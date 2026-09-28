@@ -1,0 +1,294 @@
+/* RmlUi has no default styles: every element starts inline. */
+body, div, h3, p { display: block; }
+
+body {
+    width: 100%;
+    height: 100%;
+    font-family: "PT Sans";
+    font-size: 14dp;
+    color: #e6dcc3;
+    background-color: #16181c;
+}
+
+/* carved stone around the icy scene */
+#frame {
+    width: 100%;
+    height: 100%;
+    padding: 8dp;
+    box-sizing: border-box;
+    decorator: linear-gradient(to bottom, #2b2e34, #1b1d21 60%, #141518);
+}
+
+#scene {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border: 2dp #0a0b0d;
+    decorator: linear-gradient(170deg, #1d4d6a, #0f2536 55%, #0a1a26);
+}
+
+#head {
+    padding: 6dp 16dp 2dp;
+    text-align: center;
+}
+#logo {
+    font-family: "Forum";
+    font-size: 38dp;
+    color: #e9c66b;
+    font-effect: shadow(0dp 2dp #000000), glow(0dp 6dp 0dp 0dp #00000099);
+}
+#sub {
+    display: inline-block;
+    margin-top: 2dp;
+    padding: 2dp 14dp;
+    font-family: "Forum";
+    font-size: 13dp;
+    color: #d8ecf8;
+    text-transform: uppercase;
+    border-top: 1dp #e9c66b80;
+    border-bottom: 1dp #e9c66b80;
+    decorator: linear-gradient(to right, #081e3000, #081e30d9 15%, #081e30d9 85%, #081e3000);
+}
+
+#main {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: row;
+    gap: 12dp;
+    padding: 8dp 12dp 8dp;
+    min-height: 0;
+}
+
+/* left column */
+#left {
+    flex: 0 0 250dp;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10dp;
+}
+.plate {
+    padding: 8dp 12dp;
+    border: 1dp #e9c66b73;
+    background-color: #08141ee6;
+}
+h3 {
+    margin-bottom: 5dp;
+    font-family: "Forum";
+    font-size: 15dp;
+    color: #e9c66b;
+    text-transform: uppercase;
+}
+.state { display: flex; flex-direction: row; align-items: center; gap: 10dp; margin-bottom: 8dp; }
+.orb {
+    flex: 0 0 14dp;
+    height: 14dp;
+    border-radius: 7dp;
+    background-color: #e0503f;
+}
+.orb.ok { background-color: #72d65c; box-shadow: #72d65c99 0 0 10dp 0; }
+.orb.busy { background-color: #f0b33c; box-shadow: #f0b33c99 0 0 10dp 0; }
+.orb.bad { background-color: #e0503f; box-shadow: #e0503f99 0 0 10dp 0; }
+.st-title { font-family: "Forum"; font-size: 19dp; color: #eef6fb; text-transform: uppercase; }
+.st-sub { font-size: 12dp; color: #9fb6c6; }
+
+.svc { display: flex; flex-direction: row; align-items: center; gap: 8dp; font-size: 13dp; margin-top: 3dp; }
+.dot { flex: 0 0 8dp; height: 8dp; border-radius: 4dp; background-color: #e0503f; }
+.dot.on { background-color: #72d65c; }
+.svc-name { flex: 1 1 auto; }
+.port { font-family: "PT Mono"; font-size: 12dp; color: #9fb6c6; }
+
+.kv-block { margin-top: 8dp; padding-top: 6dp; border-top: 1dp #e9c66b33; }
+.kv { display: flex; flex-direction: row; font-size: 13dp; margin-top: 2dp; }
+.k { flex: 1 1 auto; color: #9fb6c6; }
+.v { color: #e8f1f7; text-align: right; }
+
+.path {
+    font-family: "PT Mono";
+    font-size: 11dp;
+    color: #dce8ef;
+    background-color: #00000059;
+    border: 1dp #0b0d10;
+    padding: 4dp 6dp;
+    word-break: break-word;
+}
+.path.missing { color: #f0b33c; }
+.chips { display: flex; flex-direction: row; flex-wrap: wrap; gap: 5dp; margin-top: 6dp; }
+.chip { font-size: 12dp; padding: 1dp 8dp; border-radius: 9dp; border: 1dp #f0b33c; color: #f0b33c; background-color: #0000004d; }
+.chip.ok { border-color: #72d65c; color: #72d65c; }
+.chip.bad { border-color: #e0503f; color: #e0503f; }
+
+.row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6dp; margin-top: 8dp; }
+
+/* stone buttons */
+.btn {
+    padding: 5dp 12dp;
+    border: 1dp #000000;
+    border-radius: 3dp;
+    font-family: "Forum";
+    font-size: 14dp;
+    color: #e9c66b;
+    text-align: center;
+    cursor: pointer;
+    decorator: linear-gradient(to bottom, #3b4049, #1d2025);
+    font-effect: shadow(0dp 1dp #000000);
+}
+.btn:hover { color: #fff0b8; decorator: linear-gradient(to bottom, #474d57, #23262c); }
+.btn:active { decorator: linear-gradient(to bottom, #1d2025, #3b4049); }
+.btn.small { font-size: 12dp; padding: 3dp 10dp; }
+.btn.danger { color: #ffb4a6; }
+.btn.disabled, .action.disabled, #play.disabled { opacity: 0.45; cursor: arrow; }
+
+/* parchment panel */
+#panel {
+    flex: 1 1 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    color: #2a2117;
+    border: 1dp #6e5a33;
+    decorator: linear-gradient(to bottom, #ece3cc, #d6c8a6);
+}
+#tabs {
+    display: flex;
+    flex-direction: row;
+    gap: 2dp;
+    padding: 5dp 5dp 0dp;
+    border-bottom: 2dp #8a6a22;
+    decorator: linear-gradient(to bottom, #2a2d33, #1b1d21);
+}
+.tab {
+    padding: 5dp 12dp 4dp;
+    border: 1dp #000000;
+    border-bottom-width: 0;
+    border-top-left-radius: 4dp;
+    border-top-right-radius: 4dp;
+    font-family: "Forum";
+    font-size: 14dp;
+    color: #c7b98f;
+    cursor: pointer;
+    decorator: linear-gradient(to bottom, #3a3e46, #26292e);
+}
+.tab:hover { color: #fff0b8; }
+.tab.active { color: #fff0b8; decorator: linear-gradient(to bottom, #b3441f, #6e1a10); }
+
+.pane {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8dp;
+    padding: 10dp 12dp;
+    min-height: 0;
+}
+.ribbon {
+    margin: 0 -12dp;
+    padding: 2dp 12dp;
+    font-family: "Forum";
+    font-size: 15dp;
+    color: #fff0b8;
+    text-transform: uppercase;
+    decorator: linear-gradient(to right, #6e1a10, #b3441f 30%, #b3441f26);
+}
+#events { display: flex; flex-direction: column; gap: 4dp; flex: 1 1 0; overflow-y: auto; min-height: 60dp; }
+.event { display: flex; flex-direction: row; gap: 10dp; font-size: 13dp; }
+.event .time { flex: 0 0 44dp; font-family: "PT Mono"; font-size: 12dp; color: #5e4f3a; }
+.event .msg { flex: 1 1 auto; color: #3a2a1a; }
+.event.empty .msg { color: #5e4f3a; }
+
+.actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6dp; }
+.action {
+    flex: 1 1 45%;
+    padding: 5dp 8dp;
+    border: 1dp #8a7447;
+    border-radius: 3dp;
+    background-color: #ffffff59;
+    cursor: pointer;
+}
+.action:hover { background-color: #ffffff99; }
+.a-title { font-weight: bold; font-size: 13dp; }
+.a-sub { font-size: 12dp; color: #5e4f3a; }
+
+/* console */
+#log {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6dp 8dp;
+    border: 1dp #000000;
+    background-color: #0f1114;
+    font-family: "PT Mono";
+    font-size: 12dp;
+    color: #c9d2da;
+}
+#log p { white-space: pre-wrap; }
+#log p.w { color: #f0b33c; }
+#log p.e { color: #e0503f; }
+#log p.me { color: #e9c66b; }
+.cmd-row { display: flex; flex-direction: row; align-items: center; gap: 6dp; }
+.prompt { font-family: "PT Mono"; font-size: 12dp; color: #5e4f3a; }
+input.cmd {
+    display: block;
+    flex: 1 1 auto;
+    padding: 4dp 6dp;
+    border: 1dp #6e5a33;
+    background-color: #fbf6ea;
+    color: #2a2117;
+    font-family: "PT Mono";
+    font-size: 13dp;
+    cursor: text;
+}
+input.cmd:focus { border-color: #b3441f; }
+input.cmd selection { background-color: #b3441f; color: #fff0b8; }
+
+/* footer with the big button */
+#foot {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10dp;
+    padding: 6dp 14dp 12dp;
+}
+#message { flex: 1 1 auto; font-size: 12dp; color: #bcd3e2; }
+#play {
+    padding: 8dp 38dp 6dp;
+    border: 2dp #000000;
+    border-radius: 4dp;
+    text-align: center;
+    cursor: pointer;
+    decorator: radial-gradient(circle at 50% 0%, #6b2a12, #3a1307 60%, #1e0903);
+    box-shadow: #8a6a22 0 0 0 2dp, #e9963c59 0 0 24dp 0;
+}
+#play:hover { box-shadow: #e9c66b 0 0 0 2dp, #e9963c8c 0 0 32dp 0; }
+.play-title { font-family: "Forum"; font-size: 30dp; color: #e9c66b; font-effect: shadow(0dp 2dp #000000); }
+#play:hover .play-title { color: #fff0b8; }
+.play-sub { font-size: 11dp; color: #e3c99a; }
+
+/* closing overlay */
+#overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #040a10b8;
+}
+.overlay-box {
+    width: 380dp;
+    padding: 14dp 18dp;
+    border: 1dp #6e5a33;
+    color: #2a2117;
+    decorator: linear-gradient(to bottom, #ece3cc, #d6c8a6);
+}
+.ov-title { font-family: "Forum"; font-size: 20dp; color: #3a1a0c; margin-bottom: 6dp; }
+.ov-text { font-size: 13dp; }
+
+/* scrollbars */
+scrollbarvertical { width: 10dp; margin-left: 2dp; }
+scrollbarvertical slidertrack { background-color: #00000033; }
+scrollbarvertical sliderbar { background-color: #8a6a22; border-radius: 4dp; min-height: 20dp; }
+scrollbarvertical sliderbar:hover { background-color: #b08a2e; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { height: 0; }
+scrollbarhorizontal { height: 0; }

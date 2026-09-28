@@ -1,0 +1,101 @@
+<rml>
+<head>
+    <title>LonelyIce</title>
+    <link type="text/rcss" href="launcher.rcss"/>
+</head>
+<body>
+<div id="frame" data-model="li">
+<div id="scene">
+    <div id="head">
+        <div id="logo">LONELYICE</div>
+        <div id="sub">одиночный сервер · 3.3.5a</div>
+    </div>
+
+    <div id="main">
+        <div id="left">
+            <div class="plate">
+                <h3>Сервер</h3>
+                <div class="state">
+                    <div class="orb" data-class-ok="state == 'ready'" data-class-busy="state == 'starting' || state == 'loading' || state == 'stopping'" data-class-bad="state == 'failed'"></div>
+                    <div class="state-text">
+                        <div class="st-title">{{state_title}}</div>
+                        <div class="st-sub">{{state_sub}}</div>
+                    </div>
+                </div>
+                <div class="svc"><div class="dot" data-class-on="auth_on"></div><div class="svc-name">Вход (auth)</div><div class="port">:{{auth_port}}</div></div>
+                <div class="svc"><div class="dot" data-class-on="world_on"></div><div class="svc-name">Мир (world)</div><div class="port">:{{world_port}}</div></div>
+                <div class="kv-block">
+                    <div class="kv"><div class="k">Время работы</div><div class="v">{{uptime}}</div></div>
+                    <div class="kv"><div class="k">Персонажи в мире</div><div class="v">{{players}}</div></div>
+                    <div class="kv"><div class="k">Задержка мира</div><div class="v">{{diff}}</div></div>
+                    <div class="kv"><div class="k">Память</div><div class="v">{{memory}}</div></div>
+                </div>
+                <div class="row">
+                    <div id="btn-toggle" class="btn small" data-class-danger="running" data-event-click="toggle_server">{{toggle_label}}</div>
+                    <div id="btn-restart" class="btn small" data-class-disabled="!running" data-event-click="restart_server">Перезапуск</div>
+                </div>
+            </div>
+
+            <div class="plate">
+                <h3>Папка игры</h3>
+                <div class="path" data-class-missing="!client_ok">{{client_path}}</div>
+                <div class="chips">
+                    <div class="chip" data-for="c : chips" data-class-ok="c.ok" data-class-bad="!c.ok">{{c.text}}</div>
+                </div>
+                <div class="row">
+                    <div id="btn-browse" class="btn small" data-event-click="browse_client">Обзор…</div>
+                    <div id="btn-realmlist" class="btn small" data-class-disabled="!client_ok" data-event-click="fix_realmlist">Прописать realmlist</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="panel">
+            <div id="tabs">
+                <div id="tab-overview" class="tab" data-class-active="tab == 'overview'" data-event-click="tab = 'overview'">Обзор</div>
+                <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="tab = 'console'">Консоль</div>
+            </div>
+
+            <div class="pane" data-if="tab == 'overview'">
+                <div class="ribbon">События</div>
+                <div id="events">
+                    <div class="event" data-for="e : events"><div class="time">{{e.time}}</div><div class="msg">{{e.text}}</div></div>
+                    <div class="event empty" data-if="events.size == 0"><div class="msg">Пока ничего не произошло.</div></div>
+                </div>
+                <div class="ribbon">Быстрые действия</div>
+                <div class="actions">
+                    <div id="act-info" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('server info')"><div class="a-title">Состояние сервера</div><div class="a-sub">server info</div></div>
+                    <div id="act-save" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('saveall')"><div class="a-title">Сохранить всех</div><div class="a-sub">saveall</div></div>
+                    <div class="action" data-event-click="open_server_dir"><div class="a-title">Папка сервера</div><div class="a-sub">{{server_dir}}</div></div>
+                    <div class="action" data-class-disabled="!client_ok" data-event-click="open_client_dir"><div class="a-title">Папка игры</div><div class="a-sub">Wow.exe, WTF, Interface</div></div>
+                </div>
+            </div>
+
+            <div class="pane console" data-if="tab == 'console'">
+                <div id="log"></div>
+                <div class="cmd-row">
+                    <div class="prompt">AC&gt;</div>
+                    <input type="text" id="cmd" class="cmd"/>
+                    <div id="btn-send" class="btn small" data-event-click="send_command">Выполнить</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="foot">
+        <div id="message">{{message}}</div>
+        <div id="play" data-class-disabled="!play_enabled" data-event-click="play">
+            <div class="play-title">{{play_label}}</div>
+            <div class="play-sub">{{play_sub}}</div>
+        </div>
+    </div>
+
+    <div id="overlay" data-if="closing">
+        <div class="overlay-box">
+            <div class="ov-title">Остановка сервера</div>
+            <div class="ov-text">Сохраняем персонажей и выключаем мир. Закройте окно ещё раз, чтобы остановить сервер немедленно.</div>
+        </div>
+    </div>
+</div>
+</div>
+</body>
+</rml>
