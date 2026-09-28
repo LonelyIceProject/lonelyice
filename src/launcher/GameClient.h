@@ -27,10 +27,13 @@ namespace LonelyIce
         // saved path → exe folder → its parent → two levels below the parent → Blizzard registry key.
         std::filesystem::path Detect(std::filesystem::path const& saved, std::filesystem::path const& exeDir);
         ClientInfo Inspect(std::filesystem::path const& dir);
-        // Writes "set realmlist <host>" for every locale; the first overwrite keeps a realmlist.wtf.bak.
-        bool WriteRealmlist(ClientInfo const& info, std::string const& host, std::string& error);
+        // Writes "set realmlist <host>" for the given locales (all when empty); the first overwrite keeps a realmlist.wtf.bak.
+        bool WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error);
+        std::string ReadConfigLocale(std::filesystem::path const& dir);   // SET locale from WTF\Config.wtf
+        bool SetConfigLocale(std::filesystem::path const& dir, std::string const& locale);
         void ClearWdb(std::filesystem::path const& dir);
-        bool Launch(std::filesystem::path const& dir, std::string& error);
+        // On success *process receives the game process handle (caller closes it).
+        bool Launch(std::filesystem::path const& dir, std::string& error, void** process);
         bool IsRunning(std::filesystem::path const& dir);
     }
 }

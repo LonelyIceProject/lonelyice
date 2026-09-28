@@ -178,6 +178,23 @@ std::vector<std::string> LonelyIce::ServerProcess::TakeLines()
     return out;
 }
 
+bool LonelyIce::ServerProcess::TakeAccounts(std::vector<AccountInfo>& accounts, std::vector<CharacterInfo>& characters)
+{
+    std::lock_guard<std::mutex> guard(_lock);
+    if (!_accFresh)
+        return false;
+    _accFresh = false;
+    accounts = _accReady;
+    characters = _charReady;
+    return true;
+}
+
+std::string LonelyIce::ServerProcess::GetRealmName() const
+{
+    std::lock_guard<std::mutex> guard(_lock);
+    return _realmName;
+}
+
 LonelyIce::ServerStats LonelyIce::ServerProcess::GetStats() const
 {
     std::lock_guard<std::mutex> guard(_lock);
@@ -272,7 +289,17 @@ void LonelyIce::ServerProcess::HandleLine(std::string line)
             else if (s == "loading")
                 _state = ServerState::Loading;
             else if (s == "ready")
+            {
+                std::string rest;
+                std::getline(in, rest);
+                std::size_t r = rest.find("realm=");
+                if (r != std::string::npos)
+                {
+                    std::lock_guard<std::mutex> guard(_lock);
+                    _realmName = rest.substr(r + 6);
+                }
                 _state = ServerState::Ready;
+            }
             else if (s == "stopping")
                 _state = ServerState::Stopping;
             else if (s == "failed")
@@ -283,6 +310,36 @@ void LonelyIce::ServerProcess::HandleLine(std::string line)
                 _failReason = why;
                 _state = ServerState::Failed;
             }
+        }
+        else if (kind == "acc" || kind == "char")
+        {
+            std::string rest;
+            std::getline(in, rest);
+            if (!rest.empty() && rest[0] == ' ')
+                rest.erase(0, 1);
+            std::vector<std::string> f;
+            for (std::size_t pos = 0;;)
+            {
+                std::size_t tab = rest.find('\t', pos);
+                f.push_back(rest.substr(pos, tab == std::string::npos ? std::string::npos : tab - pos));
+                if (tab == std::string::npos)
+                    break;
+                pos = tab + 1;
+            }
+            std::lock_guard<std::mutex> guard(_lock);
+            if (kind == "acc" && f.size() >= 6)
+                _accBuild.push_back({ uint32_t(std::stoul(f[0])), f[1], f[4], uint32_t(std::stoul(f[2])), uint32_t(std::stoul(f[3])), f[5] == "1" });
+            else if (kind == "char" && f.size() >= 4)
+                _charBuild.push_back({ f[0], uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), f[3] == "1" });
+        }
+        else if (kind == "accend")
+        {
+            std::lock_guard<std::mutex> guard(_lock);
+            _accReady = std::move(_accBuild);
+            _charReady = std::move(_charBuild);
+            _accBuild.clear();
+            _charBuild.clear();
+            _accFresh = true;
         }
         else if (kind == "stat")
         {
@@ -297,6 +354,8 @@ void LonelyIce::ServerProcess::HandleLine(std::string line)
                 unsigned long long v = std::strtoull(kv.c_str() + eq + 1, nullptr, 10);
                 if (k == "players")
                     st.players = uint32_t(v);
+                else if (k == "chars")
+                    st.chars = uint32_t(v);
                 else if (k == "uptime")
                     st.uptime = v;
                 else if (k == "diff")

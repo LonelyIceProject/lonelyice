@@ -37,6 +37,8 @@
 #include "WorldSocket.h"
 #include "WorldSocketMgr.h"
 #include <atomic>
+#include <map>
+#include <set>
 #include <boost/asio/signal_set.hpp>
 #include <csignal>
 #include <cstdio>
@@ -89,6 +91,55 @@ namespace
     void CommandFinished(void* /*arg*/, bool success)
     {
         Control(success ? "done ok" : "done fail");
+    }
+
+    // Tab-separated rows for the launcher's Accounts tab and the character picker; names stay UTF-8.
+    void ReportAccounts()
+    {
+        std::map<uint32, uint32> charCount;
+        if (QueryResult r = CharacterDatabase.Query("SELECT account, COUNT(*) FROM characters GROUP BY account"))
+        {
+            do
+                charCount[r->Fetch()[0].Get<uint32>()] = r->Fetch()[1].Get<uint32>();
+            while (r->NextRow());
+        }
+
+        std::set<uint32> humanAccounts;
+        if (QueryResult r = LoginDatabase.Query(
+                "SELECT a.id, a.username, COALESCE(MAX(aa.gmlevel), 0), a.last_login FROM account a "
+                "LEFT JOIN account_access aa ON aa.id = a.id GROUP BY a.id, a.username, a.last_login ORDER BY a.id"))
+        {
+            do
+            {
+                Field* f = r->Fetch();
+                uint32 id = f[0].Get<uint32>();
+                std::string name = f[1].Get<std::string>();
+                bool bot = name.rfind("RNDBOT", 0) == 0;
+                if (!bot)
+                    humanAccounts.insert(id);
+                Control(Acore::StringFormat("acc {}\t{}\t{}\t{}\t{}\t{}", id, name, f[2].Get<uint32>(), charCount[id],
+                    f[3].IsNull() ? std::string() : f[3].Get<std::string>(), bot ? 1 : 0));
+            } while (r->NextRow());
+        }
+
+        if (QueryResult r = CharacterDatabase.Query("SELECT name, account, level, online FROM characters ORDER BY name"))
+        {
+            do
+            {
+                Field* f = r->Fetch();
+                if (!humanAccounts.count(f[1].Get<uint32>()))
+                    continue;
+                Control(Acore::StringFormat("char {}\t{}\t{}\t{}", f[0].Get<std::string>(), f[1].Get<uint32>(), f[2].Get<uint32>(), f[3].Get<uint32>()));
+            } while (r->NextRow());
+        }
+        Control("accend");
+    }
+
+    void SetRealmName(std::string name)
+    {
+        LoginDatabase.EscapeString(name);
+        LoginDatabase.DirectExecute("UPDATE realmlist SET name = '{}' WHERE id = {}", name, realm.Id.Realm);
+        Control("realmname ok");
     }
 
     // Raw ReadFile instead of std::cin: the thread can be cancelled with CancelSynchronousIo without holding CRT locks.
@@ -153,6 +204,16 @@ namespace
                         World::StopNow(SHUTDOWN_EXIT_CODE);
                         continue;
                     }
+                    if (line == "@@accounts")
+                    {
+                        ReportAccounts();
+                        continue;
+                    }
+                    if (line.rfind("@@realmname ", 0) == 0)
+                    {
+                        SetRealmName(line.substr(12));
+                        continue;
+                    }
 
                     sWorld->QueueCliCommand(new CliCommandHolder(nullptr, line.c_str(), &PrintCommandOutput, &CommandFinished));
                 }
@@ -185,8 +246,10 @@ namespace
                     return;
                 if (std::shared_ptr<StatusReporter> me = ref.lock())
                 {
-                    Control(Acore::StringFormat("stat players={} uptime={} diff={}",
-                        sWorldSessionMgr->GetPlayerCount(), GameTime::GetUptime().count(), sWorldUpdateTime.GetAverageUpdateTime()));
+                    // Bots have no client socket: active sessions are real players, player count includes bots.
+                    Control(Acore::StringFormat("stat players={} chars={} uptime={} diff={}",
+                        sWorldSessionMgr->GetActiveSessionCount(), sWorldSessionMgr->GetPlayerCount(),
+                        GameTime::GetUptime().count(), sWorldUpdateTime.GetAverageUpdateTime()));
                     Arm(me);
                 }
             });

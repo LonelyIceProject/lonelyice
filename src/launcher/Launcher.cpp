@@ -1,17 +1,27 @@
 #include "Assets.h"
+#include "Backup.h"
+#include "CommandCatalog.h"
+#include "ConfFile.h"
 #include "GameClient.h"
+#include "LauncherSettings.h"
 #include "ServerProcess.h"
+#include "SettingsModel.h"
 #include "TextUtil.h"
+#include "Tray.h"
 #include "UiBackend.h"
 #include <RmlUi/Core.h>
+#include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <RmlUi/Core/Elements/ElementFormControlInput.h>
 #include <SDL3/SDL.h>
-#include <chrono>
+#include <algorithm>
+#include <atomic>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <sstream>
+#include <thread>
 #include <Windows.h>
 #include <shellapi.h>
 
@@ -23,48 +33,35 @@ namespace
     constexpr int MaxLogLines = 600;
     constexpr char RealmHost[] = "127.0.0.1";
 
-    struct Chip
+    struct Opt { Rml::String id, label; };
+    struct LocaleChip { Rml::String name, cls; bool launch = false; };
+    struct EventRow { Rml::String time, text; };
+    struct AccRow { Rml::String name, level, chars, last; bool gm = false; };
+    struct CmdArgView { Rml::String name, type, value; std::vector<Opt> opts; };
+    struct CmdCardView
     {
-        Rml::String text;
-        bool ok = false;
+        Rml::String title, desc, group, preview, button;
+        bool danger = false, armed = false;
+        std::vector<CmdArgView> args;
+        int groupIdx = 0, cmdIdx = 0;
     };
-
-    struct EventRow
+    struct GroupView { Rml::String id, name; int changed = 0; };
+    struct FieldView
     {
-        Rml::String time;
-        Rml::String text;
+        Rml::String label, key, type, value, apply, apply_text, hint;
+        bool on = false, changed = false;
+        std::vector<Opt> opts;
+        int index = 0;
     };
+    struct DataRow { Rml::String title, detail, status, size; };
 
-    // Plain key=value file next to the exe.
-    struct Settings
-    {
-        fs::path file;
-        std::wstring clientPath;
-        std::wstring serverConfig;
-
-        void Load()
-        {
-            wchar_t buf[1024];
-            GetPrivateProfileStringW(L"client", L"path", L"", buf, 1024, file.c_str());
-            clientPath = buf;
-            GetPrivateProfileStringW(L"server", L"config", L"", buf, 1024, file.c_str());
-            serverConfig = buf;
-        }
-
-        void Save() const
-        {
-            WritePrivateProfileStringW(L"client", L"path", clientPath.c_str(), file.c_str());
-            WritePrivateProfileStringW(L"server", L"config", serverConfig.c_str(), file.c_str());
-        }
-    };
-
-    std::string Now()
+    std::string Now(char const* fmt = "%H:%M")
     {
         std::time_t t = std::time(nullptr);
         std::tm tm{};
         localtime_s(&tm, &t);
-        char buf[8];
-        std::strftime(buf, sizeof(buf), "%H:%M", &tm);
+        char buf[32];
+        std::strftime(buf, sizeof(buf), fmt, &tm);
         return buf;
     }
 
@@ -85,13 +82,52 @@ namespace
         char buf[32];
         if (b >= (1ull << 30))
             snprintf(buf, sizeof(buf), "%.1f ГБ", double(b) / double(1ull << 30));
-        else
+        else if (b >= (1ull << 20))
             snprintf(buf, sizeof(buf), "%llu МБ", (unsigned long long)(b >> 20));
+        else
+            snprintf(buf, sizeof(buf), "%llu КБ", (unsigned long long)((b + 1023) >> 10));
         std::string s = buf;
-        for (char& c : s)
-            if (c == '.')
-                c = ',';
+        std::replace(s.begin(), s.end(), '.', ',');
         return s;
+    }
+
+    // "2026-09-28 19:12:40" -> "сегодня, 19:12" or "28.09.2026"
+    std::string FormatLogin(std::string const& ts)
+    {
+        if (ts.size() < 16 || ts.rfind("0000", 0) == 0)
+            return "—";
+        if (ts.substr(0, 10) == Now("%Y-%m-%d"))
+            return "сегодня, " + ts.substr(11, 5);
+        return ts.substr(8, 2) + "." + ts.substr(5, 2) + "." + ts.substr(0, 4);
+    }
+
+    struct DirStats
+    {
+        uint64_t bytes = 0;
+        uint32_t files = 0;
+    };
+
+    DirStats Scan(fs::path const& dir)
+    {
+        DirStats s;
+        std::error_code ec;
+        for (fs::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        {
+            if (it->is_regular_file(ec))
+            {
+                s.bytes += it->file_size(ec);
+                ++s.files;
+            }
+        }
+        return s;
+    }
+
+    fs::path DefaultServerConfig(fs::path const& exeDir)
+    {
+        for (char const* rel : { "configs-sqlite/worldserver.conf", "configs/worldserver.conf" })
+            if (fs::exists(exeDir / rel))
+                return exeDir / rel;
+        return exeDir / "configs" / "worldserver.conf";
     }
 
     class Launcher : public Rml::EventListener
@@ -108,54 +144,114 @@ namespace
     private:
         bool SetupUi();
         void BindModel(Rml::DataModelConstructor& c);
+        void SetupTray();
         void Tick();
+        void RunUiScript();
         void OnStateChanged(ServerState prev, ServerState now);
         void RefreshServerView();
         void RefreshClient();
+        void RefreshTray();
         void AppendLog(std::string const& utf8, char const* cls);
         void AddEvent(std::string text);
         void Message(std::string text);
+        void OpenTab(std::string const& tab);
+        void ShowWindow();
+        void BeginQuit();
 
         void StartServer();
         void ToggleServer();
         void RestartServer();
         void Play();
-        void FixRealmlist(bool quiet);
+        void FixRealmlist(std::vector<std::string> const& locales, bool quiet);
+        std::string LaunchLocale() const;
         void BrowseClient();
         void SendConsoleCommand();
-        void RunCommand(std::string const& cmd);
+        void RunCommand(std::string const& cmd, bool echo = true);
+
+        void ApplyAccounts();
+        void CreateAccount();
+
+        void BuildCommandCards();
+        void SyncCommandCards();
+        void RunCard(int index);
+
+        void LoadSettingsModel();
+        void BuildSettingsFields();
+        void SyncSettingsFields();
+        void RefreshSettingsStatus();
+        void SaveSettings();
+
+        void RefreshData();
+        void StartBackup(bool scheduled);
+        void CheckScheduledBackup();
+
+        fs::path ServerConfig() const;
+        fs::path ConfPath(std::string const& key, std::string const& def) const;
 
         fs::path _exe, _exeDir;
-        Settings _settings;
+        LauncherSettings _settings;
         std::unique_ptr<ServerProcess> _server;
         ClientInfo _client;
+        SettingsModel _settingsModel;
+        Tray _tray;
+        SDL_Surface* _icon = nullptr;
+        std::vector<unsigned char> _iconPixels;
 
         Rml::Context* _ctx = nullptr;
         Rml::ElementDocument* _doc = nullptr;
         Rml::Element* _log = nullptr;
         Rml::DataModelHandle _model;
 
-        // model
-        Rml::String _state = "stopped", _stateTitle, _stateSub, _toggleLabel, _uptime = "—", _players = "—", _diff = "—", _memory = "—";
-        Rml::String _authPort = "3724", _worldPort = "8085", _clientPath, _serverDirText, _message, _playLabel, _playSub, _tab = "overview", _shownTab = "overview";
-        bool _running = false, _authOn = false, _worldOn = false, _clientOk = false, _playEnabled = true, _closing = false;
-        std::vector<Chip> _chips;
+        // model: server and client
+        Rml::String _state = "stopped", _stateTitle, _stateSub, _toggleLabel, _uptime = "—", _players = "—", _bots = "—", _diff = "—", _memory = "—";
+        Rml::String _authPort = "3724", _worldPort = "8085", _soapPort = "7878", _clientPath, _rlNote, _message, _playLabel, _playSub, _tab = "overview", _shownTab = "overview";
+        Rml::String _logsDir;
+        bool _running = false, _authOn = false, _worldOn = false, _soapEnabled = false, _clientOk = false, _playEnabled = true, _closing = false, _backupBusy = false;
+        std::vector<LocaleChip> _locales;
         std::vector<EventRow> _events;
+        // accounts
+        std::vector<AccRow> _accRows;
+        Rml::String _accNote = "Запустите сервер, чтобы увидеть аккаунты.", _accLogin, _accPass, _accLevel = "0";
+        bool _accLoaded = false;
+        // commands
+        std::vector<GroupView> _cmdGroups;
+        std::vector<CmdCardView> _cmdCards;
+        std::vector<Opt> _cmdChars;
+        Rml::String _cmdGroup = "srv", _cmdQuery, _cmdQueryShown, _cmdTarget, _cmdLast = "Ответ сервера появится во вкладке «Консоль».";
+        // settings
+        std::vector<GroupView> _setGroups;
+        std::vector<FieldView> _setFields;
+        Rml::String _setGroup = "rates", _setHint, _setStatus, _setSaveLabel = "Сохранить";
+        bool _setCanSave = false, _setShowKeys = true;
+        int _setPreset = 0;
+        // data
+        std::vector<DataRow> _dataRows;
+        Rml::String _dataSum;
 
         ServerState _lastState = ServerState::Stopped;
-        bool _pendingPlay = false, _pendingRestart = false;
-        uint64_t _lastStatsTick = 0;
+        bool _pendingPlay = false, _pendingRestart = false, _quitting = false, _startHidden = false, _scriptClose = false;
+        uint64_t _lastStatsTick = 0, _accRefreshAt = 0, _lastBackupCheck = 0;
+        HANDLE _game = nullptr;
 
-        std::mutex _dialogLock;
+        std::mutex _asyncLock;
         std::wstring _pickedDir;
+        std::thread _backupThread;
+        std::atomic<bool> _backupDone{ false };
+        BackupResult _backupResult;
     };
 
-    fs::path DefaultServerConfig(fs::path const& exeDir)
+    fs::path Launcher::ServerConfig() const
     {
-        for (char const* rel : { "configs-sqlite/worldserver.conf", "configs/worldserver.conf" })
-            if (fs::exists(exeDir / rel))
-                return exeDir / rel;
-        return exeDir / "configs" / "worldserver.conf";
+        return _settings.serverConfig.empty() ? DefaultServerConfig(_exeDir) : fs::path(_settings.serverConfig);
+    }
+
+    // A path option of worldserver.conf, resolved against the server folder.
+    fs::path Launcher::ConfPath(std::string const& key, std::string const& def) const
+    {
+        ConfFile f;
+        f.Load(ServerConfig());
+        fs::path p = fs::u8path(f.Get(key).value_or(def));
+        return p.is_absolute() ? p : _exeDir / p;
     }
 
     int Launcher::Run()
@@ -164,14 +260,17 @@ namespace
         GetModuleFileNameW(nullptr, buf, MAX_PATH);
         _exe = buf;
         _exeDir = _exe.parent_path();
-        _serverDirText = WideToUtf8(_exeDir.wstring());
+
+        for (int i = 1; i < __argc; ++i)
+            if (std::string_view(__argv[i]) == "--tray")
+                _startHidden = true;
 
         _settings.file = _exeDir / "lonelyice.ini";
         _settings.Load();
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
 
-        if (!UiBackend::Initialize("LonelyIce", 900, 640))
+        if (!UiBackend::Initialize("LonelyIce", 960, 680))
         {
             MessageBoxW(nullptr, L"Не удалось создать окно с OpenGL 3.3.", L"LonelyIce", MB_ICONERROR);
             return 1;
@@ -191,58 +290,120 @@ namespace
             return 1;
         }
 
+        SetupTray();
         RefreshClient();
+        LoadSettingsModel();
+        BuildCommandCards();
         RefreshServerView();
+
+        if (_startHidden && _settings.trayOnClose)
+            UiBackend::HideWindow();
+        if (_settings.autoStart)
+            StartServer();
 
         for (;;)
         {
-            if (!UiBackend::ProcessEvents(_ctx, 0.5))
+            bool closeRequested = false;
+            bool alive = UiBackend::ProcessEvents(_ctx, UiBackend::IsWindowVisible() ? 0.5 : 1.0, closeRequested);
+            closeRequested = closeRequested || std::exchange(_scriptClose, false);
+            if (!alive)
             {
-                if (!_server->IsRunning())
-                    break;
-                if (_closing)
+                // Windows session ends: do not wait for anything.
+                _server->Stop();
+                break;
+            }
+
+            if (closeRequested)
+            {
+                if (_quitting || _closing)
                 {
                     _server->Kill();
                     break;
                 }
-                _closing = true;
-                _server->Stop();
-                _model.DirtyVariable("closing");
+                if (_settings.trayOnClose)
+                {
+                    UiBackend::HideWindow();
+                    _tray.SetTooltip("LonelyIce — " + _stateTitle + ". Меню: правый клик");
+                }
+                else
+                    BeginQuit();
             }
 
             Tick();
 
-            if (_closing && !_server->IsRunning())
+            if (_quitting && !_server->IsRunning())
                 break;
 
-            _ctx->Update();
-            if (_tab != _shownTab)
+            if (UiBackend::IsWindowVisible())
             {
-                // A hidden log has no layout, so jump to the newest lines once it becomes visible.
-                _shownTab = _tab;
-                if (_tab == "console" && _log)
+                _ctx->Update();
+                if (_tab != _shownTab)
                 {
-                    _log->SetScrollTop(_log->GetScrollHeight());
-                    _ctx->Update();
+                    // A hidden log has no layout, so jump to the newest lines once it becomes visible.
+                    _shownTab = _tab;
+                    if (_tab == "console" && _log)
+                    {
+                        _log->SetScrollTop(_log->GetScrollHeight());
+                        _ctx->Update();
+                    }
                 }
+                UiBackend::BeginFrame();
+                _ctx->Render();
+                UiBackend::PresentFrame();
             }
-            UiBackend::BeginFrame();
-            _ctx->Render();
-            UiBackend::PresentFrame();
         }
 
+        if (_backupThread.joinable())
+            _backupThread.join();
         _settings.Save();
         _server.reset();
+        if (_game)
+            CloseHandle(_game);
+        _tray.Destroy();
         Rml::Shutdown();
+        if (_icon)
+            SDL_DestroySurface(_icon);
         UiBackend::Shutdown();
         return 0;
     }
 
+    void Launcher::BeginQuit()
+    {
+        _quitting = true;
+        if (_server->IsRunning())
+        {
+            ShowWindow();
+            _closing = true;
+            _pendingPlay = _pendingRestart = false;
+            _server->Stop();
+            _model.DirtyVariable("closing");
+        }
+    }
+
+    void Launcher::ShowWindow()
+    {
+        UiBackend::ShowWindow();
+    }
+
     bool Launcher::SetupUi()
     {
-        for (char const* font : { "fonts/PTSans-Regular.ttf", "fonts/PTSans-Bold.ttf", "fonts/PTMono-Regular.ttf", "fonts/Forum-Regular.ttf" })
+        for (char const* font : { "fonts/PTSans-Regular.ttf", "fonts/PTSans-Bold.ttf", "fonts/PTMono-Regular.ttf", "fonts/Forum-Regular.ttf",
+                 "fonts/AlegreyaSC-Medium.ttf", "fonts/AlegreyaSC-Bold.ttf" })
             if (!Rml::LoadFontFace(font))
                 return false;
+
+        // 64x64 RGBA icon for the window and the tray
+        if (Rml::FileHandle f = Rml::GetFileInterface()->Open("icons/round-64.rgba"))
+        {
+            _iconPixels.resize(Rml::GetFileInterface()->Length(f));
+            Rml::GetFileInterface()->Read(_iconPixels.data(), _iconPixels.size(), f);
+            Rml::GetFileInterface()->Close(f);
+            if (_iconPixels.size() == 64 * 64 * 4)
+            {
+                _icon = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_RGBA32, _iconPixels.data(), 64 * 4);
+                UiBackend::SetIcon(_icon);
+            }
+        }
 
         int w = 0, h = 0;
         SDL_GetWindowSizeInPixels(UiBackend::GetWindow(), &w, &h);
@@ -268,21 +429,114 @@ namespace
         return true;
     }
 
+    void Launcher::SetupTray()
+    {
+        _tray.Create(_icon, {
+            { "status", "LonelyIce", nullptr },
+            { "open", "Открыть LonelyIce", [this] { ShowWindow(); } },
+            { "play", "Играть", [this] { Play(); } },
+            { "", "", nullptr },
+            { "toggle", "Запустить сервер", [this] { ToggleServer(); } },
+            { "restart", "Перезапустить сервер", [this] { RestartServer(); } },
+            { "", "", nullptr },
+            { "tab-console", "Консоль", [this] { ShowWindow(); OpenTab("console"); } },
+            { "tab-commands", "Команды", [this] { ShowWindow(); OpenTab("commands"); } },
+            { "tab-accounts", "Аккаунты", [this] { ShowWindow(); OpenTab("accounts"); } },
+            { "tab-settings", "Настройки", [this] { ShowWindow(); OpenTab("settings"); } },
+            { "backup", "Резервная копия сейчас", [this] { StartBackup(false); } },
+            { "", "", nullptr },
+            { "quit", "Выход", [this] { BeginQuit(); } },
+        });
+        _tray.SetEnabled("status", false);
+    }
+
     void Launcher::BindModel(Rml::DataModelConstructor& c)
     {
-        if (auto chip = c.RegisterStruct<Chip>())
+        if (auto s = c.RegisterStruct<Opt>())
         {
-            chip.RegisterMember("text", &Chip::text);
-            chip.RegisterMember("ok", &Chip::ok);
+            s.RegisterMember("id", &Opt::id);
+            s.RegisterMember("label", &Opt::label);
         }
-        c.RegisterArray<std::vector<Chip>>();
+        c.RegisterArray<std::vector<Opt>>();
 
-        if (auto row = c.RegisterStruct<EventRow>())
+        if (auto s = c.RegisterStruct<LocaleChip>())
         {
-            row.RegisterMember("time", &EventRow::time);
-            row.RegisterMember("text", &EventRow::text);
+            s.RegisterMember("name", &LocaleChip::name);
+            s.RegisterMember("cls", &LocaleChip::cls);
+            s.RegisterMember("launch", &LocaleChip::launch);
+        }
+        c.RegisterArray<std::vector<LocaleChip>>();
+
+        if (auto s = c.RegisterStruct<EventRow>())
+        {
+            s.RegisterMember("time", &EventRow::time);
+            s.RegisterMember("text", &EventRow::text);
         }
         c.RegisterArray<std::vector<EventRow>>();
+
+        if (auto s = c.RegisterStruct<AccRow>())
+        {
+            s.RegisterMember("name", &AccRow::name);
+            s.RegisterMember("level", &AccRow::level);
+            s.RegisterMember("chars", &AccRow::chars);
+            s.RegisterMember("last", &AccRow::last);
+            s.RegisterMember("gm", &AccRow::gm);
+        }
+        c.RegisterArray<std::vector<AccRow>>();
+
+        if (auto s = c.RegisterStruct<CmdArgView>())
+        {
+            s.RegisterMember("name", &CmdArgView::name);
+            s.RegisterMember("type", &CmdArgView::type);
+            s.RegisterMember("value", &CmdArgView::value);
+            s.RegisterMember("opts", &CmdArgView::opts);
+        }
+        c.RegisterArray<std::vector<CmdArgView>>();
+
+        if (auto s = c.RegisterStruct<CmdCardView>())
+        {
+            s.RegisterMember("title", &CmdCardView::title);
+            s.RegisterMember("desc", &CmdCardView::desc);
+            s.RegisterMember("group", &CmdCardView::group);
+            s.RegisterMember("preview", &CmdCardView::preview);
+            s.RegisterMember("button", &CmdCardView::button);
+            s.RegisterMember("danger", &CmdCardView::danger);
+            s.RegisterMember("armed", &CmdCardView::armed);
+            s.RegisterMember("args", &CmdCardView::args);
+        }
+        c.RegisterArray<std::vector<CmdCardView>>();
+
+        if (auto s = c.RegisterStruct<GroupView>())
+        {
+            s.RegisterMember("id", &GroupView::id);
+            s.RegisterMember("name", &GroupView::name);
+            s.RegisterMember("changed", &GroupView::changed);
+        }
+        c.RegisterArray<std::vector<GroupView>>();
+
+        if (auto s = c.RegisterStruct<FieldView>())
+        {
+            s.RegisterMember("label", &FieldView::label);
+            s.RegisterMember("key", &FieldView::key);
+            s.RegisterMember("type", &FieldView::type);
+            s.RegisterMember("value", &FieldView::value);
+            s.RegisterMember("apply", &FieldView::apply);
+            s.RegisterMember("apply_text", &FieldView::apply_text);
+            s.RegisterMember("hint", &FieldView::hint);
+            s.RegisterMember("on", &FieldView::on);
+            s.RegisterMember("changed", &FieldView::changed);
+            s.RegisterMember("opts", &FieldView::opts);
+        }
+        c.RegisterArray<std::vector<FieldView>>();
+
+        if (auto s = c.RegisterStruct<DataRow>())
+        {
+            s.RegisterMember("title", &DataRow::title);
+            s.RegisterMember("detail", &DataRow::detail);
+            s.RegisterMember("status", &DataRow::status);
+            s.RegisterMember("size", &DataRow::size);
+        }
+        c.RegisterArray<std::vector<DataRow>>();
 
         c.Bind("state", &_state);
         c.Bind("state_title", &_stateTitle);
@@ -291,17 +545,22 @@ namespace
         c.Bind("running", &_running);
         c.Bind("auth_on", &_authOn);
         c.Bind("world_on", &_worldOn);
+        c.Bind("soap_enabled", &_soapEnabled);
         c.Bind("auth_port", &_authPort);
         c.Bind("world_port", &_worldPort);
+        c.Bind("soap_port", &_soapPort);
         c.Bind("uptime", &_uptime);
         c.Bind("players", &_players);
+        c.Bind("bots", &_bots);
         c.Bind("diff", &_diff);
         c.Bind("memory", &_memory);
         c.Bind("client_path", &_clientPath);
         c.Bind("client_ok", &_clientOk);
-        c.Bind("chips", &_chips);
+        c.Bind("locales", &_locales);
+        c.Bind("rl_note", &_rlNote);
         c.Bind("events", &_events);
-        c.Bind("server_dir", &_serverDirText);
+        c.Bind("logs_dir", &_logsDir);
+        c.Bind("backup_busy", &_backupBusy);
         c.Bind("message", &_message);
         c.Bind("play_label", &_playLabel);
         c.Bind("play_sub", &_playSub);
@@ -309,31 +568,117 @@ namespace
         c.Bind("tab", &_tab);
         c.Bind("closing", &_closing);
 
-        c.BindEventCallback("toggle_server", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { ToggleServer(); });
-        c.BindEventCallback("restart_server", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { RestartServer(); });
-        c.BindEventCallback("play", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { Play(); });
-        c.BindEventCallback("fix_realmlist", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { FixRealmlist(false); });
-        c.BindEventCallback("browse_client", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { BrowseClient(); });
-        c.BindEventCallback("send_command", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { SendConsoleCommand(); });
-        c.BindEventCallback("run_command", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
+        c.Bind("acc_rows", &_accRows);
+        c.Bind("acc_note", &_accNote);
+        c.Bind("acc_loaded", &_accLoaded);
+        c.Bind("acc_login", &_accLogin);
+        c.Bind("acc_pass", &_accPass);
+        c.Bind("acc_level", &_accLevel);
+
+        c.Bind("cmd_groups", &_cmdGroups);
+        c.Bind("cmd_cards", &_cmdCards);
+        c.Bind("cmd_chars", &_cmdChars);
+        c.Bind("cmd_group", &_cmdGroup);
+        c.Bind("cmd_query", &_cmdQuery);
+        c.Bind("cmd_target", &_cmdTarget);
+        c.Bind("cmd_last", &_cmdLast);
+
+        c.Bind("set_groups", &_setGroups);
+        c.Bind("set_fields", &_setFields);
+        c.Bind("set_group", &_setGroup);
+        c.Bind("set_hint", &_setHint);
+        c.Bind("set_status", &_setStatus);
+        c.Bind("set_save_label", &_setSaveLabel);
+        c.Bind("set_can_save", &_setCanSave);
+        c.Bind("set_show_keys", &_setShowKeys);
+        c.Bind("set_preset", &_setPreset);
+
+        c.Bind("data_rows", &_dataRows);
+        c.Bind("data_sum", &_dataSum);
+
+        auto on = [&](char const* name, std::function<void()> fn)
         {
-            if (!args.empty())
-                RunCommand(args[0].Get<Rml::String>());
-        });
-        c.BindEventCallback("open_server_dir", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&)
+            c.BindEventCallback(name, [fn](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { fn(); });
+        };
+        auto onArg = [&](char const* name, std::function<void(Rml::Variant const&)> fn)
         {
-            ShellExecuteW(nullptr, L"open", _exeDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-        });
-        c.BindEventCallback("open_client_dir", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&)
+            c.BindEventCallback(name, [fn](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
+            {
+                if (!args.empty())
+                    fn(args[0]);
+            });
+        };
+
+        on("toggle_server", [this] { ToggleServer(); });
+        on("restart_server", [this] { RestartServer(); });
+        on("play", [this] { Play(); });
+        on("fix_realmlist", [this] { FixRealmlist({}, false); });
+        on("browse_client", [this] { BrowseClient(); });
+        on("send_command", [this] { SendConsoleCommand(); });
+        onArg("run_command", [this](Rml::Variant const& v) { RunCommand(v.Get<Rml::String>()); });
+        onArg("open_tab", [this](Rml::Variant const& v) { OpenTab(v.Get<Rml::String>()); });
+        onArg("pick_locale", [this](Rml::Variant const& v)
         {
-            if (_client.valid)
-                ShellExecuteW(nullptr, L"open", _client.dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            _settings.locale = v.Get<Rml::String>();
+            _settings.Save();
+            for (SetValue& sv : _settingsModel.Values())
+                if (sv.def->key == "Launcher.Locale")
+                    sv.orig = sv.cur = _settings.locale;
+            BuildSettingsFields();
+            RefreshClient();
+            Message("Язык запуска: " + _settings.locale);
         });
+        on("open_server_dir", [this] { ShellExecuteW(nullptr, L"open", _exeDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        on("open_logs", [this] { ShellExecuteW(nullptr, L"open", ConfPath("LogsDir", "logs").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        on("open_data", [this] { ShellExecuteW(nullptr, L"open", ConfPath("DataDir", ".").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        on("open_backups", [this]
+        {
+            std::error_code ec;
+            fs::create_directories(_exeDir / "backups", ec);
+            ShellExecuteW(nullptr, L"open", (_exeDir / "backups").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        });
+        on("backup_now", [this] { StartBackup(false); });
+        on("announce", [this]
+        {
+            if (_state != "ready")
+                return;
+            _cmdGroup = "srv";
+            _cmdQuery.clear();
+            BuildCommandCards();
+            OpenTab("commands");
+            Message("Впишите текст в «Объявление в чат» и нажмите «Выполнить».");
+        });
+
+        on("acc_create", [this] { CreateAccount(); });
+        on("acc_refresh", [this] { if (_server->SendCommand("@@accounts")) _accNote = "Загружаем…"; });
+
+        onArg("cmd_group_pick", [this](Rml::Variant const& v)
+        {
+            _cmdGroup = v.Get<Rml::String>();
+            _cmdQuery.clear();
+            BuildCommandCards();
+        });
+        onArg("cmd_run", [this](Rml::Variant const& v) { RunCard(v.Get<int>()); });
+
+        onArg("set_group_pick", [this](Rml::Variant const& v)
+        {
+            _setGroup = v.Get<Rml::String>();
+            BuildSettingsFields();
+        });
+        onArg("set_preset_pick", [this](Rml::Variant const& v)
+        {
+            _setPreset = v.Get<int>();
+            _settingsModel.ApplyPreset(_setPreset);
+            _setGroup = "rates";
+            BuildSettingsFields();
+        });
+        on("set_save", [this] { SaveSettings(); });
+        on("data_check", [this] { RefreshData(); });
     }
 
     // Dev hook for driving the UI without a mouse: with LONELYICE_UI_SCRIPT=<file> set, each line of that file
     // ("click <id>" or "type <id> <text>") is executed and the file is deleted.
-    void RunUiScript(Rml::ElementDocument* doc)
+    void Launcher::RunUiScript()
     {
         static std::wstring const path = []
         {
@@ -345,9 +690,8 @@ namespace
             return;
 
         std::ifstream in{ fs::path(path) };
-        std::string line;
         std::vector<std::string> lines;
-        while (std::getline(in, line))
+        for (std::string line; std::getline(in, line);)
             lines.push_back(line);
         in.close();
         std::error_code ec;
@@ -358,7 +702,28 @@ namespace
             std::istringstream s(l);
             std::string verb, id;
             s >> verb >> id;
-            Rml::Element* el = doc->GetElementById(id);
+            if (verb == "show")
+            {
+                ShowWindow();
+                continue;
+            }
+            if (verb == "tab")
+            {
+                OpenTab(id);
+                continue;
+            }
+            if (verb == "tray")
+            {
+                _tray.Invoke(id);
+                continue;
+            }
+            if (verb == "close")
+            {
+                _scriptClose = true;
+                continue;
+            }
+            _ctx->Update();
+            Rml::Element* el = _doc->GetElementById(id);
             if (!el)
                 continue;
             if (verb == "click")
@@ -369,15 +734,20 @@ namespace
                 std::getline(s, text);
                 if (!text.empty() && text[0] == ' ')
                     text.erase(0, 1);
-                if (auto* input = rmlui_dynamic_cast<Rml::ElementFormControlInput*>(el))
+                if (auto* input = rmlui_dynamic_cast<Rml::ElementFormControl*>(el))
+                {
                     input->SetValue(text);
+                    Rml::Dictionary params;
+                    params["value"] = text;
+                    input->DispatchEvent(Rml::EventId::Change, params);
+                }
             }
         }
     }
 
     void Launcher::Tick()
     {
-        RunUiScript(_doc);
+        RunUiScript();
 
         for (std::string const& line : _server->TakeLines())
         {
@@ -397,32 +767,99 @@ namespace
             OnStateChanged(prev, now);
         }
 
+        std::vector<AccountInfo> accounts;
+        std::vector<CharacterInfo> characters;
+        if (_server->TakeAccounts(accounts, characters))
+        {
+            _accRows.clear();
+            uint32_t botAccounts = 0, botChars = 0;
+            for (AccountInfo const& a : accounts)
+            {
+                if (a.bot)
+                {
+                    ++botAccounts;
+                    botChars += a.characters;
+                    continue;
+                }
+                _accRows.push_back({ a.name, a.gmLevel ? "GM " + std::to_string(a.gmLevel) : "игрок", std::to_string(a.characters), FormatLogin(a.lastLogin), a.gmLevel > 0 });
+            }
+            if (botAccounts)
+                _accRows.push_back({ "RNDBOT… (" + std::to_string(botAccounts) + ")", "боты", std::to_string(botChars), "служебные", false });
+            _accLoaded = true;
+
+            std::stable_sort(characters.begin(), characters.end(), [](CharacterInfo const& a, CharacterInfo const& b) { return a.online > b.online; });
+            _cmdChars.clear();
+            for (CharacterInfo const& ch : characters)
+                _cmdChars.push_back({ ch.name, ch.name + " · " + std::to_string(ch.level) + (ch.online ? " · в игре" : "") });
+            if (!_cmdChars.empty() && std::none_of(_cmdChars.begin(), _cmdChars.end(), [&](Opt const& o) { return o.id == _cmdTarget; }))
+                _cmdTarget = _cmdChars.front().id;
+            _model.DirtyVariable("acc_rows");
+            _model.DirtyVariable("acc_loaded");
+            _model.DirtyVariable("cmd_chars");
+            _model.DirtyVariable("cmd_target");
+        }
+
         uint64_t tick = GetTickCount64();
+        if (_accRefreshAt && tick >= _accRefreshAt)
+        {
+            _accRefreshAt = 0;
+            _server->SendCommand("@@accounts");
+        }
+
         if (tick - _lastStatsTick >= 1000)
         {
             _lastStatsTick = tick;
             if (_server->IsRunning())
             {
                 ServerStats st = _server->GetStats();
-                _uptime = now == ServerState::Ready ? FormatUptime(st.uptime) : "—";
-                _players = now == ServerState::Ready ? std::to_string(st.players) : "—";
-                _diff = now == ServerState::Ready ? std::to_string(st.diff) + " мс" : "—";
+                bool ready = now == ServerState::Ready;
+                _uptime = ready ? FormatUptime(st.uptime) : "—";
+                _players = ready ? std::to_string(st.players) : "—";
+                _bots = ready ? std::to_string(st.chars >= st.players ? st.chars - st.players : 0) : "—";
+                _diff = ready ? std::to_string(st.diff) + " мс" : "—";
                 _memory = FormatBytes(_server->GetMemoryBytes());
                 if (now == ServerState::Starting || now == ServerState::Loading)
                     _stateSub = "идёт загрузка, " + std::to_string((tick - _server->GetStartTick()) / 1000) + " с";
             }
             else
-                _uptime = _players = _diff = _memory = "—";
-            _model.DirtyVariable("uptime");
-            _model.DirtyVariable("players");
-            _model.DirtyVariable("diff");
-            _model.DirtyVariable("memory");
-            _model.DirtyVariable("state_sub");
+                _uptime = _players = _bots = _diff = _memory = "—";
+            for (char const* v : { "uptime", "players", "bots", "diff", "memory", "state_sub" })
+                _model.DirtyVariable(v);
+
+            if (_game && WaitForSingleObject(_game, 0) == WAIT_OBJECT_0)
+            {
+                CloseHandle(_game);
+                _game = nullptr;
+                AddEvent("Игра закрыта");
+                if (_settings.stopWithGame && _server->IsRunning())
+                {
+                    AddEvent("Сервер останавливается вместе с игрой");
+                    _server->Stop();
+                }
+            }
+        }
+
+        if (tick - _lastBackupCheck >= 30000)
+        {
+            _lastBackupCheck = tick;
+            CheckScheduledBackup();
+        }
+
+        if (_backupDone.exchange(false))
+        {
+            if (_backupThread.joinable())
+                _backupThread.join();
+            _backupBusy = false;
+            _model.DirtyVariable("backup_busy");
+            if (_backupResult.ok)
+                AddEvent("Резервная копия: " + FormatBytes(_backupResult.bytes) + ", backups\\" + WideToUtf8(_backupResult.dir.filename().wstring()));
+            else
+                AddEvent("Резервная копия не удалась: " + _backupResult.message);
         }
 
         std::wstring picked;
         {
-            std::lock_guard<std::mutex> guard(_dialogLock);
+            std::lock_guard<std::mutex> guard(_asyncLock);
             picked.swap(_pickedDir);
         }
         if (!picked.empty())
@@ -432,11 +869,17 @@ namespace
                 _settings.clientPath = picked;
                 _settings.Save();
                 RefreshClient();
+                LoadSettingsModel();
                 Message("Папка игры сохранена.");
             }
             else
                 Message("В этой папке нет Wow.exe и Data\\common.MPQ.");
         }
+
+        if (_tab == "commands")
+            SyncCommandCards();
+        else if (_tab == "settings")
+            SyncSettingsFields();
     }
 
     void Launcher::OnStateChanged(ServerState prev, ServerState now)
@@ -447,13 +890,27 @@ namespace
                 AddEvent("Запуск сервера");
                 break;
             case ServerState::Ready:
+            {
                 AddEvent("Мир готов за " + std::to_string((GetTickCount64() - _server->GetStartTick()) / 1000) + " с, вход открыт");
+                std::string realm = _server->GetRealmName();
+                if (!_settings.pendingRealmName.empty() && _settings.pendingRealmName != realm)
+                {
+                    _server->SendCommand("@@realmname " + _settings.pendingRealmName);
+                    AddEvent("Имя мира изменено на «" + _settings.pendingRealmName + "», виден после перезапуска");
+                    realm = _settings.pendingRealmName;
+                }
+                _settings.pendingRealmName.clear();
+                _settings.realmName = realm;
+                _settings.Save();
+                if (_tab == "accounts" || _tab == "commands")
+                    _server->SendCommand("@@accounts");
                 if (_pendingPlay)
                 {
                     _pendingPlay = false;
                     Play();
                 }
                 break;
+            }
             case ServerState::Stopped:
                 if (prev != ServerState::Stopped)
                     AddEvent("Сервер остановлен");
@@ -470,7 +927,13 @@ namespace
             default:
                 break;
         }
+        if (now != ServerState::Ready)
+        {
+            _accLoaded = false;
+            _accNote = "Запустите сервер, чтобы увидеть аккаунты.";
+        }
         RefreshServerView();
+        RefreshTray();
     }
 
     void Launcher::RefreshServerView()
@@ -480,9 +943,9 @@ namespace
         switch (s)
         {
             case ServerState::Stopped: _state = "stopped"; _stateTitle = "Остановлен"; _stateSub = "нажмите «Запустить» или «Играть»"; break;
-            case ServerState::Starting: _state = "starting"; _stateTitle = "Запуск"; _stateSub = "конфиг и базы данных"; break;
+            case ServerState::Starting: _state = "starting"; _stateTitle = "Запуск"; _stateSub = "конфиг и база данных"; break;
             case ServerState::Loading: _state = "loading"; _stateTitle = "Загрузка"; _stateSub = "загружаем мир"; break;
-            case ServerState::Ready: _state = "ready"; _stateTitle = "Работает"; _stateSub = "SQLite, вход открыт"; break;
+            case ServerState::Ready: _state = "ready"; _stateTitle = "Работает"; _stateSub = "вход открыт"; break;
             case ServerState::Stopping: _state = "stopping"; _stateTitle = "Остановка"; _stateSub = "сохраняем персонажей"; break;
             case ServerState::Failed: _state = "failed"; _stateTitle = "Ошибка"; _stateSub = _server->GetFailReason(); break;
         }
@@ -490,37 +953,58 @@ namespace
         _worldOn = s == ServerState::Ready;
         _toggleLabel = _running ? "Остановить" : "Запустить";
 
+        ConfFile conf;
+        conf.Load(ServerConfig());
+        _authPort = conf.Get("RealmServerPort").value_or("3724");
+        _worldPort = conf.Get("WorldServerPort").value_or("8085");
+        _soapPort = conf.Get("SOAP.Port").value_or("7878");
+        std::string soap = conf.Get("SOAP.Enabled").value_or("0");
+        _soapEnabled = soap == "1" || soap == "true";
+        _logsDir = WideToUtf8(ConfPath("LogsDir", "logs").wstring());
+
+        _playLabel = "ИГРАТЬ";
         if (!_clientOk)
         {
-            _playLabel = "ИГРАТЬ";
             _playSub = "укажите папку игры";
             _playEnabled = false;
         }
         else if (s == ServerState::Ready)
         {
-            _playLabel = "ИГРАТЬ";
             _playSub = "запустить Wow.exe";
             _playEnabled = true;
         }
         else if (s == ServerState::Stopping)
         {
-            _playLabel = "ИГРАТЬ";
             _playSub = "сервер останавливается";
             _playEnabled = false;
         }
         else if (_pendingPlay)
         {
-            _playLabel = "ИГРАТЬ";
             _playSub = "игра откроется, когда мир загрузится";
             _playEnabled = false;
         }
         else
         {
-            _playLabel = "ИГРАТЬ";
             _playSub = "запустить сервер и игру";
             _playEnabled = true;
         }
         _model.DirtyAllVariables();
+    }
+
+    void Launcher::RefreshTray()
+    {
+        _tray.SetLabel("status", "Сервер: " + _stateTitle);
+        _tray.SetLabel("toggle", _running ? "Остановить сервер" : "Запустить сервер");
+        _tray.SetEnabled("restart", _running);
+        _tray.SetEnabled("play", _clientOk && _server->GetState() != ServerState::Stopping);
+        _tray.SetTooltip("LonelyIce — " + _stateTitle);
+    }
+
+    std::string Launcher::LaunchLocale() const
+    {
+        if (!_settings.locale.empty())
+            return _settings.locale;
+        return _client.valid ? GameClient::ReadConfigLocale(_client.dir) : std::string();
     }
 
     void Launcher::RefreshClient()
@@ -528,10 +1012,13 @@ namespace
         fs::path dir = GameClient::Detect(_settings.clientPath, _exeDir);
         _client = GameClient::Inspect(dir);
         _clientOk = _client.valid;
-        _chips.clear();
+        _locales.clear();
 
         if (!_client.valid)
+        {
             _clientPath = "Клиент 3.3.5a не найден";
+            _rlNote = "Укажите папку с Wow.exe кнопкой «Обзор…».";
+        }
         else
         {
             _clientPath = WideToUtf8(_client.dir.wstring());
@@ -540,22 +1027,35 @@ namespace
                 _settings.clientPath = _client.dir.wstring();
                 _settings.Save();
             }
-            if (_client.version != "3.3.5.12340")
-                _chips.push_back({ "Wow.exe " + (_client.version.empty() ? std::string("?") : _client.version), false });
-            std::string good, bad;
+
+            std::string launch = LaunchLocale();
+            int foreign = 0;
+            bool launchOk = true;
             for (ClientLocale const& loc : _client.locales)
             {
-                std::string& list = loc.realmlist == RealmHost ? good : bad;
-                list += (list.empty() ? "" : ", ") + loc.name;
+                std::string cls = loc.realmlist == RealmHost ? "ok" : loc.realmlist.empty() ? "bad" : "warn";
+                if (cls != "ok")
+                {
+                    ++foreign;
+                    if (loc.name == launch)
+                        launchOk = false;
+                }
+                _locales.push_back({ loc.name, cls, loc.name == launch });
             }
-            if (_client.locales.empty())
-                _chips.push_back({ "локали не найдены", false });
-            if (!good.empty())
-                _chips.push_back({ good + ": 127.0.0.1", true });
-            if (!bad.empty())
-                _chips.push_back({ bad + ": другой сервер", false });
+
+            if (_client.version != "3.3.5.12340")
+                _rlNote = "Wow.exe " + (_client.version.empty() ? std::string("неизвестной версии") : _client.version) + ", нужен 3.3.5a (12340).";
+            else if (_client.locales.empty())
+                _rlNote = "В Data\\ не найдено ни одной локали.";
+            else if (!launchOk)
+                _rlNote = launch + ": чужой адрес" + (_settings.writeRealmlist ? ", лаунчер поправит его при запуске игры." : ".");
+            else if (foreign)
+                _rlNote = "Выделен язык запуска; ещё в " + std::to_string(foreign) + " чужой адрес.";
+            else
+                _rlNote = "Выделен язык запуска; везде 127.0.0.1.";
         }
         RefreshServerView();
+        RefreshTray();
     }
 
     void Launcher::AppendLog(std::string const& utf8, char const* cls)
@@ -591,11 +1091,26 @@ namespace
         _model.DirtyVariable("message");
     }
 
+    void Launcher::OpenTab(std::string const& tab)
+    {
+        _tab = tab;
+        if (tab == "accounts" || tab == "commands")
+        {
+            if (_server->GetState() == ServerState::Ready && _server->SendCommand("@@accounts") && !_accLoaded)
+                _accNote = "Загружаем…";
+        }
+        if (tab == "settings" && _settingsModel.ChangedCount() == 0)
+            LoadSettingsModel();
+        if (tab == "data")
+            RefreshData();
+        _model.DirtyAllVariables();
+    }
+
     void Launcher::StartServer()
     {
         if (_server->IsRunning())
             return;
-        fs::path config = _settings.serverConfig.empty() ? DefaultServerConfig(_exeDir) : fs::path(_settings.serverConfig);
+        fs::path config = ServerConfig();
         if (!fs::exists(config))
         {
             Message("Не найден конфиг сервера: " + WideToUtf8(config.wstring()));
@@ -606,6 +1121,7 @@ namespace
         if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(_exeDir.wstring()), env))
             Message("Не удалось запустить сервер: " + _server->GetFailReason());
         RefreshServerView();
+        RefreshTray();
     }
 
     void Launcher::ToggleServer()
@@ -618,6 +1134,7 @@ namespace
         else
             StartServer();
         RefreshServerView();
+        RefreshTray();
     }
 
     void Launcher::RestartServer()
@@ -633,12 +1150,12 @@ namespace
     {
         if (!_client.valid)
         {
+            ShowWindow();
             Message("Сначала укажите папку с клиентом 3.3.5a.");
             return;
         }
 
-        ServerState s = _server->GetState();
-        if (s != ServerState::Ready)
+        if (_server->GetState() != ServerState::Ready)
         {
             _pendingPlay = true;
             if (!_server->IsRunning())
@@ -653,28 +1170,38 @@ namespace
             return;
         }
 
-        FixRealmlist(true);
+        std::string launch = LaunchLocale();
+        if (_settings.writeRealmlist)
+            FixRealmlist(launch.empty() ? std::vector<std::string>{} : std::vector<std::string>{ launch }, true);
+        if (!_settings.locale.empty())
+            GameClient::SetConfigLocale(_client.dir, _settings.locale);
+        if (_settings.clearWdb)
+            GameClient::ClearWdb(_client.dir);
 
         std::string error;
-        if (GameClient::Launch(_client.dir, error))
+        HANDLE process = nullptr;
+        if (GameClient::Launch(_client.dir, error, reinterpret_cast<void**>(&process)))
         {
-            AddEvent("Запущена игра");
+            if (_game)
+                CloseHandle(_game);
+            _game = process;
+            AddEvent("Запущена игра" + (launch.empty() ? std::string() : " (" + launch + ")"));
             Message("");
         }
         else
             Message(error);
     }
 
-    void Launcher::FixRealmlist(bool quiet)
+    void Launcher::FixRealmlist(std::vector<std::string> const& locales, bool quiet)
     {
         if (!_client.valid)
             return;
 
-        bool needed = false;
+        std::vector<std::string> todo;
         for (ClientLocale const& loc : _client.locales)
-            if (loc.realmlist != RealmHost)
-                needed = true;
-        if (!needed)
+            if (loc.realmlist != RealmHost && (locales.empty() || std::find(locales.begin(), locales.end(), loc.name) != locales.end()))
+                todo.push_back(loc.name);
+        if (todo.empty())
         {
             if (!quiet)
                 Message("realmlist уже указывает на этот компьютер.");
@@ -682,14 +1209,15 @@ namespace
         }
 
         std::string error;
-        if (!GameClient::WriteRealmlist(_client, RealmHost, error))
+        if (!GameClient::WriteRealmlist(_client, RealmHost, todo, error))
         {
             Message(error);
             return;
         }
-        // Item and quest cache from another server shows wrong names and tooltips.
-        GameClient::ClearWdb(_client.dir);
-        AddEvent("realmlist: 127.0.0.1 во всех локалях, кэш клиента очищен");
+        std::string list;
+        for (std::string const& l : todo)
+            list += (list.empty() ? "" : ", ") + l;
+        AddEvent("realmlist 127.0.0.1: " + list);
         RefreshClient();
     }
 
@@ -702,7 +1230,7 @@ namespace
                 return;
             auto* me = static_cast<Launcher*>(self);
             {
-                std::lock_guard<std::mutex> guard(me->_dialogLock);
+                std::lock_guard<std::mutex> guard(me->_asyncLock);
                 me->_pickedDir = Utf8ToWide(list[0]);
             }
             UiBackend::Wake();
@@ -721,16 +1249,366 @@ namespace
         input->SetValue("");
     }
 
-    void Launcher::RunCommand(std::string const& cmd)
+    void Launcher::RunCommand(std::string const& cmd, bool echo)
     {
         if (_server->GetState() != ServerState::Ready)
         {
             Message("Команды принимаются, когда мир запущен.");
             return;
         }
-        AppendLog("AC> " + cmd, "me");
+        if (echo)
+            AppendLog("AC> " + cmd, "me");
         if (!_server->SendCommand(cmd))
             Message("Команда не отправлена: сервер не отвечает.");
+    }
+
+    // ---- accounts
+
+    void Launcher::CreateAccount()
+    {
+        if (_server->GetState() != ServerState::Ready)
+            return;
+        std::string login = _accLogin, pass = _accPass;
+        if (login.empty() || pass.empty() || login.find(' ') != std::string::npos || pass.find(' ') != std::string::npos)
+        {
+            Message("Логин и пароль не должны быть пустыми и не должны содержать пробелов.");
+            return;
+        }
+        RunCommand("account create " + login + " " + pass, false);
+        AppendLog("AC> account create " + login + " ********", "me");
+        if (_accLevel != "0")
+            RunCommand("account set gmlevel " + login + " " + _accLevel + " -1");
+        AddEvent("Создан аккаунт " + login + (_accLevel != "0" ? ", GM " + _accLevel : ""));
+        _accPass.clear();
+        _accLogin.clear();
+        _model.DirtyVariable("acc_pass");
+        _model.DirtyVariable("acc_login");
+        _accRefreshAt = GetTickCount64() + 1500;
+    }
+
+    // ---- commands
+
+    void Launcher::BuildCommandCards()
+    {
+        auto const& catalog = CommandCatalog();
+        _cmdGroups.clear();
+        for (CmdGroup const& g : catalog)
+            _cmdGroups.push_back({ g.id, g.name });
+
+        std::string q = _cmdQuery;
+        std::transform(q.begin(), q.end(), q.begin(), ::tolower);
+
+        _cmdCards.clear();
+        for (int gi = 0; gi < int(catalog.size()); ++gi)
+        {
+            CmdGroup const& g = catalog[gi];
+            if (q.empty() && g.id != _cmdGroup)
+                continue;
+            for (int ci = 0; ci < int(g.cmds.size()); ++ci)
+            {
+                CmdDef const& d = g.cmds[ci];
+                if (!q.empty())
+                {
+                    // ASCII-only lowering: Cyrillic search matches the case typed
+                    std::string hay = d.title + " " + d.desc + " " + d.tmpl;
+                    std::transform(hay.begin(), hay.end(), hay.begin(), ::tolower);
+                    if (hay.find(q) == std::string::npos)
+                        continue;
+                }
+                CmdCardView card;
+                card.title = d.title;
+                card.desc = d.desc;
+                card.group = q.empty() ? "" : g.name;
+                card.danger = d.danger;
+                card.groupIdx = gi;
+                card.cmdIdx = ci;
+                for (CmdArgDef const& a : d.args)
+                {
+                    CmdArgView av{ a.name, std::string(1, a.type), a.def, {} };
+                    for (auto const& [id, label] : a.options)
+                        av.opts.push_back({ id, label });
+                    card.args.push_back(av);
+                }
+                _cmdCards.push_back(std::move(card));
+            }
+        }
+        _cmdQueryShown = _cmdQuery;
+        SyncCommandCards();
+        _model.DirtyVariable("cmd_groups");
+        _model.DirtyVariable("cmd_cards");
+        _model.DirtyVariable("cmd_group");
+        _model.DirtyVariable("cmd_query");
+    }
+
+    void Launcher::SyncCommandCards()
+    {
+        if (_cmdQuery != _cmdQueryShown)
+        {
+            BuildCommandCards();
+            return;
+        }
+        bool dirty = false;
+        for (CmdCardView& card : _cmdCards)
+        {
+            CmdDef const& d = CommandCatalog()[card.groupIdx].cmds[card.cmdIdx];
+            std::vector<std::string> values;
+            for (CmdArgView const& a : card.args)
+                values.push_back(a.value);
+            std::string preview = BuildCommand(d, values, _cmdTarget);
+            std::string button = card.armed ? "Точно?" : d.danger ? "Выполнить…" : "Выполнить";
+            if (preview != card.preview || button != card.button)
+            {
+                card.preview = preview;
+                card.button = button;
+                dirty = true;
+            }
+        }
+        if (dirty)
+            _model.DirtyVariable("cmd_cards");
+    }
+
+    void Launcher::RunCard(int index)
+    {
+        if (index < 0 || index >= int(_cmdCards.size()) || _server->GetState() != ServerState::Ready)
+            return;
+        CmdCardView& card = _cmdCards[index];
+        CmdDef const& d = CommandCatalog()[card.groupIdx].cmds[card.cmdIdx];
+        if (d.tmpl.find("{p}") != std::string::npos && _cmdTarget.empty())
+        {
+            Message("Выберите персонажа.");
+            return;
+        }
+        if (d.danger && !card.armed)
+        {
+            card.armed = true;
+            SyncCommandCards();
+            return;
+        }
+        card.armed = false;
+        std::vector<std::string> values;
+        for (CmdArgView const& a : card.args)
+            values.push_back(a.value);
+        std::string cmd = BuildCommand(d, values, _cmdTarget);
+        RunCommand(cmd);
+        _cmdLast = "Отправлено: " + cmd + ". Ответ во вкладке «Консоль».";
+        _model.DirtyVariable("cmd_last");
+        SyncCommandCards();
+    }
+
+    // ---- settings
+
+    void Launcher::LoadSettingsModel()
+    {
+        std::vector<std::string> locales;
+        for (ClientLocale const& l : _client.locales)
+            locales.push_back(l.name);
+        _settingsModel.Load(ServerConfig(), _settings, locales);
+        _setPreset = 0;
+        BuildSettingsFields();
+    }
+
+    void Launcher::BuildSettingsFields()
+    {
+        static std::map<std::string, std::string> const applyText = { { "now", "сразу" }, { "rel", ".reload" }, { "rst", "перезапуск" } };
+
+        _setGroups.clear();
+        for (SetGroup const& g : _settingsModel.Groups())
+        {
+            _setGroups.push_back({ g.id, g.name, _settingsModel.ChangedCount(g.id) });
+            if (g.id == _setGroup)
+                _setHint = g.hint;
+        }
+
+        _setFields.clear();
+        auto& values = _settingsModel.Values();
+        for (int i = 0; i < int(values.size()); ++i)
+        {
+            SetValue const& v = values[i];
+            if (v.def->group != _setGroup)
+                continue;
+            FieldView f;
+            f.label = v.def->label;
+            f.key = v.def->key;
+            f.type = std::string(1, v.def->type);
+            f.value = v.cur;
+            f.on = v.cur == "1";
+            f.apply = v.def->apply;
+            f.apply_text = applyText.at(v.def->apply);
+            f.hint = v.def->hint;
+            f.changed = _settingsModel.Changed(v);
+            f.index = i;
+            for (auto const& [id, label] : v.def->options)
+                f.opts.push_back({ id, label });
+            _setFields.push_back(std::move(f));
+        }
+        RefreshSettingsStatus();
+        for (char const* v : { "set_groups", "set_fields", "set_group", "set_hint", "set_preset" })
+            _model.DirtyVariable(v);
+    }
+
+    void Launcher::SyncSettingsFields()
+    {
+        auto& values = _settingsModel.Values();
+        bool dirty = false;
+        for (FieldView& f : _setFields)
+        {
+            SetValue& v = values[f.index];
+            std::string cur = f.type == "b" ? (f.on ? "1" : "0") : f.value;
+            if (cur != v.cur)
+                v.cur = cur;
+            bool changed = _settingsModel.Changed(v);
+            if (changed != f.changed)
+            {
+                f.changed = changed;
+                dirty = true;
+            }
+        }
+        if (dirty)
+        {
+            for (GroupView& g : _setGroups)
+                g.changed = _settingsModel.ChangedCount(g.id);
+            RefreshSettingsStatus();
+            _model.DirtyVariable("set_fields");
+            _model.DirtyVariable("set_groups");
+        }
+    }
+
+    void Launcher::RefreshSettingsStatus()
+    {
+        int n = _settingsModel.ChangedCount();
+        bool restart = _settingsModel.NeedsRestart() && _server->IsRunning();
+        _setStatus = n ? "Изменено: " + std::to_string(n) + (restart ? ", нужен перезапуск" : "") : "Изменений нет";
+        _setSaveLabel = restart ? "Сохранить и перезапустить" : "Сохранить";
+        _setCanSave = n > 0;
+        for (char const* v : { "set_status", "set_save_label", "set_can_save" })
+            _model.DirtyVariable(v);
+    }
+
+    void Launcher::SaveSettings()
+    {
+        SyncSettingsFields();
+        if (!_settingsModel.ChangedCount())
+            return;
+        bool restartNeeded = _settingsModel.NeedsRestart();
+        SaveResult r = _settingsModel.Save(_settings);
+        if (!r.error.empty())
+        {
+            Message(r.error);
+            return;
+        }
+
+        std::string what = "Настройки сохранены";
+        if (_server->GetState() == ServerState::Ready)
+        {
+            if (r.reload && !restartNeeded)
+            {
+                RunCommand("reload config");
+                what += ", конфиг перечитан";
+            }
+            if (restartNeeded)
+            {
+                RestartServer();
+                what += ", сервер перезапускается";
+            }
+        }
+        AddEvent(what);
+        Message(what + ".");
+        RefreshClient();
+        BuildSettingsFields();
+    }
+
+    // ---- data
+
+    void Launcher::RefreshData()
+    {
+        _dataRows.clear();
+        uint64_t total = 0;
+        std::vector<std::string> missing;
+
+        static std::map<std::string, std::pair<std::string, std::string>> const dbTitle = {
+            { "auth", { "База входа", "аккаунты, права, список миров" } }, { "characters", { "База персонажей", "персонажи, вещи, почта, гильдии" } },
+            { "world", { "База мира", "существа, задания, добыча, предметы" } }, { "playerbots", { "База ботов", "поведение и маршруты ботов" } } };
+        for (DatabaseFile const& db : FindDatabases(ServerConfig(), _exeDir))
+        {
+            std::error_code ec;
+            std::string title = dbTitle.count(db.name) ? dbTitle.at(db.name).first : db.name;
+            std::string detail = dbTitle.count(db.name) ? dbTitle.at(db.name).second : std::string();
+            if (db.path.empty())
+            {
+                _dataRows.push_back({ title, "внешний сервер базы данных", "ok", "" });
+                continue;
+            }
+            bool ok = fs::exists(db.path, ec);
+            uint64_t size = ok ? fs::file_size(db.path, ec) : 0;
+            total += size;
+            if (!ok)
+                missing.push_back(title);
+            _dataRows.push_back({ title, detail, ok ? "ok" : "bad", ok ? FormatBytes(size) : "нет" });
+        }
+
+        fs::path data = ConfPath("DataDir", ".");
+        struct Part { char const* dir; char const* title; char const* detail; bool required; };
+        for (Part const& p : { Part{ "dbc", "DBC", "таблицы клиента", true }, Part{ "maps", "Карты", "карты высот и зон", true },
+                 Part{ "Cameras", "Камеры", "ролики и полёты", false }, Part{ "vmaps", "Модели зданий (vmaps)", "линия видимости, пещеры", false },
+                 Part{ "mmaps", "Навигация (mmaps)", "пути для монстров и ботов", false } })
+        {
+            DirStats s = Scan(data / p.dir);
+            total += s.bytes;
+            bool ok = s.files > 0;
+            if (!ok)
+                missing.push_back(p.title);
+            _dataRows.push_back({ p.title, std::string(p.detail) + (ok ? ", файлов: " + std::to_string(s.files) : ""),
+                ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : "нет" });
+        }
+
+        if (missing.empty())
+            _dataSum = "всё на месте · " + FormatBytes(total);
+        else
+        {
+            _dataSum = "не хватает: ";
+            for (std::size_t i = 0; i < missing.size(); ++i)
+                _dataSum += (i ? ", " : "") + missing[i];
+        }
+        _model.DirtyVariable("data_rows");
+        _model.DirtyVariable("data_sum");
+    }
+
+    // ---- backups
+
+    void Launcher::StartBackup(bool scheduled)
+    {
+        if (_backupBusy)
+            return;
+        std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), _exeDir);
+        if (std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
+        {
+            Message("Резервная копия работает только с базами в файлах.");
+            return;
+        }
+        _backupBusy = true;
+        _model.DirtyVariable("backup_busy");
+        if (!scheduled)
+            Message("Делаем резервную копию…");
+        if (_backupThread.joinable())
+            _backupThread.join();
+        _backupThread = std::thread([this, dbs, root = _exeDir / "backups", keep = _settings.backupKeep]
+        {
+            _backupResult = BackupDatabases(dbs, root, keep);
+            _backupDone = true;
+            UiBackend::Wake();
+        });
+    }
+
+    void Launcher::CheckScheduledBackup()
+    {
+        if (_settings.backupTime.size() != 5 || _backupBusy)
+            return;
+        std::string today = Now("%Y-%m-%d");
+        if (_settings.lastBackupDay == today || Now("%H:%M") < _settings.backupTime)
+            return;
+        _settings.lastBackupDay = today;
+        _settings.Save();
+        StartBackup(true);
     }
 }
 

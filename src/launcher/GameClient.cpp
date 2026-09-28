@@ -123,10 +123,80 @@ LonelyIce::ClientInfo LonelyIce::GameClient::Inspect(fs::path const& dir)
     return info;
 }
 
-bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string const& host, std::string& error)
+namespace
+{
+    // Rewrites "SET <key> ..." lines of WTF\Config.wtf (case-insensitive key); appends the line if missing.
+    bool SetConfigWtf(fs::path const& dir, std::string const& key, std::string const& value, bool appendIfMissing)
+    {
+        fs::path config = dir / "WTF" / "Config.wtf";
+        std::string text;
+        {
+            std::ifstream in(config, std::ios::binary);
+            if (in)
+                text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            else if (!appendIfMissing)
+                return true;
+        }
+
+        std::string prefix = "set " + key + " ";
+        std::transform(prefix.begin(), prefix.end(), prefix.begin(), ::tolower);
+        std::istringstream lines(text);
+        std::string line, result;
+        bool found = false;
+        while (std::getline(lines, line))
+        {
+            std::string lower = line;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            if (lower.rfind(prefix, 0) == 0)
+            {
+                line = "SET " + key + " \"" + value + "\"\r";
+                found = true;
+            }
+            result += line + "\n";
+        }
+        if (!found)
+        {
+            if (!appendIfMissing)
+                return true;
+            result += "SET " + key + " \"" + value + "\"\r\n";
+        }
+
+        std::error_code ec;
+        fs::create_directories(config.parent_path(), ec);
+        std::ofstream out(config, std::ios::binary | std::ios::trunc);
+        out << result;
+        return bool(out);
+    }
+}
+
+std::string LonelyIce::GameClient::ReadConfigLocale(fs::path const& dir)
+{
+    std::ifstream in(dir / "WTF" / "Config.wtf");
+    std::string line;
+    while (std::getline(in, line))
+    {
+        std::string lower = line;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        if (lower.rfind("set locale ", 0) != 0)
+            continue;
+        std::size_t a = line.find('"'), b = line.rfind('"');
+        if (a != std::string::npos && b > a)
+            return line.substr(a + 1, b - a - 1);
+    }
+    return {};
+}
+
+bool LonelyIce::GameClient::SetConfigLocale(fs::path const& dir, std::string const& locale)
+{
+    return SetConfigWtf(dir, "locale", locale, true);
+}
+
+bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error)
 {
     for (ClientLocale const& loc : info.locales)
     {
+        if (!locales.empty() && std::find(locales.begin(), locales.end(), loc.name) == locales.end())
+            continue;
         fs::path file = info.dir / "Data" / loc.name / "realmlist.wtf";
         fs::path bak = file;
         bak += ".bak";
@@ -145,29 +215,7 @@ bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string c
     }
 
     // Config.wtf may carry its own realmList that wins over realmlist.wtf.
-    fs::path config = info.dir / "WTF" / "Config.wtf";
-    std::ifstream in(config, std::ios::binary);
-    if (in)
-    {
-        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        in.close();
-        std::istringstream lines(text);
-        std::string line, result;
-        bool changed = false;
-        while (std::getline(lines, line))
-        {
-            std::string lower = line;
-            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-            if (lower.rfind("set realmlist ", 0) == 0)
-            {
-                line = "SET realmList \"" + host + "\"\r";
-                changed = true;
-            }
-            result += line + "\n";
-        }
-        if (changed)
-            std::ofstream(config, std::ios::binary | std::ios::trunc) << result;
-    }
+    SetConfigWtf(info.dir, "realmList", host, false);
     return true;
 }
 
@@ -177,7 +225,7 @@ void LonelyIce::GameClient::ClearWdb(fs::path const& dir)
     fs::remove_all(dir / "Cache" / "WDB", ec);
 }
 
-bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string& error)
+bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string& error, void** process)
 {
     std::wstring exe = (dir / "Wow.exe").wstring();
     std::wstring cmd = L"\"" + exe + L"\"";
@@ -189,7 +237,10 @@ bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string& error)
         return false;
     }
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    if (process)
+        *process = pi.hProcess;
+    else
+        CloseHandle(pi.hProcess);
     return true;
 }
 

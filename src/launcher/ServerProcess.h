@@ -25,9 +25,25 @@ namespace LonelyIce
 
     struct ServerStats
     {
-        uint32_t players = 0;
+        uint32_t players = 0;   // real clients
+        uint32_t chars = 0;     // characters in world, bots included
         uint64_t uptime = 0;
         uint32_t diff = 0;
+    };
+
+    struct AccountInfo
+    {
+        uint32_t id = 0;
+        std::string name, lastLogin;
+        uint32_t gmLevel = 0, characters = 0;
+        bool bot = false;
+    };
+
+    struct CharacterInfo
+    {
+        std::string name;
+        uint32_t account = 0, level = 0;
+        bool online = false;
     };
 
     // Runs this same exe with --server as a child process; log comes back through a pipe, commands go in through stdin.
@@ -44,6 +60,10 @@ namespace LonelyIce
 
         // Call on the UI thread: drains new log lines and applies control messages.
         std::vector<std::string> TakeLines();
+
+        // True once per completed "@@accounts" answer.
+        bool TakeAccounts(std::vector<AccountInfo>& accounts, std::vector<CharacterInfo>& characters);
+        std::string GetRealmName() const;
 
         ServerState GetState() const { return _state; }
         ServerStats GetStats() const;
@@ -67,6 +87,10 @@ namespace LonelyIce
         mutable std::mutex _lock;
         std::deque<std::string> _lines;
         ServerStats _stats;
+        std::vector<AccountInfo> _accBuild, _accReady;
+        std::vector<CharacterInfo> _charBuild, _charReady;
+        bool _accFresh = false;
+        std::string _realmName;
         std::string _failReason;
         std::atomic<ServerState> _state{ ServerState::Stopped };
         std::atomic<int> _exitCode{ 0 };

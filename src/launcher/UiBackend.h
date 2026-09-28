@@ -12,6 +12,7 @@ namespace Rml
 }
 
 struct SDL_Window;
+struct SDL_Surface;
 
 // SDL3 window + OpenGL 3.3 renderer for RmlUi, trimmed from RmlUi's SDL_GL3 sample backend (no SDL_image: textures are TGA).
 namespace LonelyIce::UiBackend
@@ -24,8 +25,13 @@ namespace LonelyIce::UiBackend
     SDL_Window* GetWindow();
     float GetDisplayScale();
 
-    // Returns false when the user closed the window. Waits for input unless wakeups arrive.
-    bool ProcessEvents(Rml::Context* context, double maxWaitSeconds);
+    // Returns false when the application must quit (session end). closeRequested is set when the user closed the window.
+    // Waits for input up to maxWaitSeconds unless woken up.
+    bool ProcessEvents(Rml::Context* context, double maxWaitSeconds, bool& closeRequested);
+    void SetIcon(SDL_Surface* icon);
+    void ShowWindow();       // restore, raise and focus
+    void HideWindow();
+    bool IsWindowVisible();
     void Wake();                 // thread-safe, interrupts the wait in ProcessEvents
     void BeginFrame();
     void PresentFrame();

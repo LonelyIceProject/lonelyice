@@ -24,11 +24,13 @@
                 </div>
                 <div class="svc"><div class="dot" data-class-on="auth_on"></div><div class="svc-name">Вход (auth)</div><div class="port">:{{auth_port}}</div></div>
                 <div class="svc"><div class="dot" data-class-on="world_on"></div><div class="svc-name">Мир (world)</div><div class="port">:{{world_port}}</div></div>
+                <div class="svc" data-if="soap_enabled"><div class="dot" data-class-on="world_on"></div><div class="svc-name">SOAP</div><div class="port">:{{soap_port}}</div></div>
                 <div class="kv-block">
                     <div class="kv"><div class="k">Время работы</div><div class="v">{{uptime}}</div></div>
-                    <div class="kv"><div class="k">Персонажи в мире</div><div class="v">{{players}}</div></div>
-                    <div class="kv"><div class="k">Задержка мира</div><div class="v">{{diff}}</div></div>
+                    <div class="kv"><div class="k">Игроки онлайн</div><div class="v">{{players}}</div></div>
+                    <div class="kv"><div class="k">Боты в мире</div><div class="v">{{bots}}</div></div>
                     <div class="kv"><div class="k">Память</div><div class="v">{{memory}}</div></div>
+                    <div class="kv"><div class="k">Задержка мира</div><div class="v">{{diff}}</div></div>
                 </div>
                 <div class="row">
                     <div id="btn-toggle" class="btn small" data-class-danger="running" data-event-click="toggle_server">{{toggle_label}}</div>
@@ -40,8 +42,9 @@
                 <h3>Папка игры</h3>
                 <div class="path" data-class-missing="!client_ok">{{client_path}}</div>
                 <div class="chips">
-                    <div class="chip" data-for="c : chips" data-class-ok="c.ok" data-class-bad="!c.ok">{{c.text}}</div>
+                    <div class="chip" data-for="l : locales" data-class-ok="l.cls == 'ok'" data-class-warn="l.cls == 'warn'" data-class-bad="l.cls == 'bad'" data-class-launch="l.launch" data-event-click="pick_locale(l.name)">{{l.name}}</div>
                 </div>
+                <div class="rlnote">{{rl_note}}</div>
                 <div class="row">
                     <div id="btn-browse" class="btn small" data-event-click="browse_client">Обзор…</div>
                     <div id="btn-realmlist" class="btn small" data-class-disabled="!client_ok" data-event-click="fix_realmlist">Прописать realmlist</div>
@@ -51,26 +54,53 @@
 
         <div id="panel">
             <div id="tabs">
-                <div id="tab-overview" class="tab" data-class-active="tab == 'overview'" data-event-click="tab = 'overview'">Обзор</div>
-                <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="tab = 'console'">Консоль</div>
+                <div id="tab-overview" class="tab" data-class-active="tab == 'overview'" data-event-click="open_tab('overview')">Обзор</div>
+                <div id="tab-accounts" class="tab" data-class-active="tab == 'accounts'" data-event-click="open_tab('accounts')">Аккаунты</div>
+                <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="open_tab('console')">Консоль</div>
+                <div id="tab-commands" class="tab" data-class-active="tab == 'commands'" data-event-click="open_tab('commands')">Команды</div>
+                <div id="tab-settings" class="tab" data-class-active="tab == 'settings'" data-event-click="open_tab('settings')">Настройки</div>
+                <div id="tab-data" class="tab" data-class-active="tab == 'data'" data-event-click="open_tab('data')">Данные</div>
             </div>
 
+            <!-- overview -->
             <div class="pane" data-if="tab == 'overview'">
-                <div class="ribbon">События</div>
-                <div id="events">
+                <div class="ribbon">События <span class="ribbon-note">сегодня</span></div>
+                <div id="events" class="scroll grow">
                     <div class="event" data-for="e : events"><div class="time">{{e.time}}</div><div class="msg">{{e.text}}</div></div>
                     <div class="event empty" data-if="events.size == 0"><div class="msg">Пока ничего не произошло.</div></div>
                 </div>
                 <div class="ribbon">Быстрые действия</div>
                 <div class="actions">
-                    <div id="act-info" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('server info')"><div class="a-title">Состояние сервера</div><div class="a-sub">server info</div></div>
+                    <div id="act-backup" class="action" data-class-disabled="backup_busy" data-event-click="backup_now"><div class="a-title">Резервная копия</div><div class="a-sub">аккаунты и персонажи в backups</div></div>
                     <div id="act-save" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('saveall')"><div class="a-title">Сохранить всех</div><div class="a-sub">saveall</div></div>
-                    <div class="action" data-event-click="open_server_dir"><div class="a-title">Папка сервера</div><div class="a-sub">{{server_dir}}</div></div>
-                    <div class="action" data-class-disabled="!client_ok" data-event-click="open_client_dir"><div class="a-title">Папка игры</div><div class="a-sub">Wow.exe, WTF, Interface</div></div>
+                    <div id="act-announce" class="action" data-class-disabled="state != 'ready'" data-event-click="announce"><div class="a-title">Объявление</div><div class="a-sub">сообщение в чат сервера</div></div>
+                    <div id="act-logs" class="action" data-event-click="open_logs"><div class="a-title">Папка логов</div><div class="a-sub">{{logs_dir}}</div></div>
                 </div>
             </div>
 
-            <div class="pane console" data-if="tab == 'console'">
+            <!-- accounts -->
+            <div class="pane" data-if="tab == 'accounts'">
+                <div class="scroll grow">
+                    <div class="note pad" data-if="!acc_loaded">{{acc_note}}</div>
+                    <div class="trow thead" data-if="acc_loaded"><div class="c1">Логин</div><div class="c2">Уровень</div><div class="c3">Персонажи</div><div class="c4">Последний вход</div></div>
+                    <div class="trow" data-for="a : acc_rows"><div class="c1">{{a.name}}</div><div class="c2"><span data-class-gm="a.gm">{{a.level}}</span></div><div class="c3">{{a.chars}}</div><div class="c4">{{a.last}}</div></div>
+                </div>
+                <div class="ribbon">Новый аккаунт</div>
+                <div class="form-row">
+                    <div class="f"><div class="f-label">Логин</div><input type="text" id="acc-login" class="field" data-value="acc_login"/></div>
+                    <div class="f"><div class="f-label">Пароль</div><input type="password" id="acc-pass" class="field" data-value="acc_pass"/></div>
+                    <div class="f"><div class="f-label">Уровень</div>
+                        <select id="acc-level" class="field" data-value="acc_level">
+                            <option value="0">Игрок</option><option value="1">GM 1</option><option value="2">GM 2</option><option value="3">GM 3</option>
+                        </select>
+                    </div>
+                    <div id="btn-acc-create" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_create">Создать</div>
+                    <div id="btn-acc-refresh" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_refresh">Обновить</div>
+                </div>
+            </div>
+
+            <!-- console: kept in the DOM (data-visible) so the log survives tab switches -->
+            <div class="pane console" data-visible="tab == 'console'" data-class-hidden="tab != 'console'">
                 <div id="log"></div>
                 <div class="cmd-row">
                     <div class="prompt">AC&gt;</div>
@@ -78,16 +108,111 @@
                     <div id="btn-send" class="btn small" data-event-click="send_command">Выполнить</div>
                 </div>
             </div>
+
+            <!-- commands -->
+            <div class="pane" data-if="tab == 'commands'">
+                <div class="toolbar">
+                    <div class="f-inline">Персонаж</div>
+                    <select id="cmd-target" class="field target" data-if="cmd_chars.size > 0" data-value="cmd_target">
+                        <option data-for="o : cmd_chars" data-attr-value="o.id">{{o.label}}</option>
+                    </select>
+                    <input type="text" id="cmd-target-text" class="field target" data-if="cmd_chars.size == 0" data-value="cmd_target"/>
+                    <div class="spacer"></div>
+                    <div class="f-inline">Поиск</div>
+                    <input type="text" id="cmd-search" class="field search" data-value="cmd_query"/>
+                </div>
+                <div class="cats">
+                    <div class="cat" data-attr-id="'cmd-group-' + g.id" data-for="g : cmd_groups" data-class-active="cmd_query == '' && cmd_group == g.id" data-event-click="cmd_group_pick(g.id)">{{g.name}}</div>
+                </div>
+                <div class="scroll grow">
+                    <div class="ccard" data-for="c, ci : cmd_cards" data-class-danger="c.danger">
+                        <div class="cc-main">
+                            <div class="cc-title">{{c.title}}<span class="cc-group" data-if="c.group != ''"> · {{c.group}}</span></div>
+                            <div class="cc-desc" data-if="c.desc != ''">{{c.desc}}</div>
+                            <div class="cc-args" data-if="c.args.size > 0">
+                                <div class="cc-arg" data-for="a : c.args">
+                                    <input type="text" class="field arg" data-if="a.type != 's'" data-value="a.value"/>
+                                    <select class="field arg" data-if="a.type == 's'" data-value="a.value">
+                                        <option data-for="o : a.opts" data-attr-value="o.id">{{o.label}}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="cc-preview">{{c.preview}}</div>
+                        </div>
+                        <div class="btn small go" data-attr-id="'run-' + ci" data-class-danger="c.danger" data-class-disabled="state != 'ready'" data-event-click="cmd_run(ci)">{{c.button}}</div>
+                    </div>
+                    <div class="note pad" data-if="cmd_cards.size == 0">Ничего не найдено.</div>
+                </div>
+                <div class="statusbar"><div class="note grow">{{cmd_last}}</div></div>
+            </div>
+
+            <!-- settings -->
+            <div class="pane" data-if="tab == 'settings'" data-class-nokeys="!set_show_keys">
+                <div class="toolbar">
+                    <div class="f-inline">Пресет</div>
+                    <div class="pre" data-class-active="set_preset == 1" data-event-click="set_preset_pick(1)">Классика ×1</div>
+                    <div class="pre" data-class-active="set_preset == 2" data-event-click="set_preset_pick(2)">Быстрее ×2</div>
+                    <div class="pre" data-class-active="set_preset == 5" data-event-click="set_preset_pick(5)">Казуал ×5</div>
+                    <div class="spacer"></div>
+                    <input type="checkbox" id="set-keys" class="check" data-checked="set_show_keys"/><div class="f-inline">ключи конфига</div>
+                </div>
+                <div class="cats">
+                    <div class="cat" data-attr-id="'set-group-' + g.id" data-for="g : set_groups" data-class-active="set_group == g.id" data-event-click="set_group_pick(g.id)">{{g.name}}<span class="count" data-if="g.changed > 0">{{g.changed}}</span></div>
+                </div>
+                <div class="scroll grow">
+                    <div class="group-hint">{{set_hint}}</div>
+                    <div class="fld" data-for="f : set_fields" data-class-changed="f.changed">
+                        <div class="fld-main">
+                            <div class="fld-label">{{f.label}} <span class="ap" data-class-now="f.apply == 'now'" data-class-rel="f.apply == 'rel'" data-class-rst="f.apply == 'rst'">{{f.apply_text}}</span></div>
+                            <div class="fld-key">{{f.key}}</div>
+                            <div class="fld-hint" data-if="f.hint != ''">{{f.hint}}</div>
+                        </div>
+                        <div class="fld-ctl">
+                            <input type="checkbox" class="check" data-attr-id="'chk-' + f.key" data-if="f.type == 'b'" data-checked="f.on"/>
+                            <input type="text" class="field" data-attr-id="'set-' + f.key" data-if="f.type == 'n' || f.type == 't'" data-value="f.value"/>
+                            <select class="field" data-attr-id="'sel-' + f.key" data-if="f.type == 's'" data-value="f.value">
+                                <option data-for="o : f.opts" data-attr-value="o.id">{{o.label}}</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="statusbar">
+                    <div class="note grow">{{set_status}}</div>
+                    <span class="ap now">сразу</span><span class="ap rel">.reload</span><span class="ap rst">перезапуск</span>
+                    <div id="btn-set-save" class="btn small" data-class-disabled="!set_can_save" data-event-click="set_save">{{set_save_label}}</div>
+                </div>
+            </div>
+
+            <!-- data -->
+            <div class="pane" data-if="tab == 'data'">
+                <div class="ribbon">Данные сервера <span class="ribbon-note">{{data_sum}}</span></div>
+                <div class="scroll grow">
+                    <div class="drow" data-for="d : data_rows">
+                        <div class="dot big" data-class-on="d.status == 'ok'" data-class-warn="d.status == 'warn'"></div>
+                        <div class="d-main"><div class="d-title">{{d.title}}</div><div class="d-detail">{{d.detail}}</div></div>
+                        <div class="d-size">{{d.size}}</div>
+                    </div>
+                </div>
+                <div class="statusbar">
+                    <div class="note grow">Мастер первой установки соберёт базы из SQL и карты из клиента игры.</div>
+                    <div id="btn-data-check" class="btn small" data-event-click="data_check">Проверить файлы</div>
+                    <div id="btn-data-open" class="btn small" data-event-click="open_data">Открыть папку</div>
+                </div>
+            </div>
         </div>
     </div>
 
     <div id="foot">
+        <div id="btn-foot-settings" class="btn foot-btn" data-event-click="open_tab('settings')">Настройки</div>
+        <div id="btn-foot-backups" class="btn foot-btn" data-event-click="open_backups">Бэкапы</div>
+        <div id="btn-foot-server" class="btn foot-btn" data-event-click="open_server_dir">Папка сервера</div>
         <div id="message">{{message}}</div>
         <div id="play" data-class-disabled="!play_enabled" data-event-click="play">
             <div class="play-title">{{play_label}}</div>
             <div class="play-sub">{{play_sub}}</div>
         </div>
     </div>
+    <div id="credit">LonelyIce на базе AzerothCore · GPL-2.0</div>
 
     <div id="overlay" data-if="closing">
         <div class="overlay-box">

@@ -53,10 +53,10 @@ namespace
 
 bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height)
 {
+    SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
         return false;
-
-    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     _wakeEvent = SDL_RegisterEvents(1);
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -161,9 +161,10 @@ void LonelyIce::UiBackend::Wake()
     SDL_PushEvent(&ev);
 }
 
-bool LonelyIce::UiBackend::ProcessEvents(Rml::Context* context, double maxWaitSeconds)
+bool LonelyIce::UiBackend::ProcessEvents(Rml::Context* context, double maxWaitSeconds, bool& closeRequested)
 {
     bool running = true;
+    closeRequested = false;
     SDL_Event ev;
 
     double wait = std::min(context->GetNextUpdateDelay(), maxWaitSeconds);
@@ -174,8 +175,10 @@ bool LonelyIce::UiBackend::ProcessEvents(Rml::Context* context, double maxWaitSe
         switch (ev.type)
         {
             case SDL_EVENT_QUIT:
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
                 running = false;
+                break;
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                closeRequested = true;
                 break;
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 _data->render.SetViewport(ev.window.data1, ev.window.data2);
@@ -192,6 +195,32 @@ bool LonelyIce::UiBackend::ProcessEvents(Rml::Context* context, double maxWaitSe
         has = SDL_PollEvent(&ev);
     }
     return running;
+}
+
+void LonelyIce::UiBackend::SetIcon(SDL_Surface* icon)
+{
+    if (_data && icon)
+        SDL_SetWindowIcon(_data->window, icon);
+}
+
+void LonelyIce::UiBackend::ShowWindow()
+{
+    if (!_data)
+        return;
+    SDL_ShowWindow(_data->window);
+    SDL_RestoreWindow(_data->window);
+    SDL_RaiseWindow(_data->window);
+}
+
+void LonelyIce::UiBackend::HideWindow()
+{
+    if (_data)
+        SDL_HideWindow(_data->window);
+}
+
+bool LonelyIce::UiBackend::IsWindowVisible()
+{
+    return _data && !(SDL_GetWindowFlags(_data->window) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED));
 }
 
 void LonelyIce::UiBackend::BeginFrame()
