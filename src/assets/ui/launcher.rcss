@@ -39,7 +39,7 @@ body {
     display: inline-block;
     margin-top: 2dp;
     padding: 2dp 14dp;
-    font-family: "Alegreya SC";
+    font-family: "Forum";
     font-size: 12dp;
     color: #d8ecf8;
     border-top: 1dp #e9c66b80;
@@ -59,13 +59,13 @@ body {
 /* left column */
 #left { flex: 0 0 262dp; min-height: 0; display: flex; flex-direction: column; gap: 10dp; overflow: hidden; }
 .plate { padding: 6dp 11dp 8dp; border: 1dp #e9c66b73; background-color: #08141ee6; }
-h3 { margin-bottom: 3dp; font-family: "Alegreya SC"; font-size: 17dp; color: #e9c66b; }
+h3 { margin-bottom: 3dp; font-family: "Forum"; font-size: 19dp; color: #e9c66b; }
 .state { display: flex; flex-direction: row; align-items: center; gap: 10dp; margin-bottom: 6dp; }
 .orb { flex: 0 0 14dp; height: 14dp; border-radius: 7dp; background-color: #e0503f; }
 .orb.ok { background-color: #72d65c; box-shadow: #72d65c99 0 0 10dp 0; }
 .orb.busy { background-color: #f0b33c; box-shadow: #f0b33c99 0 0 10dp 0; }
 .orb.bad { background-color: #e0503f; box-shadow: #e0503f99 0 0 10dp 0; }
-.st-title { font-family: "Alegreya SC"; font-weight: bold; font-size: 20dp; color: #eef6fb; }
+.st-title { font-family: "Forum"; font-size: 23dp; color: #eef6fb; }
 .st-sub { font-size: 13dp; color: #a9c0cf; }
 
 .svc { display: flex; flex-direction: row; align-items: center; gap: 8dp; font-size: 14dp; margin-top: 0dp; }
@@ -98,7 +98,7 @@ h3 { margin-bottom: 3dp; font-family: "Alegreya SC"; font-size: 17dp; color: #e9
     padding: 4dp 12dp 5dp;
     border: 1dp #000000;
     border-radius: 3dp;
-    font-family: "Alegreya SC";
+    font-family: "Forum";
     font-size: 15dp;
     color: #e9c66b;
     text-align: center;
@@ -130,7 +130,7 @@ h3 { margin-bottom: 3dp; font-family: "Alegreya SC"; font-size: 17dp; color: #e9
     border-bottom-width: 0;
     border-top-left-radius: 4dp;
     border-top-right-radius: 4dp;
-    font-family: "Alegreya SC";
+    font-family: "Forum";
     font-size: 15dp;
     color: #cdbf95;
     cursor: pointer;
@@ -150,7 +150,7 @@ h3 { margin-bottom: 3dp; font-family: "Alegreya SC"; font-size: 17dp; color: #e9
 .ribbon {
     margin: 0 -12dp;
     padding: 1dp 12dp 2dp;
-    font-family: "Alegreya SC";
+    font-family: "Forum";
     font-size: 16dp;
     color: #fff0b8;
     decorator: linear-gradient(to right, #6e1a10, #b3441f 30%, #b3441f26);
@@ -325,7 +325,7 @@ input.cmd:focus { border-color: #b3441f; }
     background-color: #040a10b8;
 }
 .overlay-box { width: 400dp; padding: 14dp 18dp; border: 1dp #6e5a33; color: #2a2117; decorator: linear-gradient(to bottom, #ece3cc, #d6c8a6); }
-.ov-title { font-family: "Alegreya SC"; font-size: 21dp; color: #3a1a0c; margin-bottom: 6dp; }
+.ov-title { font-family: "Forum"; font-size: 23dp; color: #3a1a0c; margin-bottom: 6dp; }
 .ov-text { font-size: 14dp; }
 
 /* scrollbars */

@@ -123,6 +123,8 @@ SettingsModel::SettingsModel()
         W("perf", "Потоки обновления карт", "MapUpdate.Threads", 'n', "rst", "1", "Разумно: число ядер минус 4"),
         W("perf", "Сохранение персонажей, мин", "PlayerSaveInterval", 'n', "rel", "900000"),
 
+        L("launch", "Масштаб интерфейса", "Launcher.UiScale", 's', "Поверх масштаба Windows; также Ctrl + колесо мыши",
+            { { "100", "100 %" }, { "125", "125 %" }, { "150", "150 %" }, { "175", "175 %" }, { "200", "200 %" } }),
         L("launch", "Язык клиента", "Launcher.Locale", 's', "Записывается в WTF\\Config.wtf перед запуском игры"),
         L("launch", "Проверять realmlist перед запуском", "Launcher.WriteRealmlist", 'b', "Чужой адрес заменяется на 127.0.0.1, старый файл сохраняется как realmlist.wtf.bak"),
         L("launch", "Очищать кэш клиента (Cache\\WDB)", "Launcher.ClearWdb", 'b', "Нужно после правок базы мира"),
@@ -185,6 +187,7 @@ void SettingsModel::Load(fs::path const& worldConf, LauncherSettings const& ls, 
                         d.options.push_back({ l, l });
                     v = ls.locale;
                 }
+                else if (d.key == "Launcher.UiScale") v = std::to_string(ls.uiScale);
                 else if (d.key == "Launcher.WriteRealmlist") v = ls.writeRealmlist ? "1" : "0";
                 else if (d.key == "Launcher.ClearWdb") v = ls.clearWdb ? "1" : "0";
                 else if (d.key == "Launcher.AutoStart") v = ls.autoStart ? "1" : "0";
@@ -241,6 +244,7 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
                 break;
             case SetSource::Launcher:
                 if (d.key == "Launcher.Locale") ls.locale = v.cur;
+                else if (d.key == "Launcher.UiScale") ls.uiScale = std::clamp(std::atoi(v.cur.c_str()), 50, 300);
                 else if (d.key == "Launcher.WriteRealmlist") ls.writeRealmlist = v.cur == "1";
                 else if (d.key == "Launcher.ClearWdb") ls.clearWdb = v.cur == "1";
                 else if (d.key == "Launcher.AutoStart") ls.autoStart = v.cur == "1";

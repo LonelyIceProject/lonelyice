@@ -49,10 +49,31 @@ namespace
 
     std::unique_ptr<BackendData> _data;
     Uint32 _wakeEvent = 0;
+    float _uiScale = 1.f;
+    void (*_zoomHandler)(void*, int) = nullptr;
+    void* _zoomUser = nullptr;
+
+    float DisplayScale(SDL_Window* window)
+    {
+        float s = window ? SDL_GetWindowDisplayScale(window) : SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+        return s > 0.f ? s : 1.f;
+    }
+
+    // Fits w x h (pixels) into the usable area of the window's display, leaving a margin.
+    void FitToDisplay(SDL_DisplayID display, int& w, int& h)
+    {
+        SDL_Rect area{};
+        if (!SDL_GetDisplayUsableBounds(display, &area) || area.w <= 0)
+            return;
+        float k = std::min({ 1.f, area.w * 0.96f / w, area.h * 0.94f / h });
+        w = int(w * k);
+        h = int(h * k);
+    }
 }
 
-bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height)
+bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height, float uiScale)
 {
+    _uiScale = uiScale;
     SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -65,16 +86,30 @@ bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
-    if (scale <= 0.f)
-        scale = 1.f;
+    float scale = DisplayScale(nullptr);
+    if (_uiScale <= 0.f)
+    {
+        SDL_Rect area{};
+        bool known = SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &area) && area.w > 0;
+        _uiScale = 1.f;
+        for (float s : { 1.5f, 1.25f })
+        {
+            if (known && width * scale * s <= area.w * 0.96f && height * scale * s <= area.h * 0.94f)
+            {
+                _uiScale = s;
+                break;
+            }
+        }
+    }
+    int w = int(width * scale * _uiScale), h = int(height * scale * _uiScale);
+    FitToDisplay(SDL_GetPrimaryDisplay(), w, h);
 
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title);
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_CENTERED);
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_CENTERED);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, int(width * scale));
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, int(height * scale));
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, w);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, h);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIGH_PIXEL_DENSITY_BOOLEAN, true);
@@ -85,7 +120,7 @@ bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height)
         Rml::Log::Message(Rml::Log::LT_ERROR, "SDL_CreateWindow: %s", SDL_GetError());
         return false;
     }
-    SDL_SetWindowMinimumSize(window, int(760 * scale), int(540 * scale));
+    SDL_SetWindowMinimumSize(window, int(640 * scale), int(460 * scale));
 
     SDL_GLContext gl = SDL_GL_CreateContext(window);
     if (!gl)
@@ -148,10 +183,48 @@ SDL_Window* LonelyIce::UiBackend::GetWindow()
     return _data ? _data->window : nullptr;
 }
 
-float LonelyIce::UiBackend::GetDisplayScale()
+float LonelyIce::UiBackend::GetUiScale()
 {
-    float s = _data ? SDL_GetWindowDisplayScale(_data->window) : 1.f;
-    return s > 0.f ? s : 1.f;
+    return _uiScale;
+}
+
+float LonelyIce::UiBackend::GetDpRatio()
+{
+    return DisplayScale(_data ? _data->window : nullptr) * _uiScale;
+}
+
+void LonelyIce::UiBackend::SetUiScale(Rml::Context* context, float uiScale)
+{
+    if (!_data || uiScale <= 0.f || uiScale == _uiScale)
+        return;
+    float k = uiScale / _uiScale;
+    _uiScale = uiScale;
+    context->SetDensityIndependentPixelRatio(GetDpRatio());
+
+    SDL_Window* window = _data->window;
+    if (SDL_GetWindowFlags(window) & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN))
+        return;
+    int x = 0, y = 0, w = 0, h = 0;
+    SDL_GetWindowPosition(window, &x, &y);
+    SDL_GetWindowSize(window, &w, &h);
+    int nw = int(w * k), nh = int(h * k);
+    SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+    FitToDisplay(display, nw, nh);
+    SDL_SetWindowSize(window, nw, nh);
+
+    SDL_Rect area{};
+    if (SDL_GetDisplayUsableBounds(display, &area))
+    {
+        int nx = std::clamp(x - (nw - w) / 2, area.x, std::max(area.x, area.x + area.w - nw));
+        int ny = std::clamp(y - (nh - h) / 2, area.y, std::max(area.y, area.y + area.h - nh));
+        SDL_SetWindowPosition(window, nx, ny);
+    }
+}
+
+void LonelyIce::UiBackend::SetZoomHandler(void (*handler)(void*, int), void* user)
+{
+    _zoomHandler = handler;
+    _zoomUser = user;
 }
 
 void LonelyIce::UiBackend::Wake()
@@ -185,7 +258,16 @@ bool LonelyIce::UiBackend::ProcessEvents(Rml::Context* context, double maxWaitSe
                 RmlSDL::InputEventHandler(context, _data->window, ev);
                 break;
             case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-                context->SetDensityIndependentPixelRatio(GetDisplayScale());
+                context->SetDensityIndependentPixelRatio(GetDpRatio());
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                if ((SDL_GetModState() & SDL_KMOD_CTRL) && _zoomHandler)
+                {
+                    if (ev.wheel.y != 0.f)
+                        _zoomHandler(_zoomUser, ev.wheel.y > 0.f ? 1 : -1);
+                }
+                else
+                    RmlSDL::InputEventHandler(context, _data->window, ev);
                 break;
             default:
                 if (ev.type != _wakeEvent)

@@ -157,6 +157,7 @@ namespace
         void OpenTab(std::string const& tab);
         void ShowWindow();
         void BeginQuit();
+        void SetUiScale(int percent);
 
         void StartServer();
         void ToggleServer();
@@ -270,11 +271,12 @@ namespace
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
 
-        if (!UiBackend::Initialize("LonelyIce", 960, 680))
+        if (!UiBackend::Initialize("LonelyIce", 960, 680, _settings.uiScale / 100.f))
         {
             MessageBoxW(nullptr, L"Не удалось создать окно с OpenGL 3.3.", L"LonelyIce", MB_ICONERROR);
             return 1;
         }
+        _settings.uiScale = int(UiBackend::GetUiScale() * 100.f + 0.5f);
 
         static AssetFileInterface assets;
         Rml::SetFileInterface(&assets);
@@ -385,10 +387,24 @@ namespace
         UiBackend::ShowWindow();
     }
 
+    void Launcher::SetUiScale(int percent)
+    {
+        UiBackend::SetUiScale(_ctx, percent / 100.f);
+        if (percent == _settings.uiScale)
+            return;
+        _settings.uiScale = percent;
+        _settings.Save();
+        for (SetValue& sv : _settingsModel.Values())
+            if (sv.def->key == "Launcher.UiScale")
+                sv.orig = sv.cur = std::to_string(percent);
+        if (_tab == "settings")
+            BuildSettingsFields();
+        Message("Масштаб интерфейса: " + std::to_string(percent) + " %");
+    }
+
     bool Launcher::SetupUi()
     {
-        for (char const* font : { "fonts/PTSans-Regular.ttf", "fonts/PTSans-Bold.ttf", "fonts/PTMono-Regular.ttf", "fonts/Forum-Regular.ttf",
-                 "fonts/AlegreyaSC-Medium.ttf", "fonts/AlegreyaSC-Bold.ttf" })
+        for (char const* font : { "fonts/PTSans-Regular.ttf", "fonts/PTSans-Bold.ttf", "fonts/PTMono-Regular.ttf", "fonts/Forum-Regular.ttf" })
             if (!Rml::LoadFontFace(font))
                 return false;
 
@@ -410,7 +426,12 @@ namespace
         _ctx = Rml::CreateContext("main", Rml::Vector2i(w, h));
         if (!_ctx)
             return false;
-        _ctx->SetDensityIndependentPixelRatio(UiBackend::GetDisplayScale());
+        _ctx->SetDensityIndependentPixelRatio(UiBackend::GetDpRatio());
+        UiBackend::SetZoomHandler([](void* self, int steps)
+        {
+            auto* me = static_cast<Launcher*>(self);
+            me->SetUiScale(std::clamp((me->_settings.uiScale + 12) / 25 * 25 + steps * 25, 100, 200));
+        }, this);
 
         Rml::DataModelConstructor c = _ctx->CreateDataModel("li");
         if (!c)
@@ -1513,6 +1534,7 @@ namespace
         }
         AddEvent(what);
         Message(what + ".");
+        UiBackend::SetUiScale(_ctx, _settings.uiScale / 100.f);
         RefreshClient();
         BuildSettingsFields();
     }

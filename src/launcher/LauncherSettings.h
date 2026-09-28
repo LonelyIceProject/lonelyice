@@ -19,6 +19,7 @@ namespace LonelyIce
         bool autoStart = false;
         bool stopWithGame = false;
         bool trayOnClose = true;
+        int uiScale = 0;                 // percent on top of the Windows display scale, 0 = largest that fits the screen
         std::string backupTime = "04:00"; // empty = no scheduled backups
         int backupKeep = 7;
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled backup
