@@ -13,6 +13,7 @@ namespace LonelyIce
 
         std::wstring clientPath;
         std::wstring serverConfig;
+        std::wstring dataRoot;           // server folder made by the wizard (configs, db, data, logs, backups); empty = next to the exe
         std::string locale;              // client language to start, empty = keep Config.wtf
         bool writeRealmlist = true;      // fix realmlist of the start locale before launching
         bool clearWdb = true;
@@ -23,6 +24,7 @@ namespace LonelyIce
         std::string backupTime = "04:00"; // empty = no scheduled backups
         int backupKeep = 7;
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled backup
+        std::string sqlStamp;            // setup\sql.pak the databases were last deployed from
         std::string realmName;           // last known, for the settings tab while the server is down
         std::string pendingRealmName;    // applied when the server comes up
 

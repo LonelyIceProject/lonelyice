@@ -27,6 +27,9 @@
 #include "ScriptLoader.h"
 #include "ScriptMgr.h"
 #include "SecretMgr.h"
+#include "SRP6.h"
+#include "StringConvert.h"
+#include "Tokenize.h"
 #include "SharedDefines.h"
 #include "SteadyTimer.h"
 #include "TC9Sidecar.h"
@@ -140,6 +143,63 @@ namespace
         LoginDatabase.EscapeString(name);
         LoginDatabase.DirectExecute("UPDATE realmlist SET name = '{}' WHERE id = {}", name, realm.Id.Realm);
         Control("realmname ok");
+    }
+
+    std::string Env(char const* name)
+    {
+        char* v = nullptr;
+        std::size_t n = 0;
+        std::string out;
+        if (_dupenv_s(&v, &n, name) == 0 && v)
+            out = v;
+        free(v);
+        return out;
+    }
+
+    // First-run setup after the databases were created: the player's account (LONELYICE_ACCOUNT = login\tpassword\tgmlevel)
+    // and the realm name (LONELYICE_REALMNAME). Runs without the world loaded, so nothing here may touch sWorld.
+    bool DeploySetup()
+    {
+        std::string account = Env("LONELYICE_ACCOUNT");
+        if (!account.empty())
+        {
+            std::vector<std::string_view> parts = Acore::Tokenize(account, '\t', true);
+            if (parts.size() < 2)
+                return false;
+            std::string user(parts[0]), pass(parts[1]);
+            uint32 gm = parts.size() > 2 ? Acore::StringTo<uint32>(parts[2]).value_or(0) : 0;
+            Utf8ToUpperOnlyLatin(user);
+            Utf8ToUpperOnlyLatin(pass);
+
+            if (!LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user))
+            {
+                // The account statements are prepared for the async connection only, so plain SQL here.
+                auto [salt, verifier] = Acore::Crypto::SRP6::MakeRegistrationData(user, pass);
+                LoginDatabase.DirectExecute("INSERT INTO account (username, salt, verifier, expansion, reg_mail, email, joindate) "
+                    "VALUES ('{}', X'{}', X'{}', {}, '', '', CURRENT_TIMESTAMP)", user, ByteArrayToHexStr(salt), ByteArrayToHexStr(verifier),
+                    uint32(EXPANSION_WRATH_OF_THE_LICH_KING));
+                LoginDatabase.DirectExecute("INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 "
+                    "FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL");
+                LOG_INFO("server.worldserver", "Account {} created", user);
+            }
+            if (QueryResult r = LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user))
+            {
+                uint32 id = r->Fetch()[0].Get<uint32>();
+                LoginDatabase.DirectExecute("DELETE FROM account_access WHERE id = {}", id);
+                if (gm)
+                    LoginDatabase.DirectExecute("INSERT INTO account_access (id, gmlevel, RealmID) VALUES ({}, {}, -1)", id, gm);
+            }
+            else
+                return false;
+        }
+
+        std::string realmName = Env("LONELYICE_REALMNAME");
+        if (!realmName.empty())
+        {
+            LoginDatabase.EscapeString(realmName);
+            LoginDatabase.DirectExecute("UPDATE realmlist SET name = '{}' WHERE id = {}", realmName, sConfigMgr->GetOption<uint32>("RealmID", 1));
+        }
+        return true;
     }
 
     // Raw ReadFile instead of std::cin: the thread can be cancelled with CancelSynchronousIo without holding CRT locks.
@@ -414,6 +474,13 @@ int ServerMain(int argc, char** argv)
     SetupStdio();
     Control("state starting");
 
+    // Nobody can answer "create the database?" on this process's stdin.
+    _putenv_s("AC_DISABLE_INTERACTIVE", "1");
+    bool deploy = false;
+    for (int i = 1; i < argc; ++i)
+        if (std::string_view(argv[i]) == "--deploy")
+            deploy = true;
+
     Acore::Impl::CurrentServerProcessHolder::_type = SERVER_PROCESS_WORLDSERVER;
     signal(SIGABRT, &Acore::AbortHandler);
 
@@ -494,6 +561,13 @@ int ServerMain(int argc, char** argv)
     }
 
     std::shared_ptr<void> dbHandle(nullptr, [](void*) { StopDB(); });
+
+    if (deploy)
+    {
+        bool ok = DeploySetup();
+        Control(ok ? "deploy ok" : "deploy failed account");
+        return ok ? 0 : 1;
+    }
 
     LoginDatabase.DirectExecute("UPDATE realmlist SET flag = (flag & ~{}) | {} WHERE id = '{}'", REALM_FLAG_OFFLINE, REALM_FLAG_VERSION_MISMATCH, realm.Id.Realm);
 

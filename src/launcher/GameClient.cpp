@@ -191,6 +191,11 @@ bool LonelyIce::GameClient::SetConfigLocale(fs::path const& dir, std::string con
     return SetConfigWtf(dir, "locale", locale, true);
 }
 
+bool LonelyIce::GameClient::SetConfigValue(fs::path const& dir, std::string const& key, std::string const& value)
+{
+    return SetConfigWtf(dir, key, value, true);
+}
+
 bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error)
 {
     for (ClientLocale const& loc : info.locales)

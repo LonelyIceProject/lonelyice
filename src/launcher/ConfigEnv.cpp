@@ -5,38 +5,38 @@
 
 namespace fs = std::filesystem;
 
-namespace
+// Same conversion as IniKeyToEnvVarKey in src/common/Configuration/Config.cpp
+std::string LonelyIce::EnvName(std::string const& key)
 {
-    // Same conversion as IniKeyToEnvVarKey in src/common/Configuration/Config.cpp
-    std::string EnvName(std::string const& key)
+    std::string r = "AC_";
+    for (std::size_t i = 0; i < key.size(); ++i)
     {
-        std::string r = "AC_";
-        for (std::size_t i = 0; i < key.size(); ++i)
+        char c = key[i];
+        if (c == ' ' || c == '.' || c == '-')
         {
-            char c = key[i];
-            if (c == ' ' || c == '.' || c == '-')
+            r += '_';
+            continue;
+        }
+        char up = char(std::toupper(static_cast<unsigned char>(c)));
+        if (i + 1 < key.size())
+        {
+            char n = key[i + 1];
+            bool cNum = std::isdigit(static_cast<unsigned char>(c)) != 0;
+            bool nNum = std::isdigit(static_cast<unsigned char>(n)) != 0;
+            if ((!std::isupper(static_cast<unsigned char>(c)) && std::isupper(static_cast<unsigned char>(n))) || cNum != nNum)
             {
+                r += up;
                 r += '_';
                 continue;
             }
-            char up = char(std::toupper(static_cast<unsigned char>(c)));
-            if (i + 1 < key.size())
-            {
-                char n = key[i + 1];
-                bool cNum = std::isdigit(static_cast<unsigned char>(c)) != 0;
-                bool nNum = std::isdigit(static_cast<unsigned char>(n)) != 0;
-                if ((!std::isupper(static_cast<unsigned char>(c)) && std::isupper(static_cast<unsigned char>(n))) || cNum != nNum)
-                {
-                    r += up;
-                    r += '_';
-                    continue;
-                }
-            }
-            r += up;
         }
-        return r;
+        r += up;
     }
+    return r;
+}
 
+namespace
+{
     std::string Trim(std::string s)
     {
         s.erase(0, s.find_first_not_of(" \t\r"));

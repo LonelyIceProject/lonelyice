@@ -45,6 +45,7 @@ void LonelyIce::LauncherSettings::Load()
     writeRealmlist = ReadBool(file, L"client", L"writeRealmlist", true);
     clearWdb = ReadBool(file, L"client", L"clearWdb", true);
     serverConfig = ReadW(file, L"server", L"config", L"");
+    dataRoot = ReadW(file, L"server", L"root", L"");
     autoStart = ReadBool(file, L"launcher", L"autoStart", false);
     stopWithGame = ReadBool(file, L"launcher", L"stopWithGame", false);
     trayOnClose = ReadBool(file, L"launcher", L"trayOnClose", true);
@@ -54,6 +55,7 @@ void LonelyIce::LauncherSettings::Load()
     backupKeep = std::max(1, _wtoi(ReadW(file, L"backup", L"keep", L"7").c_str()));
     lastBackupDay = Read(file, L"backup", L"lastDay", "");
     realmName = Read(file, L"server", L"realmName", "");
+    sqlStamp = Read(file, L"server", L"sqlStamp", "");
     pendingRealmName = Read(file, L"server", L"pendingRealmName", "");
 }
 
@@ -64,7 +66,9 @@ void LonelyIce::LauncherSettings::Save() const
     Write(file, L"client", L"writeRealmlist", writeRealmlist);
     Write(file, L"client", L"clearWdb", clearWdb);
     Write(file, L"server", L"config", serverConfig);
+    Write(file, L"server", L"root", dataRoot);
     Write(file, L"server", L"realmName", realmName);
+    Write(file, L"server", L"sqlStamp", sqlStamp);
     Write(file, L"server", L"pendingRealmName", pendingRealmName);
     Write(file, L"launcher", L"autoStart", autoStart);
     Write(file, L"launcher", L"stopWithGame", stopWithGame);

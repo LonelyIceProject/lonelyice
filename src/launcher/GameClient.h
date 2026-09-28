@@ -31,6 +31,7 @@ namespace LonelyIce
         bool WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error);
         std::string ReadConfigLocale(std::filesystem::path const& dir);   // SET locale from WTF\Config.wtf
         bool SetConfigLocale(std::filesystem::path const& dir, std::string const& locale);
+        bool SetConfigValue(std::filesystem::path const& dir, std::string const& key, std::string const& value);  // SET key "value", added if missing
         void ClearWdb(std::filesystem::path const& dir);
         // On success *process receives the game process handle (caller closes it).
         bool Launch(std::filesystem::path const& dir, std::string& error, void** process);

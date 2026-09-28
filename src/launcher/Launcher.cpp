@@ -9,6 +9,7 @@
 #include "TextUtil.h"
 #include "Tray.h"
 #include "UiBackend.h"
+#include "Wizard.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <RmlUi/Core/Elements/ElementFormControlInput.h>
@@ -186,12 +187,16 @@ namespace
         void StartBackup(bool scheduled);
         void CheckScheduledBackup();
 
+        bool NeedsSetup() const;
+        void OpenWizard();
+        fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
 
         fs::path _exe, _exeDir;
         LauncherSettings _settings;
         std::unique_ptr<ServerProcess> _server;
+        std::unique_ptr<Wizard> _wizard;
         ClientInfo _client;
         SettingsModel _settingsModel;
         Tray _tray;
@@ -241,9 +246,36 @@ namespace
         BackupResult _backupResult;
     };
 
+    // No config or no world database: the wizard has to run first.
+    bool Launcher::NeedsSetup() const
+    {
+        std::error_code ec;
+        if (!fs::exists(ServerConfig(), ec))
+            return true;
+        for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
+            if (db.name == "world" && !db.path.empty() && !fs::exists(db.path, ec))
+                return true;
+        // An interrupted install leaves the databases but no client data; the server cannot start without DBC.
+        fs::path dbc = ConfPath("DataDir", ".") / "dbc";
+        return !fs::is_directory(dbc, ec) || fs::is_empty(dbc, ec);
+    }
+
+    void Launcher::OpenWizard()
+    {
+        ShowWindow();
+        _wizard->Open(_client.valid ? _client.dir : fs::path());
+    }
+
+    fs::path Launcher::Root() const
+    {
+        return _settings.dataRoot.empty() ? _exeDir : fs::path(_settings.dataRoot);
+    }
+
     fs::path Launcher::ServerConfig() const
     {
-        return _settings.serverConfig.empty() ? DefaultServerConfig(_exeDir) : fs::path(_settings.serverConfig);
+        if (!_settings.serverConfig.empty())
+            return _settings.serverConfig;
+        return _settings.dataRoot.empty() ? DefaultServerConfig(_exeDir) : Root() / "configs" / "worldserver.conf";
     }
 
     // A path option of worldserver.conf, resolved against the server folder.
@@ -252,7 +284,7 @@ namespace
         ConfFile f;
         f.Load(ServerConfig());
         fs::path p = fs::u8path(f.Get(key).value_or(def));
-        return p.is_absolute() ? p : _exeDir / p;
+        return p.is_absolute() ? p : Root() / p;
     }
 
     int Launcher::Run()
@@ -270,6 +302,25 @@ namespace
         _settings.Load();
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
+        _wizard = std::make_unique<Wizard>(Wizard::Host{ _exe, _exeDir, [this] { return Root(); }, [this] { return _server->IsRunning(); },
+            [this] { return _settings.sqlStamp; },
+            [this](InstallOptions const& o)
+            {
+                _settings.dataRoot = o.root.wstring();
+                _settings.serverConfig.clear();
+                _settings.clientPath = o.client.wstring();
+                if (o.db)
+                {
+                    _settings.sqlStamp = Installer::SqlStamp(o.setupDir);
+                    _settings.realmName = o.realmName;
+                    _settings.pendingRealmName.clear();
+                }
+                _settings.Save();
+                RefreshClient();
+                LoadSettingsModel();
+                AddEvent("Установка завершена: " + WideToUtf8(o.root.wstring()));
+            },
+            [this] { Play(); }, [] { UiBackend::Wake(); } });
 
         if (!UiBackend::Initialize("LonelyIce", 960, 680, _settings.uiScale / 100.f))
         {
@@ -298,10 +349,18 @@ namespace
         BuildCommandCards();
         RefreshServerView();
 
-        if (_startHidden && _settings.trayOnClose)
-            UiBackend::HideWindow();
-        if (_settings.autoStart)
-            StartServer();
+        if (NeedsSetup())
+            OpenWizard();
+        else
+        {
+            std::string stamp = Installer::SqlStamp(_exeDir / "setup");
+            if (!stamp.empty() && stamp != _settings.sqlStamp)
+                AddEvent("В setup\\sql.pak новые обновления баз: «Данные» → «Мастер установки…», пункт «Базы данных».");
+            if (_startHidden && _settings.trayOnClose)
+                UiBackend::HideWindow();
+            if (_settings.autoStart)
+                StartServer();
+        }
 
         for (;;)
         {
@@ -437,7 +496,9 @@ namespace
         if (!c)
             return false;
         BindModel(c);
+        _wizard->Bind(c);
         _model = c.GetModelHandle();
+        _wizard->SetModel(_model);
 
         _doc = _ctx->LoadDocument("ui/launcher.rml");
         if (!_doc)
@@ -649,14 +710,14 @@ namespace
             RefreshClient();
             Message("Язык запуска: " + _settings.locale);
         });
-        on("open_server_dir", [this] { ShellExecuteW(nullptr, L"open", _exeDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        on("open_server_dir", [this] { ShellExecuteW(nullptr, L"open", Root().c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
         on("open_logs", [this] { ShellExecuteW(nullptr, L"open", ConfPath("LogsDir", "logs").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
         on("open_data", [this] { ShellExecuteW(nullptr, L"open", ConfPath("DataDir", ".").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
         on("open_backups", [this]
         {
             std::error_code ec;
-            fs::create_directories(_exeDir / "backups", ec);
-            ShellExecuteW(nullptr, L"open", (_exeDir / "backups").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            fs::create_directories(Root() / "backups", ec);
+            ShellExecuteW(nullptr, L"open", (Root() / "backups").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         });
         on("backup_now", [this] { StartBackup(false); });
         on("announce", [this]
@@ -695,6 +756,7 @@ namespace
         });
         on("set_save", [this] { SaveSettings(); });
         on("data_check", [this] { RefreshData(); });
+        on("open_wizard", [this] { OpenWizard(); });
     }
 
     // Dev hook for driving the UI without a mouse: with LONELYICE_UI_SCRIPT=<file> set, each line of that file
@@ -769,6 +831,7 @@ namespace
     void Launcher::Tick()
     {
         RunUiScript();
+        _wizard->Tick();
 
         for (std::string const& line : _server->TakeLines())
         {
@@ -984,7 +1047,13 @@ namespace
         _logsDir = WideToUtf8(ConfPath("LogsDir", "logs").wstring());
 
         _playLabel = "ИГРАТЬ";
-        if (!_clientOk)
+        if (NeedsSetup())
+        {
+            _playLabel = "УСТАНОВИТЬ";
+            _playSub = "подготовить данные";
+            _playEnabled = true;
+        }
+        else if (!_clientOk)
         {
             _playSub = "укажите папку игры";
             _playEnabled = false;
@@ -1131,6 +1200,16 @@ namespace
     {
         if (_server->IsRunning())
             return;
+        if (_wizard->IsInstalling())
+        {
+            Message("Идёт установка, сервер запустится после неё.");
+            return;
+        }
+        if (NeedsSetup())
+        {
+            OpenWizard();
+            return;
+        }
         fs::path config = ServerConfig();
         if (!fs::exists(config))
         {
@@ -1138,8 +1217,8 @@ namespace
             return;
         }
         AppendLog("-- запуск: " + WideToUtf8(config.wstring()), "me");
-        EnvList env = ModuleConfigOverrides(config, _exeDir);
-        if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(_exeDir.wstring()), env))
+        EnvList env = ModuleConfigOverrides(config, Root());
+        if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(Root().wstring()), env))
             Message("Не удалось запустить сервер: " + _server->GetFailReason());
         RefreshServerView();
         RefreshTray();
@@ -1169,6 +1248,11 @@ namespace
 
     void Launcher::Play()
     {
+        if (NeedsSetup())
+        {
+            OpenWizard();
+            return;
+        }
         if (!_client.valid)
         {
             ShowWindow();
@@ -1550,7 +1634,7 @@ namespace
         static std::map<std::string, std::pair<std::string, std::string>> const dbTitle = {
             { "auth", { "База входа", "аккаунты, права, список миров" } }, { "characters", { "База персонажей", "персонажи, вещи, почта, гильдии" } },
             { "world", { "База мира", "существа, задания, добыча, предметы" } }, { "playerbots", { "База ботов", "поведение и маршруты ботов" } } };
-        for (DatabaseFile const& db : FindDatabases(ServerConfig(), _exeDir))
+        for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
         {
             std::error_code ec;
             std::string title = dbTitle.count(db.name) ? dbTitle.at(db.name).first : db.name;
@@ -1601,7 +1685,7 @@ namespace
     {
         if (_backupBusy)
             return;
-        std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), _exeDir);
+        std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), Root());
         if (std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
         {
             Message("Резервная копия работает только с базами в файлах.");
@@ -1613,7 +1697,7 @@ namespace
             Message("Делаем резервную копию…");
         if (_backupThread.joinable())
             _backupThread.join();
-        _backupThread = std::thread([this, dbs, root = _exeDir / "backups", keep = _settings.backupKeep]
+        _backupThread = std::thread([this, dbs, root = Root() / "backups", keep = _settings.backupKeep]
         {
             _backupResult = BackupDatabases(dbs, root, keep);
             _backupDone = true;

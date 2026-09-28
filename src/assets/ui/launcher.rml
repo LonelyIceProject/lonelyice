@@ -194,7 +194,8 @@
                     </div>
                 </div>
                 <div class="statusbar">
-                    <div class="note grow">Мастер первой установки соберёт базы из SQL и карты из клиента игры.</div>
+                    <div class="note grow">Мастер соберёт базы из SQL и карты из клиента игры.</div>
+                    <div id="btn-data-wizard" class="btn small" data-event-click="open_wizard">Мастер установки…</div>
                     <div id="btn-data-check" class="btn small" data-event-click="data_check">Проверить файлы</div>
                     <div id="btn-data-open" class="btn small" data-event-click="open_data">Открыть папку</div>
                 </div>
@@ -213,6 +214,113 @@
         </div>
     </div>
     <div id="credit">LonelyIce на базе AzerothCore · GPL-2.0</div>
+
+    <div id="wiz" data-if="wz_open">
+        <div class="wbox">
+            <div class="whead"><div class="wtitle">Подготовка LonelyIce</div><div class="wcount">{{wz_counter}}</div></div>
+            <div class="wsteps"><div class="wst" data-for="s : wz_steps" data-class-done="s.cls == 'done'" data-class-cur="s.cls == 'cur'">{{s.name}}</div></div>
+            <div class="wbody scroll">
+                <!-- 0 client -->
+                <div data-if="wz_step == 0">
+                    <div class="wh">Клиент игры</div>
+                    <div class="detect">
+                        <div class="orb" data-class-ok="wz_client_found" data-class-bad="!wz_client_found"></div>
+                        <div class="grow"><div class="d-title">{{wz_client_title}}</div><div class="path">{{wz_client_path}}</div></div>
+                    </div>
+                    <div class="check" data-for="c : wz_checks">
+                        <div class="ic" data-class-ok="c.cls == 'ok'" data-class-warn="c.cls == 'warn'" data-class-bad="c.cls == 'bad'">{{c.cls == 'ok' ? '+' : '!'}}</div>
+                        <div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
+                    </div>
+                    <div class="note">Порядок поиска: сохранённая папка, папка LonelyIce.exe и её родитель, папки рядом, путь из реестра.</div>
+                    <div class="row"><div id="wz-browse-client" class="btn small" data-event-click="wz_browse_client">Выбрать другую папку…</div></div>
+                </div>
+                <!-- 1 place -->
+                <div data-if="wz_step == 1">
+                    <div class="wh">Где хранить данные сервера</div>
+                    <div class="opt" data-for="p : wz_places" data-attr-id="'wz-place-' + p.id" data-class-active="wz_place == p.id" data-event-click="wz_pick_place(p.id)">
+                        <div class="radio"></div>
+                        <div class="grow"><div class="o-title">{{p.title}}</div><div class="path small">{{p.path}}</div><div class="o-desc">{{p.detail}}</div></div>
+                        <div class="o-size">{{p.free}}</div>
+                    </div>
+                    <div class="row"><div id="wz-browse-place" class="btn small" data-event-click="wz_browse_place">Выбрать папку…</div></div>
+                    <div class="note">Внутри: configs — настройки, db — базы, data — dbc, maps, vmaps, mmaps, logs — журналы, backups — копии.</div>
+                </div>
+                <!-- 2 components -->
+                <div data-if="wz_step == 2">
+                    <div class="wh">Что подготовить</div>
+                    <div class="opt comp" data-for="c : wz_comps" data-class-locked="c.locked">
+                        <input type="checkbox" class="check" data-attr-id="'wz-comp-' + c.id" data-checked="c.on"/>
+                        <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
+                        <div class="o-size">{{c.size}}</div>
+                    </div>
+                    <div class="form-row wz-threads">
+                        <div class="f-inline">Потоков для навигации</div>
+                        <input type="text" id="wz-threads" class="field short" data-value="wz_threads"/>
+                        <div class="f-inline">{{wz_cores_note}}</div>
+                    </div>
+                    <div class="note">{{wz_total}}</div>
+                </div>
+                <!-- 3 world and account -->
+                <div data-if="wz_step == 3">
+                    <div class="wh">Мир и ваш аккаунт</div>
+                    <div class="form-row">
+                        <div class="f"><div class="f-label">Имя мира</div><input type="text" id="wz-realm" class="field" data-value="wz_realm"/></div>
+                        <div class="f"><div class="f-label">Множители</div>
+                            <select id="wz-rate" class="field" data-value="wz_rate"><option value="1">Классика ×1</option><option value="2">Быстрее ×2</option><option value="5">Казуал ×5</option></select></div>
+                        <div class="f"><div class="f-label">Случайных ботов</div>
+                            <select id="wz-bots" class="field" data-value="wz_bots"><option value="0">0 — пустой мир</option><option value="100">100 — тихо</option><option value="500">500 — живой мир</option><option value="1000">1000 — мощный ПК</option></select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="f"><div class="f-label">Логин</div><input type="text" id="wz-login" class="field" data-value="wz_login"/></div>
+                        <div class="f"><div class="f-label">Пароль</div><input type="password" id="wz-pass" class="field" data-value="wz_pass"/></div>
+                        <div class="f"><div class="f-label">Права</div>
+                            <select id="wz-gm" class="field" data-value="wz_gm"><option value="0">Игрок</option><option value="3">Администратор (GM 3)</option></select></div>
+                    </div>
+                    <div class="note">Аккаунт создаётся в новой базе. Всё остальное можно поменять позже во вкладке «Настройки».</div>
+                </div>
+                <!-- 4 client preparation -->
+                <div data-if="wz_step == 4">
+                    <div class="wh">Подготовка клиента</div>
+                    <div class="opt comp"><input type="checkbox" id="wz-rl" class="check" data-checked="wz_rl"/>
+                        <div class="grow"><div class="o-title">Прописать realmlist 127.0.0.1</div><div class="o-desc">Старый realmlist.wtf сохранится как realmlist.wtf.bak</div></div><div class="o-size">{{wz_rl_note}}</div></div>
+                    <div class="opt comp"><input type="checkbox" id="wz-wdb" class="check" data-checked="wz_wdb"/>
+                        <div class="grow"><div class="o-title">Очистить кэш клиента</div><div class="o-desc">Кэш от другого сервера показывает неверные предметы и задания</div></div><div class="o-size">Cache\WDB</div></div>
+                    <div class="opt comp"><input type="checkbox" id="wz-accname" class="check" data-checked="wz_accname"/>
+                        <div class="grow"><div class="o-title">Подставить логин в окно входа</div><div class="o-desc">SET accountName "{{wz_login}}"</div></div><div class="o-size">WTF\Config.wtf</div></div>
+                    <div class="opt comp"><input type="checkbox" id="wz-lnk" class="check" data-checked="wz_lnk"/>
+                        <div class="grow"><div class="o-title">Ярлык на рабочем столе</div><div class="o-desc">Запускает LonelyIce, а он — сервер и игру</div></div></div>
+                </div>
+                <!-- 5 install -->
+                <div data-if="wz_step == 5">
+                    <div class="wh">Установка</div>
+                    <div class="istep" data-for="r, ri : wz_inst" data-class-done="r.state == 'done'" data-class-run="r.state == 'run'" data-class-fail="r.state == 'fail'">
+                        <div class="inum">{{r.state == 'done' ? '+' : r.state == 'fail' ? '!' : ri + 1}}</div>
+                        <div class="grow">
+                            <div class="irow"><div class="o-title grow">{{r.title}}</div><div class="inote">{{r.note}}</div></div>
+                            <div class="bar"><div class="fill" data-style-width="r.pct + '%'"></div></div>
+                        </div>
+                    </div>
+                    <div class="wlog"><div data-for="l : wz_log">{{l}}</div></div>
+                    <div class="note">Можно свернуть окно: установка идёт в фоне с пониженным приоритетом.</div>
+                </div>
+                <!-- 6 done -->
+                <div data-if="wz_step == 6">
+                    <div class="wh">Всё готово</div>
+                    <div class="check" data-for="c : wz_done">
+                        <div class="ic ok">+</div><div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
+                    </div>
+                    <div class="pad">Нажмите «Играть»: LonelyIce запустит сервер и откроет игру. Первый запуск мира занимает около минуты.</div>
+                </div>
+            </div>
+            <div class="werr" data-if="wz_error != ''">{{wz_error}}</div>
+            <div class="wfoot">
+                <div id="wz-cancel" class="btn small" data-event-click="wz_cancel">{{wz_cancel_label}}</div>
+                <div class="spacer"></div>
+                <div id="wz-back" class="btn small" data-if="wz_back_visible" data-event-click="wz_back">Назад</div>
+                <div id="wz-next" class="btn next" data-class-disabled="!wz_next_ok" data-event-click="wz_next">{{wz_next_label}}</div>
+            </div>
+        </div>
+    </div>
 
     <div id="overlay" data-if="closing">
         <div class="overlay-box">
