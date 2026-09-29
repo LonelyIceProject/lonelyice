@@ -21,7 +21,18 @@ namespace LonelyIce::Packages
         std::map<std::string, std::string> depends;                // id -> version range
         std::vector<std::string> conflicts;
         std::string url, sha256;                                   // url already resolved against the index
+        std::string icon;                                          // resolved like url, empty: none
+        std::string source;                                        // index it came from
         uint64_t size = 0;
+    };
+
+    // One package index: an http(s) URL, a file or a folder with index.json.
+    struct Source
+    {
+        std::string location, name;     // name: the index's "name", empty when it has none
+        bool ok = false;
+        std::string error;
+        std::size_t packages = 0;
     };
 
     // A plugin in the plugins folder, enabled (plugins/<id>) or disabled (plugins/.disabled/<id>).
@@ -52,9 +63,20 @@ namespace LonelyIce::Packages
 
         std::filesystem::path const& Dir() const { return _dir; }
 
-        // Reads the indexes (";"-separated URLs or paths); packages for another core or platform are left out.
+        // Reads the indexes (";"-separated URLs, files or folders); packages for another core or platform are left
+        // out. An index that cannot be read is skipped (see Sources()); false only when none could be read.
         bool LoadIndex(std::string const& sources, std::string& error, Http::Progress const& progress = {});
         std::vector<Package> const& Available() const { return _available; }
+        std::vector<Source> const& Sources() const { return _sources; }
+
+        // Icons of the available packages, downloaded into IconCache(); already cached ones are kept.
+        void FetchIcons();
+        std::filesystem::path IconCache() const { return _dir / ".cache" / "icons"; }
+        std::filesystem::path IconFile(Package const& p) const { return IconCache() / (p.id + "-" + p.version + ".png"); }
+
+        static std::vector<std::string> SplitSources(std::string const& sources);
+        // Where an index is read from: a folder means its index.json.
+        static std::string IndexLocation(std::string const& source);
 
         std::vector<Local> Installed() const;
 
@@ -83,6 +105,7 @@ namespace LonelyIce::Packages
     private:
         std::filesystem::path _dir;
         std::vector<Package> _available;
+        std::vector<Source> _sources;
     };
 }
 

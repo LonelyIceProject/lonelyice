@@ -1,4 +1,5 @@
 #include "Plugins.h"
+#include "Lang.h"
 #include <algorithm>
 #include <fstream>
 #include <map>
@@ -15,10 +16,11 @@ namespace
             return n.get_value<std::string>();
         if (!n.is_mapping())
             return {};
-        for (char const* locale : { "ru", "en" })
-            if (n.contains(locale) && n[locale].is_string())
-                return n[locale].get_value<std::string>();
-        return {};
+        std::map<std::string, std::string> texts;
+        for (auto const& [k, v] : n.as_map())
+            if (k.is_string() && v.is_string())
+                texts[k.get_value<std::string>()] = v.get_value<std::string>();
+        return LonelyIce::Lang::Pick(texts);
     }
 
     std::string Str(fkyaml::node const& n, char const* key)

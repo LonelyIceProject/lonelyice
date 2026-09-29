@@ -49,6 +49,7 @@ void LonelyIce::LauncherSettings::Load()
     autoStart = ReadBool(file, L"launcher", L"autoStart", false);
     stopWithGame = ReadBool(file, L"launcher", L"stopWithGame", false);
     trayOnClose = ReadBool(file, L"launcher", L"trayOnClose", true);
+    language = Read(file, L"launcher", L"language", "");
     uiScale = _wtoi(ReadW(file, L"launcher", L"uiScale", L"0").c_str());
     uiScale = uiScale ? std::clamp(uiScale, 50, 300) : 0;
     backupTime = Read(file, L"backup", L"time", "04:00");
@@ -58,6 +59,7 @@ void LonelyIce::LauncherSettings::Load()
     sqlStamp = Read(file, L"server", L"sqlStamp", "");
     pendingRealmName = Read(file, L"server", L"pendingRealmName", "");
     packageIndex = Read(file, L"packages", L"index", DefaultPackageIndex);
+    packageIndexOff = Read(file, L"packages", L"disabled", "");
 }
 
 void LonelyIce::LauncherSettings::Save() const
@@ -74,9 +76,11 @@ void LonelyIce::LauncherSettings::Save() const
     Write(file, L"launcher", L"autoStart", autoStart);
     Write(file, L"launcher", L"stopWithGame", stopWithGame);
     Write(file, L"launcher", L"trayOnClose", trayOnClose);
+    Write(file, L"launcher", L"language", language);
     Write(file, L"launcher", L"uiScale", std::to_wstring(uiScale));
     Write(file, L"backup", L"time", backupTime);
     Write(file, L"backup", L"keep", std::to_wstring(backupKeep));
     Write(file, L"backup", L"lastDay", lastBackupDay);
     Write(file, L"packages", L"index", packageIndex);
+    Write(file, L"packages", L"disabled", packageIndexOff);
 }

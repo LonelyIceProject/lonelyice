@@ -1,4 +1,5 @@
 #include "DbcRecipes.h"
+#include "Lang.h"
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -150,7 +151,7 @@ bool Recipe::Load(PluginManifest const& plugin, std::string& error)
     std::ifstream in(plugin.patches, std::ios::binary);
     if (!in)
     {
-        error = plugin.id + ": нет файла " + plugin.patches.filename().string();
+        error = Tr("patch.recipe.no_file", plugin.id, plugin.patches.filename().string());
         return false;
     }
     _text.assign(std::istreambuf_iterator<char>(in), {});
@@ -281,13 +282,13 @@ bool Recipe::Patch(std::string const& table, Table& t, IdMap const& ids, std::st
                         declared = &n;
                 if (!(id = lookup(ref.substr(1))))
                 {
-                    error = where + ": нет id для " + ref;
+                    error = Tr("patch.recipe.no_id", where, ref);
                     return false;
                 }
             }
             else
             {
-                error = where + ": у строки нет \"id\"";
+                error = Tr("patch.recipe.row_no_id", where);
                 return false;
             }
 
@@ -298,14 +299,14 @@ bool Recipe::Patch(std::string const& table, Table& t, IdMap const& ids, std::st
             std::optional<uint32_t> at = t.Find(keyField, id);
             if (at && mode == "insert")
             {
-                error = where + ": строка " + std::to_string(id) + " уже есть";
+                error = Tr("patch.recipe.row_exists", where, id);
                 return false;
             }
             if (!at)
             {
                 if (mode == "update")
                 {
-                    error = where + ": нет строки " + std::to_string(id);
+                    error = Tr("patch.recipe.row_missing", where, id);
                     return false;
                 }
                 std::optional<uint32_t> copy;
@@ -314,7 +315,7 @@ bool Recipe::Patch(std::string const& table, Table& t, IdMap const& ids, std::st
                     copyId = declared->copy;
                 if (copyId && !(copy = t.Find(keyField, *copyId)))
                 {
-                    error = where + ": нет строки " + std::to_string(*copyId) + " для копирования";
+                    error = Tr("patch.recipe.copy_missing", where, *copyId);
                     return false;
                 }
                 at = t.AddRow(copy);
@@ -334,14 +335,14 @@ bool Recipe::Patch(std::string const& table, Table& t, IdMap const& ids, std::st
                 }
                 catch (std::exception const&)
                 {
-                    error = where + ": поля задаются номерами, а не \"" + key.get_value<std::string>() + "\"";
+                    error = Tr("patch.recipe.field_not_number", where, key.get_value<std::string>());
                     return false;
                 }
                 bool const isRef = value.is_mapping() && value.contains("ref");
                 bool const localized = value.is_mapping() && !isRef;
                 if (field == keyField || field + (localized ? 16 : 0) >= t.fields)
                 {
-                    error = where + ": поле " + std::to_string(field) + " задать нельзя";
+                    error = Tr("patch.recipe.field_forbidden", where, field);
                     return false;
                 }
 
@@ -363,7 +364,7 @@ bool Recipe::Patch(std::string const& table, Table& t, IdMap const& ids, std::st
                     uint32_t const refId = lookup(Str(value, "ref"));
                     if (!refId)
                     {
-                        error = where + ": нет id для " + Str(value, "ref");
+                        error = Tr("patch.recipe.no_id", where, Str(value, "ref"));
                         return false;
                     }
                     t.Set(*at, field, refId);
@@ -404,7 +405,7 @@ bool LonelyIce::DbcRecipes::Substitute(std::string const& plugin, std::string& t
         auto it = ids.find(Qualified(plugin, name));
         if (it == ids.end())
         {
-            error = plugin + ": нет id для {{id:" + name + "}}";
+            error = Tr("patch.recipe.no_id_placeholder", plugin, name);
             return false;
         }
         out.append(text, last, pos - last);

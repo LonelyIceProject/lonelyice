@@ -1,0 +1,367 @@
+# Launcher-Fenster: Seiten, Tabs, Nachrichten (Launcher.cpp, launcher.rml)
+
+lang.self = Deutsch
+
+# Seiten und Navigation
+page.settings = Einstellungen
+page.plugins = Plugins
+page.service = Wartung
+tab.overview = Überblick
+tab.console = Konsole
+tab.commands = Befehle
+tab.accounts = Accounts
+
+# Allgemeine Wörter
+ui.back = ‹ Start
+ui.back_step = Zurück
+ui.subtitle = Einzelspieler-Server · 3.3.5a
+ui.server = Server
+ui.game = Spiel
+ui.svc.auth = Login (auth)
+ui.svc.world = Welt
+ui.kv.uptime = Laufzeit
+ui.kv.players = Spieler online
+ui.kv.bots = Bots in der Welt
+ui.kv.memory = Speicher
+ui.kv.diff = Weltlatenz
+ui.restart = Neustart
+ui.browse = Durchsuchen…
+ui.fix_realmlist = realmlist setzen
+ui.news = Neuigkeiten
+ui.events = Ereignisse
+ui.today = heute
+ui.no_events = Bisher ist nichts passiert.
+ui.run = Ausführen
+ui.search = Suche
+ui.nothing_found = Nichts gefunden.
+ui.refresh = Aktualisieren
+ui.add = Hinzufügen
+ui.folder = Ordner…
+ui.open_folder = Ordner öffnen
+ui.enable = Aktivieren
+ui.disable = Deaktivieren
+ui.remove = Entfernen
+ui.credit = LonelyIce, basierend auf AzerothCore · GPL-2.0
+ui.closing = Server wird gestoppt
+ui.closing.text = Charaktere werden gespeichert, die Welt wird heruntergefahren. Schließen Sie das Fenster erneut, um den Server sofort zu stoppen.
+
+# Schnellaktionen
+act.backup = Backup
+act.backup.sub = Accounts und Charaktere in Backups
+act.saveall = Alle speichern
+act.announce = Ansage
+act.announce.sub = eine Nachricht an den Server-Chat
+act.folder = Serverordner
+act.folder.sub = Konfigs, Datenbanken, Protokolle
+
+# Serverstatus
+state.stopped = Gestoppt
+state.stopped.sub = „Start“ oder „Spielen“ drücken
+state.starting = Wird gestartet
+state.starting.sub = Konfiguration und Datenbank
+state.loading = Wird geladen
+state.loading.sub = Welt wird geladen
+state.loading_for = wird geladen, {0} s
+state.ready = Läuft
+state.ready.sub = Login ist offen
+state.stopping = Wird gestoppt
+state.stopping.sub = Charaktere werden gespeichert
+state.failed = Fehler
+server.start = Start
+server.stop = Stopp
+
+# Spielen-Schaltfläche
+play.play = SPIELEN
+play.install = INSTALLIEREN
+play.sub.install = Daten vorbereiten
+play.sub.no_client = Spielordner wählen
+play.sub.ready = Wow.exe starten
+play.sub.stopping = der Server wird gestoppt
+play.sub.pending = das Spiel öffnet sich, sobald die Welt geladen ist
+play.sub.start = Server und Spiel starten
+
+# Fußzeile
+foot.installing = Installation läuft…
+foot.preparing_client = Client wird vorbereitet: Plugin-Add-ons…
+foot.backup = Backup wird erstellt…
+foot.ready = Welt offen · Spieler: {0} · Bots: {1}
+
+# Zeit und Einheiten
+time.seconds = {0} s
+time.minutes = {0} min
+time.hours_minutes = {0} h {1} min
+time.days_hours = {0} d {1} h
+time.ms = {0} ms
+time.today_at = heute, {0}
+time.date = {0}.{1}.{2}
+unit.kb = {0} KB
+
+# Spielclient
+client.not_found = 3.3.5a-Client nicht gefunden
+client.not_found.hint = Wählen Sie den Ordner mit Wow.exe über „Durchsuchen…“.
+client.wrong_version = Wow.exe {0}, benötigt wird 3.3.5a (12340).
+client.unknown_version = von unbekannter Version
+client.no_locales = In Data\ wurden keine Sprachen gefunden.
+client.rl_foreign = {0}: fremde Adresse.
+client.rl_foreign_fix = {0}: fremde Adresse, der Launcher korrigiert sie beim Spielstart.
+client.rl_some_foreign = Die Startsprache ist hervorgehoben; fremde Adresse in anderen Sprachen: {0}.
+client.rl_ok = Die Startsprache ist hervorgehoben; überall 127.0.0.1.
+
+# Neuigkeiten im Überblick
+news.setup = Serverdaten sind noch nicht vorbereitet
+news.setup.text = Der Assistent erstellt die Datenbanken und extrahiert Karten aus Ihrem Spielclient.
+news.setup.button = Assistenten öffnen
+news.failed = Der Server wurde mit einem Fehler beendet
+news.updates = Plugin-Updates verfügbar: {0}
+news.updates.text = Sie werden installiert, während der Server gestoppt ist.
+news.backup = Letztes Backup
+news.backup.text = {0} · {1}
+news.no_backup = Noch keine Backups
+news.no_backup.text = Erstellen Sie jetzt eines oder legen Sie eine tägliche Uhrzeit unter Einstellungen › Launcher fest.
+news.open = Öffnen
+
+# Ereignisse
+event.install_done = Installation abgeschlossen: {0}
+event.sql_updates = setup\sql.pak enthält neue Datenbank-Updates: Wartung › Assistent › Datenbanken.
+event.game_closed = Spiel geschlossen
+event.stop_with_game = Der Server stoppt zusammen mit dem Spiel
+event.client_line = Client: {0}
+event.client_failed = Client nicht vorbereitet: {0}
+event.backup_done = Backup: {0}, backups\{1}
+event.backup_failed = Backup fehlgeschlagen: {0}
+event.server_starting = Server wird gestartet
+event.world_ready = Welt bereit nach {0} s, Login ist offen
+event.realm_renamed = Realm umbenannt in „{0}“, sichtbar nach einem Neustart
+event.server_stopped = Server gestoppt
+event.server_failed = Der Server wurde mit einem Fehler beendet: {0}. Details im Tab Konsole.
+event.game_started = Spiel gestartet
+event.game_started_locale = Spiel gestartet ({0})
+event.acc_created = Account {0} erstellt
+event.acc_created_gm = Account {0} erstellt, GM {1}
+event.plugin_settings_bad = Plugin-Einstellungen nicht gelesen: {0}
+event.plugins_line = Plugins: {0}
+event.plugin_removed = Plugin {0} entfernt.
+event.plugin_disabled = Plugin {0} deaktiviert.
+event.plugin_enabled = Plugin {0} aktiviert.
+event.repo_added = Paketkatalog hinzugefügt: {0}
+event.repo_removed = Paketkatalog entfernt: {0}
+event.repo_disabled = Paketkatalog deaktiviert: {0}
+event.repo_enabled = Paketkatalog aktiviert: {0}
+event.repo_failed = Katalog {0}: {1}
+
+# Meldungen
+msg.ui_scale = Oberflächenskalierung: {0} %
+msg.launch_locale = Startsprache: {0}
+msg.announce_hint = Geben Sie den Text bei „Chat-Ansage“ ein und drücken Sie „Ausführen“.
+msg.client_saved = Spielordner gespeichert.
+msg.not_client_dir = Dieser Ordner enthält kein Wow.exe und kein Data\common.MPQ.
+msg.installing = Die Installation läuft, der Server startet danach.
+msg.no_config = Serverkonfiguration nicht gefunden: {0}
+msg.start_failed = Der Server konnte nicht gestartet werden: {0}
+msg.need_client = Wählen Sie zuerst den 3.3.5a-Clientordner.
+msg.game_running = Das Spiel läuft bereits.
+msg.preparing_client = Client wird vorbereitet: Plugin-Add-ons…
+msg.realmlist_ok = realmlist zeigt bereits auf diesen Computer.
+msg.cmd_not_ready = Befehle werden angenommen, sobald die Welt läuft.
+msg.cmd_not_sent = Befehl nicht gesendet: der Server antwortet nicht.
+msg.acc_invalid = Login und Passwort dürfen nicht leer sein oder Leerzeichen enthalten.
+msg.pick_character = Wählen Sie einen Charakter.
+msg.plugins_locked = Stoppen Sie den Server: Plugins ändern sich, während er aus ist.
+msg.all_installed = Es ist bereits alles installiert.
+msg.load_index_first = Laden Sie zuerst die Paketliste.
+msg.plugin_needed_by = {0} wird benötigt von: {1}.
+msg.repo_semicolon = Eine Katalogadresse darf kein „;“ enthalten.
+msg.repo_missing = Datei oder Ordner nicht gefunden: {0}
+msg.repo_no_index = Der Ordner enthält keine index.json. Erstellen Sie sie mit LonelyIce.exe --pkg pack.
+msg.repo_exists = Dieser Katalog ist bereits hinzugefügt.
+msg.backup_files_only = Backups funktionieren nur mit Datenbanken in Dateien.
+msg.backup_running = Backup wird erstellt…
+log.starting = -- Start: {0}
+
+# Accounts
+acc.start_server = Starten Sie den Server, um die Accounts zu sehen.
+acc.loading = Wird geladen…
+acc.player = Spieler
+acc.gm = GM {0}
+acc.bots = Bots
+acc.bots_row = RNDBOT… ({0})
+acc.service = Dienst
+acc.login = Login
+acc.password = Passwort
+acc.level = Stufe
+acc.chars = Charaktere
+acc.last_login = Letzter Login
+acc.new = Neuer Account
+acc.create = Erstellen
+
+# Tab „Befehle“
+cmd.character = Charakter
+cmd.char = {0} · {1}
+cmd.char_online = {0} · {1} · im Spiel
+cmd.last_hint = Die Antwort des Servers erscheint im Tab Konsole.
+cmd.run = Ausführen
+cmd.run_danger = Ausführen…
+cmd.sure = Sicher?
+cmd.sent = Gesendet: {0}. Die Antwort ist im Tab Konsole.
+
+# Einstellungsseite
+set.section.world = Server
+set.section.plugins = Plugins
+set.section.launcher = Launcher
+set.preset = Voreinstellung
+set.preset.x1 = Klassisch ×1
+set.preset.x2 = Schneller ×2
+set.preset.x5 = Entspannt ×5
+set.show_keys = Konfigurationsschlüssel
+set.save = Speichern
+set.save_restart = Speichern und neu starten
+set.changed = Geändert: {0}
+set.changed_restart = Geändert: {0}, ein Neustart ist erforderlich
+set.unchanged = Keine Änderungen
+set.saved = Einstellungen gespeichert.
+set.saved_reloaded = Einstellungen gespeichert, Konfiguration neu geladen.
+set.saved_restarting = Einstellungen gespeichert, der Server startet neu.
+apply.now = sofort
+apply.reload = .reload
+apply.restart = Neustart
+
+# Über (eine Einstellungsgruppe)
+about.title = Über
+about.hint = Ein Einzelspieler-Server für World of Warcraft 3.3.5a mit Launcher.
+about.version = Version
+about.core = Server-Kern
+about.core.text = AzerothCore mit dem Playerbots-Modul
+about.license = Lizenz
+about.license.text = GNU GPL 2.0 oder später; Plugins haben ihre eigenen Lizenzen.
+about.fonts = Schriftarten
+about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
+about.app_dir = Programmordner
+about.data_dir = Serverdaten
+about.config = Serverkonfiguration
+about.plugins_dir = Plugin-Ordner
+
+# Plugin-Seite
+pl.show = Anzeigen
+pl.view.installed = Installiert
+pl.view.updates = Updates
+pl.view.catalog = Katalog
+pl.repos = Paketkataloge
+pl.manage_repos = Kataloge…
+pl.back_to_list = Zur Liste
+pl.install = Installieren
+pl.update = Aktualisieren
+pl.check = Nach Updates suchen
+pl.update_all = Alle aktualisieren
+pl.empty.installed = Keine Plugins installiert.
+pl.empty.updates = Alles ist aktuell.
+pl.empty.catalog = Der Katalog enthält nichts Neues für diese Version.
+pl.note.needs = benötigt {0}
+pl.note.disabled = deaktiviert
+pl.applies_on_start = Datenbanken und Client folgen beim nächsten Serverstart.
+pl.repos.empty = Keine Kataloge: Plugins können nur manuell installiert werden.
+pl.repos.add = Katalog hinzufügen
+pl.repos.help = Ein entfernter Katalog ist die Adresse einer index.json (https://…). Ein lokaler ist ein Ordner mit index.json oder die Datei selbst; LonelyIce.exe --pkg pack erstellt die Datei.
+pl.repos.official = LonelyIce-Katalog wiederherstellen
+pl.status.not_loaded = Die Paketliste ist noch nicht geladen.
+pl.status.loading = Paketliste wird geladen…
+pl.status.no_repos = Keine Kataloge hinzugefügt; fügen Sie sie unter „Kataloge…“ hinzu.
+pl.status.loaded = Pakete in den Katalogen: {0}.
+pl.status.loaded_some = Pakete in den Katalogen: {0}, Kataloge nicht verfügbar: {1}.
+pl.status.repos_down = Kataloge nicht verfügbar, Details unter „Kataloge…“.
+pl.status.installing = Wird installiert…
+pl.status.done = Fertig. Datenbanken und Client folgen beim nächsten Serverstart.
+pl.status.failed = Fehlgeschlagen, Details im Tab Überblick.
+repo.official = LonelyIce-Katalog
+repo.remote = entfernt
+repo.local = lokal
+repo.not_loaded = nicht geladen
+repo.disabled = deaktiviert
+repo.packages = Pakete: {0}
+
+# Wartungsseite
+svc.data = Serverdaten
+svc.backups = Backups
+svc.logs = Protokolle
+svc.data.note = Der Assistent erstellt die Datenbanken aus SQL und die Karten aus dem Spielclient.
+svc.wizard = Einrichtungsassistent…
+svc.check = Dateien prüfen
+svc.backups.empty = Noch keine Backups.
+svc.backups.note = Accounts, Charaktere und Bots; ältere Kopien über dem Limit werden gelöscht.
+svc.backup_now = Jetzt sichern
+svc.logs.empty = Noch keine Protokolldateien.
+svc.logs.note = Server-Protokolle; das Live-Protokoll ist im Tab Konsole.
+backup.files = Dateien: {0}
+backup.sum = Kopien: {0} · {1} · täglich um {2}, aufbewahren: {3}
+backup.sum_manual = Kopien: {0} · {1} · kein Zeitplan
+data.db.auth = Login-Datenbank
+data.db.auth.detail = Accounts, Rechte, Realmliste
+data.db.characters = Charakter-Datenbank
+data.db.characters.detail = Charaktere, Gegenstände, Post, Gilden
+data.db.world = Welt-Datenbank
+data.db.world.detail = Kreaturen, Quests, Beute, Gegenstände
+data.db.playerbots = Bot-Datenbank
+data.db.playerbots.detail = Bot-Verhalten und Routen
+data.external_db = externer Datenbankserver
+data.none = keine
+data.dbc = DBC
+data.dbc.detail = Client-Tabellen
+data.maps = Karten
+data.maps.detail = Höhen- und Gebietskarten
+data.cameras = Kameras
+data.cameras.detail = Zwischensequenzen und Flüge
+data.vmaps = Gebäudemodelle (vmaps)
+data.vmaps.detail = Sichtlinie, Höhlen
+data.mmaps = Navigation (mmaps)
+data.mmaps.detail = Wege für Kreaturen und Bots
+data.detail_files = {0}, Dateien: {1}
+data.all_present = alles vorhanden · {0}
+data.missing = fehlt: {0}
+
+# Taskleiste (Tray)
+tray.open = LonelyIce öffnen
+tray.play = Spielen
+tray.start = Server starten
+tray.stop = Server stoppen
+tray.restart = Server neu starten
+tray.backup = Jetzt sichern
+tray.quit = Beenden
+tray.status = Server: {0}
+tray.tooltip_hidden = LonelyIce — {0}. Menü: Rechtsklick
+
+# Fehler vor dem Fenster
+error.no_opengl = Es konnte kein Fenster mit OpenGL 3.3 erstellt werden.
+error.no_ui = Die Oberfläche konnte nicht geladen werden (ui/launcher.rml).
+
+# Einrichtungsassistent: Text im Markup
+wz.title = LonelyIce wird vorbereitet
+wz.client = Spielclient
+wz.client.order = Suchreihenfolge: gespeicherter Ordner, Ordner von LonelyIce.exe und dessen übergeordneter Ordner, benachbarte Ordner, Pfad aus der Registrierung.
+wz.client.browse = Anderen Ordner wählen…
+wz.place = Wo die Serverdaten gespeichert werden
+wz.place.browse = Ordner wählen…
+wz.place.note = Darin: configs — Einstellungen, db — Datenbanken, data — dbc, maps, vmaps, mmaps, logs — Protokolle, backups — Kopien.
+wz.comps = Was vorbereitet werden soll
+wz.threads = Threads für Navigation
+wz.world = Realm und Ihr Account
+wz.realm_name = Realmname
+wz.rates = Raten
+wz.bots = Zufällige Bots
+wz.bots.0 = 0 — leere Welt
+wz.bots.100 = 100 — ruhig
+wz.bots.500 = 500 — lebendige Welt
+wz.bots.1000 = 1000 — starker PC
+wz.rights = Rechte
+wz.rights.admin = Administrator (GM 3)
+wz.world.note = Der Account wird in der neuen Datenbank erstellt. Alles andere kann später unter Einstellungen geändert werden.
+wz.prep = Client-Vorbereitung
+wz.prep.rl = realmlist auf 127.0.0.1 setzen
+wz.prep.rl.desc = Die alte realmlist.wtf bleibt als realmlist.wtf.bak erhalten
+wz.prep.wdb = Client-Cache leeren
+wz.prep.wdb.desc = Ein Cache von einem anderen Server zeigt falsche Gegenstände und Quests
+wz.prep.accname = Login in den Anmeldebildschirm eintragen
+wz.prep.lnk = Desktop-Verknüpfung
+wz.prep.lnk.desc = Startet LonelyIce, das wiederum Server und Spiel startet
+wz.install = Installation
+wz.install.note = Sie können das Fenster minimieren: die Installation läuft im Hintergrund mit niedriger Priorität.
+wz.done = Alles bereit
+wz.done.note = Drücken Sie „Spielen“: LonelyIce startet den Server und öffnet das Spiel. Der erste Weltstart dauert etwa eine Minute.

@@ -1,4 +1,5 @@
 #include "GameClient.h"
+#include "Lang.h"
 #include "TextUtil.h"
 #include <algorithm>
 #include <fstream>
@@ -213,7 +214,7 @@ bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string c
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         if (!out)
         {
-            error = "Не удалось записать " + WideToUtf8(file.wstring());
+            error = Tr("client.error.write", WideToUtf8(file.wstring()));
             return false;
         }
         out << "set realmlist " << host << "\r\n";
@@ -238,7 +239,7 @@ bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string& error, void
     PROCESS_INFORMATION pi{};
     if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi))
     {
-        error = "Не удалось запустить Wow.exe (код " + std::to_string(GetLastError()) + ")";
+        error = Tr("client.error.start", GetLastError());
         return false;
     }
     CloseHandle(pi.hThread);

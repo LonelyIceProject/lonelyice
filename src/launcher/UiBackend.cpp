@@ -1,4 +1,6 @@
 #include "UiBackend.h"
+#include "Lang.h"
+#include "Png.h"
 #include "RmlUi_Platform_SDL.h"
 #include "RmlUi_Renderer_GL3.h"
 #include <RmlUi/Core/Context.h>
@@ -6,6 +8,8 @@
 #include <RmlUi/Core/Log.h>
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <Windows.h>
@@ -16,6 +20,34 @@ namespace
     class LoggingSystemInterface : public SystemInterface_SDL
     {
     public:
+        // Markup text "@{key}" becomes Tr("key"). Inside a data binding ({{ ... }}) it is left for the text the
+        // binding produces, which RmlUi passes through here again: a translation may hold quotes.
+        int TranslateString(Rml::String& translated, Rml::String const& input) override
+        {
+            translated.clear();
+            int count = 0, depth = 0;
+            for (std::size_t i = 0; i < input.size();)
+            {
+                if (input.compare(i, 2, "{{") == 0 || input.compare(i, 2, "}}") == 0)
+                {
+                    depth += input[i] == '{' ? 1 : -1;
+                    translated.append(input, i, 2);
+                    i += 2;
+                    continue;
+                }
+                std::size_t const end = depth == 0 && input.compare(i, 2, "@{") == 0 ? input.find('}', i + 2) : Rml::String::npos;
+                if (end == Rml::String::npos)
+                {
+                    translated += input[i++];
+                    continue;
+                }
+                translated += LonelyIce::Tr(std::string_view(input).substr(i + 2, end - i - 2));
+                i = end + 1;
+                ++count;
+            }
+            return count;
+        }
+
         bool LogMessage(Rml::Log::Type type, Rml::String const& message) override
         {
             if (type <= Rml::Log::LT_WARNING)
@@ -39,10 +71,36 @@ namespace
         }
     };
 
+    // The GL3 sample renderer reads TGA only; plugin icons are PNG files on disk.
+    class Renderer : public RenderInterface_GL3
+    {
+    public:
+        Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions, Rml::String const& source) override
+        {
+            if (source.size() < 4 || _stricmp(source.c_str() + source.size() - 4, ".png") != 0)
+                return RenderInterface_GL3::LoadTexture(dimensions, source);
+
+            std::ifstream in(std::filesystem::u8path(source), std::ios::binary);
+            std::vector<uint8_t> file(std::istreambuf_iterator<char>(in), {});
+            std::vector<uint8_t> rgba;
+            int w = 0, h = 0;
+            if (file.empty() || !LonelyIce::Png::Decode(file.data(), file.size(), rgba, w, h))
+            {
+                Rml::Log::Message(Rml::Log::LT_WARNING, "Cannot read image %s", source.c_str());
+                return 0;
+            }
+            for (std::size_t i = 0; i < rgba.size(); i += 4)
+                for (std::size_t j = 0; j < 3; ++j)
+                    rgba[i + j] = uint8_t(rgba[i + j] * rgba[i + 3] / 255);    // premultiplied alpha
+            dimensions = { w, h };
+            return GenerateTexture({ rgba.data(), rgba.size() }, dimensions);
+        }
+    };
+
     struct BackendData
     {
         LoggingSystemInterface system;
-        RenderInterface_GL3 render;
+        Renderer render;
         SDL_Window* window = nullptr;
         SDL_GLContext gl = nullptr;
     };

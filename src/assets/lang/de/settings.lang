@@ -1,0 +1,81 @@
+# Einstellungsseite: Gruppen, Beschriftungen, Hinweise, Optionen, Speicherfehler
+
+set.group.realm = Realm
+set.group.realm.hint = Realm, Stufen und Charakterstart
+set.group.rates = Raten
+set.group.rates.hint = Wie viel Erfahrung, Geld und Beute man erhält
+set.group.diff = Schwierigkeit
+set.group.diff.hint = Für das Spielen mit einer kleinen Bot-Gruppe
+set.group.perf = Netzwerk und Ressourcen
+set.group.perf.hint = Ports, Threads und Speichern
+set.group.launch = Launcher
+set.group.launch.hint = Eigene Optionen von LonelyIce, lonelyice.ini
+
+set.realm.name = Realmname
+set.realm.name.hint = Wird in der Login-Datenbank gespeichert, sichtbar in der Realmliste
+set.realm.game_type = Realm-Typ
+set.realm.max_level = Maximale Stufe
+set.realm.start_level = Startstufe
+set.realm.start_level_dk = Startstufe für Todesritter
+set.realm.start_money = Startgeld, Kupfer
+set.realm.two_side_accounts = Allianz und Horde auf einem Account
+set.realm.two_side_group = Gemischte Allianz- und Horde-Gruppen
+set.realm.two_side_group.hint = Bots beider Fraktionen in einer Gruppe
+
+set.opt.gametype.normal = Normal
+set.opt.gametype.pvp = PvP
+set.opt.gametype.rp = RP
+set.opt.gametype.rppvp = RP-PvP
+
+set.rates.xp_kill = Erfahrung für Tötungen
+set.rates.xp_quest = Erfahrung für Quests
+set.rates.xp_explore = Erfahrung für Erkundung
+set.rates.rest_ingame = Ausgeruhte Erfahrung im Spiel
+set.rates.reputation = Ruf
+set.rates.honor = Ehrenpunkte
+set.rates.drop_money = Geld von Kreaturen
+set.rates.drop_rare = Seltene Gegenstände (blau)
+set.rates.drop_epic = Epische Gegenstände
+set.rates.skill_crafting = Zuwachs der Berufsfertigkeiten
+
+set.diff.normal_damage = Schaden normaler Kreaturen
+set.diff.normal_hp = Gesundheit normaler Kreaturen
+set.diff.elite_damage = Schaden von Elite-Kreaturen
+set.diff.ignore_level = Dungeons ohne Stufenanforderung betreten
+set.diff.ignore_raid = Schlachtzüge ohne Schlachtzugsgruppe
+set.diff.ignore_raid.hint = Ermöglicht Schlachtzüge mit einer Gruppe aus 5 Bots
+set.diff.quests_ignore_raid = Schlachtzug-Quests in einer normalen Gruppe
+
+set.perf.bind_local = Nur dieser Computer
+set.perf.bind_local.hint = Ausschalten, um aus dem lokalen Netzwerk zu verbinden
+set.perf.realm_port = Login-Port
+set.perf.world_port = Welt-Port
+set.perf.soap = SOAP für Werkzeuge
+set.perf.soap_port = SOAP-Port
+set.perf.map_threads = Threads für Kartenaktualisierung
+set.perf.map_threads.hint = Sinnvoll: Anzahl der Kerne minus 4
+set.perf.save_interval = Intervall für Charakterspeicherung, Min.
+
+set.launch.ui_scale = Oberflächenskalierung
+set.launch.ui_scale.hint = Zusätzlich zur Windows-Skalierung; auch Strg + Mausrad
+set.launch.locale = Client-Sprache
+set.launch.locale.hint = Wird vor dem Spielstart in WTF\Config.wtf geschrieben
+set.launch.write_realmlist = realmlist vor dem Start prüfen
+set.launch.write_realmlist.hint = Eine fremde Adresse wird durch 127.0.0.1 ersetzt, die alte Datei bleibt als realmlist.wtf.bak erhalten
+set.launch.clear_wdb = Client-Cache leeren (Cache\WDB)
+set.launch.clear_wdb.hint = Nötig nach dem Bearbeiten der Weltdatenbank
+set.launch.autostart = Server zusammen mit dem Launcher starten
+set.launch.stop_with_game = Spiel beenden stoppt den Server
+set.launch.tray_on_close = Fenster schließen minimiert in den Infobereich
+set.launch.tray_on_close.hint = Der Server läuft weiter, LonelyIce bleibt im Infobereich
+set.launch.backup_time = Backup, Uhrzeit
+set.launch.backup_time.hint = HH:MM, leer für keinen Zeitplan
+set.launch.backup_keep = Aufzubewahrende Backups
+
+set.opt.locale.config_wtf = Wie in Config.wtf
+
+# {0} = Dateipfad
+set.error.open = {0} konnte nicht geöffnet werden
+set.error.write = {0} konnte nicht geschrieben werden
+# {0} = Bezeichnung der Einstellung
+set.error.number = „{0}“: eine Zahl ist erforderlich

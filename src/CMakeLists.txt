@@ -1,18 +1,20 @@
 # LonelyIce: launcher UI + auth + world in one exe (Windows only).
-# Deps (static SDL3, FreeType, RmlUi, StormLib, miniz) are built by tools/build-ui-deps.ps1 into LONELYICE_DEPS.
+# Deps (static SDL3, FreeType, RmlUi, StormLib, miniz, libcurl) are built by tools/build-ui-deps.ps1 into LONELYICE_DEPS.
 # The core (LONELYICE_CORE_DIR) is added by the top-level CMakeLists.txt; its targets are linked here.
 
 set(LONELYICE_DEPS "${CMAKE_SOURCE_DIR}/deps" CACHE PATH "Folder with sdl3/, freetype/, rmlui/ and src/rmlui (backends)")
 set(LONELYICE_RMLUI_BACKENDS "${LONELYICE_DEPS}/src/rmlui/Backends")
 
-list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui" "${LONELYICE_DEPS}/stormlib" "${LONELYICE_DEPS}/miniz")
+list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui" "${LONELYICE_DEPS}/stormlib" "${LONELYICE_DEPS}/miniz" "${LONELYICE_DEPS}/curl")
 find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static)
 find_package(RmlUi CONFIG QUIET)
 find_package(StormLib CONFIG QUIET)
 find_package(miniz CONFIG QUIET)
+# Static libcurl: its config package adds CURL_STATICLIB and the system libraries it needs.
+find_package(CURL CONFIG QUIET)
 
-if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT StormLib_FOUND OR NOT miniz_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
-  message(STATUS "LonelyIce: SDL3/RmlUi/StormLib/miniz not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1)")
+if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT StormLib_FOUND OR NOT miniz_FOUND OR NOT CURL_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
+  message(STATUS "LonelyIce: SDL3/RmlUi/StormLib/miniz/libcurl not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1)")
   return()
 endif()
 
@@ -47,7 +49,7 @@ set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/tools/VmapExtractorUnit
 
 # Embedded assets: every file under assets/ becomes an RCDATA resource, looked up by relative path.
 set(ASSET_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${ASSET_ROOT}/ui/*" "${ASSET_ROOT}/fonts/*.ttf" "${ASSET_ROOT}/icons/*.rgba" "${ASSET_ROOT}/icons/*.tga")
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${ASSET_ROOT}/ui/*" "${ASSET_ROOT}/fonts/*.ttf" "${ASSET_ROOT}/icons/*.rgba" "${ASSET_ROOT}/icons/*.tga" "${ASSET_ROOT}/lang/*.lang")
 # Icon 1 is what Explorer and the taskbar show for the exe.
 set(ASSET_RC "1 ICON \"${ASSET_ROOT}/icons/lonelyice-round.ico\"\n")
 set(ASSET_INDEX "")
@@ -112,7 +114,7 @@ target_link_libraries(lonelyice
     SDL3::SDL3-static
     StormLib::storm
     miniz::miniz
-    winhttp
+    CURL::libcurl
     version
     psapi
     winmm

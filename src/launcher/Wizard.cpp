@@ -1,4 +1,5 @@
 #include "Wizard.h"
+#include "Lang.h"
 #include "TextUtil.h"
 #include "UiBackend.h"
 #include <RmlUi/Core/DataModelHandle.h>
@@ -14,7 +15,8 @@ using namespace LonelyIce;
 
 namespace
 {
-    char const* const StepNames[] = { "Клиент", "Размещение", "Компоненты", "Мир", "Игра", "Установка", "Готово" };
+    char const* const StepKeys[] = { "wizard.step.client", "wizard.step.place", "wizard.step.components", "wizard.step.world",
+        "wizard.step.game", "wizard.step.install", "wizard.step.done" };
     constexpr int StepCount = 7;
 
     std::string Utf8(fs::path const& p)
@@ -33,13 +35,21 @@ namespace
         return free.QuadPart;
     }
 
-    std::string Gb(uint64_t bytes)
+    // "6.0 GB": one decimal, with the language's decimal separator (unit.decimal).
+    std::string GbText(double gb)
     {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%.1f", double(bytes) / double(1ull << 30));
+        snprintf(buf, sizeof(buf), "%.1f", gb);
         std::string s = buf;
-        std::replace(s.begin(), s.end(), '.', ',');
-        return s + " ГБ";
+        std::string sep = Tr("unit.decimal");
+        if (sep.size() == 1)
+            std::replace(s.begin(), s.end(), '.', sep[0]);
+        return Tr("unit.gb", s);
+    }
+
+    std::string Gb(uint64_t bytes)
+    {
+        return GbText(double(bytes) / double(1ull << 30));
     }
 
     uint32_t CountFiles(fs::path const& dir, std::wstring const& ext = {})
@@ -77,10 +87,28 @@ Wizard::Wizard(Host host) : _host(std::move(host)), _installer([w = _host.wake] 
     unsigned cores = std::max(1u, std::thread::hardware_concurrency());
     // A third of the logical CPUs stays free for the rest of the system (4 of 12 cores with SMT).
     _threads = std::to_string(std::max(1u, cores - cores / 3));
-    _coresNote = "из " + std::to_string(cores) + " потоков процессора";
+    _coresNote = Tr("wizard.cores_note", cores);
 }
 
 Wizard::~Wizard() = default;
+
+void Wizard::Relocalize()
+{
+    unsigned cores = std::max(1u, std::thread::hardware_concurrency());
+    _coresNote = Tr("wizard.cores_note", cores);
+    // Lists are built once the wizard has been opened; the client is not inspected again while installing.
+    if (!_places.empty())
+    {
+        if (!_installer.IsRunning())
+            Inspect(_clientInput);
+        BuildPlaces();
+        BuildComponents();
+    }
+    if (!_done.empty())
+        BuildDone();
+    RefreshFooter();
+    Dirty();
+}
 
 void Wizard::Bind(Rml::DataModelConstructor& c)
 {
@@ -217,33 +245,36 @@ void Wizard::Open(fs::path const& client)
 
 void Wizard::Inspect(fs::path const& client)
 {
+    _clientInput = client;
     _client = client.empty() ? ClientInfo{} : GameClient::Inspect(client);
     _checks.clear();
     _clientFound = _client.valid;
     if (!_client.valid)
     {
-        _clientTitle = "Клиент 3.3.5a не найден";
-        _clientPath = client.empty() ? "Укажите папку, где лежит Wow.exe" : Utf8(client);
-        _checks.push_back({ "bad", "Wow.exe и Data\\common.MPQ", "не найдены" });
+        _clientTitle = Tr("wizard.client.not_found");
+        _clientPath = client.empty() ? Tr("wizard.client.pick") : Utf8(client);
+        _checks.push_back({ "bad", Tr("wizard.check.files"), Tr("wizard.check.files_missing") });
         return;
     }
     std::error_code ec;
     bool nextToExe = fs::equivalent(_client.dir, _host.exeDir, ec) || fs::equivalent(_client.dir, _host.exeDir.parent_path(), ec);
-    _clientTitle = nextToExe ? "Клиент найден рядом с LonelyIce.exe" : "Клиент найден";
+    _clientTitle = nextToExe ? Tr("wizard.client.found_near_exe") : Tr("wizard.client.found");
     _clientPath = Utf8(_client.dir);
 
     bool build = _client.version == "3.3.5.12340";
-    _checks.push_back({ build ? "ok" : "bad", "Wow.exe, версия 3.3.5a", _client.version.empty() ? "версия не прочитана" : "сборка " + _client.version.substr(_client.version.rfind('.') + 1) });
+    _checks.push_back({ build ? "ok" : "bad", Tr("wizard.check.version"), _client.version.empty() ? Tr("wizard.check.version_unread")
+        : Tr("wizard.check.build", _client.version.substr(_client.version.rfind('.') + 1)) });
     uint32_t mpq = CountFiles(_client.dir / "Data", L".MPQ") + CountFiles(_client.dir / "Data", L".mpq");
-    _checks.push_back({ mpq >= 4 ? "ok" : "bad", "Архивы Data\\*.MPQ", std::to_string(mpq) + " шт." });
+    _checks.push_back({ mpq >= 4 ? "ok" : "bad", Tr("wizard.check.mpq"), Tr("wizard.check.mpq_count", mpq) });
     for (ClientLocale const& l : _client.locales)
-        _checks.push_back({ "ok", "Локаль " + l.name, "Data\\" + l.name });
+        _checks.push_back({ "ok", Tr("wizard.check.locale", l.name), "Data\\" + l.name });
     if (_client.locales.empty())
-        _checks.push_back({ "bad", "Локаль", "в Data\\ нет ни одной" });
+        _checks.push_back({ "bad", Tr("wizard.check.locale_title"), Tr("wizard.check.locale_none") });
     bool writable = Writable(_client.dir / "WTF");
-    _checks.push_back({ writable ? "ok" : "bad", "Запись в папку клиента", writable ? "разрешена" : "нет прав, запустите от администратора или перенесите игру" });
+    _checks.push_back({ writable ? "ok" : "bad", Tr("wizard.check.write"), writable ? Tr("wizard.check.write_ok") : Tr("wizard.check.write_denied") });
     bool running = GameClient::IsRunning(_client.dir);
-    _checks.push_back({ running ? "warn" : "ok", running ? "Игра запущена" : "Игра не запущена", running ? "закройте Wow.exe перед установкой" : "" });
+    _checks.push_back({ running ? "warn" : "ok", running ? Tr("wizard.check.game_running") : Tr("wizard.check.game_stopped"),
+        running ? Tr("wizard.check.game_close") : "" });
 
     std::string list;
     for (ClientLocale const& l : _client.locales)
@@ -263,13 +294,14 @@ fs::path Wizard::PlacePath() const
 void Wizard::BuildPlaces()
 {
     _places.clear();
-    auto add = [&](char const* id, char const* title, fs::path const& p, char const* detail)
+    auto add = [&](std::string const& id, fs::path const& p)
     {
-        _places.push_back({ id, title, p.empty() ? "папка не выбрана" : Utf8(p), p.empty() ? "" : Gb(FreeBytes(p)) + " свободно", detail });
+        _places.push_back({ id, Tr("wizard.place." + id + ".title"), p.empty() ? Tr("wizard.place.none") : Utf8(p),
+            p.empty() ? "" : Tr("wizard.place.free", Gb(FreeBytes(p))), Tr("wizard.place." + id + ".detail") });
     };
-    add("client", "Внутри папки клиента", _client.valid ? _client.dir / "LonelyIce" : fs::path(), "Всё в одном месте, удобно переносить.");
-    add("exe", "Рядом с LonelyIce.exe", _host.exeDir, "Если exe лежит отдельно от клиента.");
-    add("custom", "Другая папка…", _customPlace, "Например, на быстром SSD.");
+    add("client", _client.valid ? _client.dir / "LonelyIce" : fs::path());
+    add("exe", _host.exeDir);
+    add("custom", _customPlace);
 }
 
 void Wizard::BuildComponents()
@@ -283,18 +315,18 @@ void Wizard::BuildComponents()
     uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", L".vmtree");
     uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps");
 
-    auto have = [](bool yes, std::string const& what) { return yes ? "уже есть: " + what : std::string(); };
+    auto have = [](uint32_t count, char const* key) { return count ? Tr(key, count) : std::string(); };
     bool newSql = setup && haveDb && _host.sqlStamp && _host.sqlStamp() != Installer::SqlStamp(_host.exeDir / "setup");
     std::vector<CompRow> old = std::move(_comps);
+    // Titles are the installer's step titles.
     _comps = {
-        { "db", "Базы данных", "Вход, мир, персонажи и боты из SQL в папке setup", "0,4 ГБ · ≈ 1 мин",
-            !setup ? "нет setup\\sql.pak рядом с exe" : newSql ? "в setup\\sql.pak новые обновления, базы будут обновлены" : have(haveDb, "db\\world.sqlite, будут только обновлены"),
+        { "db", Tr("install.step.db"), Tr("wizard.comp.db.desc"), Tr("wizard.comp.db.size"),
+            !setup ? Tr("wizard.comp.db.no_setup") : newSql ? Tr("wizard.comp.db.new_sql") : haveDb ? Tr("wizard.comp.db.have") : std::string(),
             setup && (!haveDb || newSql), !setup },
-        { "maps", "DBC и карты", "Таблицы клиента, карты высот, камеры", "0,7 ГБ · ≈ 2 мин", have(maps > 0, std::to_string(maps) + " файлов карт"), maps == 0, false },
-        { "vmaps", "Модели зданий (vmaps)", "Линия видимости, пещеры, помещения", "0,6 ГБ · ≈ 5 мин", have(vmaps > 0, std::to_string(vmaps) + " карт"), vmaps == 0, false },
-        { "mmaps", "Навигация (mmaps)", "Пути для монстров и ботов. Без неё боты ходят сквозь стены", "6 ГБ · 20–60 мин",
-            mmaps ? "уже есть " + std::to_string(mmaps) + " файлов; включите, чтобы достроить недостающие" : "", mmaps == 0, false },
-        { "client", "Подготовка клиента", "realmlist, кэш, логин в окне входа, ярлык", "< 1 мин", "", true, false },
+        { "maps", Tr("install.step.maps"), Tr("wizard.comp.maps.desc"), Tr("wizard.comp.maps.size"), have(maps, "wizard.comp.maps.have"), maps == 0, false },
+        { "vmaps", Tr("install.step.vmaps"), Tr("wizard.comp.vmaps.desc"), Tr("wizard.comp.vmaps.size"), have(vmaps, "wizard.comp.vmaps.have"), vmaps == 0, false },
+        { "mmaps", Tr("install.step.mmaps"), Tr("wizard.comp.mmaps.desc"), Tr("wizard.comp.mmaps.size"), have(mmaps, "wizard.comp.mmaps.have"), mmaps == 0, false },
+        { "client", Tr("install.step.client"), Tr("wizard.comp.client.desc"), Tr("wizard.comp.client.size"), "", true, false },
     };
     // Keep the player's own choices when only the place changed.
     if (old.size() == _comps.size() && _step >= 2)
@@ -315,33 +347,30 @@ void Wizard::RefreshTotal()
             need += gb[i];
             ++n;
         }
-    char buf[96];
-    snprintf(buf, sizeof(buf), "Выбрано: %d из %zu · ≈ %.1f ГБ на диске", n, _comps.size(), need);
-    _total = buf;
-    std::replace(_total.begin(), _total.end(), '.', ',');
+    _total = Tr("wizard.total", n, _comps.size(), GbText(need));
 }
 
 void Wizard::RefreshFooter()
 {
     _steps.clear();
     for (int i = 0; i < StepCount; ++i)
-        _steps.push_back({ StepNames[i], i < _step ? "done" : i == _step ? "cur" : "" });
-    _counter = "шаг " + std::to_string(_step + 1) + " из " + std::to_string(StepCount);
+        _steps.push_back({ Tr(StepKeys[i]), i < _step ? "done" : i == _step ? "cur" : "" });
+    _counter = Tr("wizard.counter", _step + 1, StepCount);
     _backVisible = _step > 0 && _step < 5;
     bool installing = _installer.IsRunning();
-    _cancelLabel = _step == 5 && installing ? "Прервать" : _step == 6 ? "Закрыть" : "Позже";
+    _cancelLabel = Tr(_step == 5 && installing ? "wizard.button.abort" : _step == 6 ? "wizard.button.close" : "wizard.button.later");
     _nextOk = true;
     if (_step == 4)
-        _nextLabel = "Установить";
+        _nextLabel = Tr("wizard.button.install");
     else if (_step == 5)
     {
-        _nextLabel = _installer.Finished() && !_installer.Succeeded() ? "Повторить" : "Готово";
+        _nextLabel = Tr(_installer.Finished() && !_installer.Succeeded() ? "wizard.button.retry" : "wizard.button.done");
         _nextOk = _installer.Finished();
     }
     else if (_step == 6)
-        _nextLabel = "Играть";
+        _nextLabel = Tr("wizard.button.play");
     else
-        _nextLabel = "Далее";
+        _nextLabel = Tr("wizard.button.next");
 }
 
 void Wizard::Go(int step)
@@ -366,17 +395,17 @@ void Wizard::Next()
     {
         case 0:
             if (!_client.valid)
-                return Error("Укажите папку с клиентом 3.3.5a.");
+                return Error(Tr("wizard.error.no_client"));
             if (_client.version != "3.3.5.12340")
-                return Error("Нужен клиент 3.3.5a (сборка 12340).");
+                return Error(Tr("wizard.error.wrong_build"));
             return Go(1);
         case 1:
         {
             fs::path root = PlacePath();
             if (root.empty())
-                return Error("Выберите папку.");
+                return Error(Tr("wizard.error.no_place"));
             if (!Writable(root))
-                return Error("В эту папку нельзя записывать: " + Utf8(root));
+                return Error(Tr("wizard.error.not_writable", Utf8(root)));
             BuildComponents();
             return Go(2);
         }
@@ -384,26 +413,26 @@ void Wizard::Next()
         {
             RefreshTotal();
             if (std::none_of(_comps.begin(), _comps.end(), [](CompRow const& c) { return c.on; }))
-                return Error("Выберите хотя бы один компонент.");
+                return Error(Tr("wizard.error.no_components"));
             if (_comps[0].on && _comps[0].locked)
-                return Error("Нет файлов setup\\sql.pak и configs.pak рядом с LonelyIce.exe.");
+                return Error(Tr("wizard.error.no_setup"));
             int t = std::atoi(_threads.c_str());
             if (t < 1)
-                return Error("Число потоков должно быть больше нуля.");
+                return Error(Tr("wizard.error.threads"));
             Go(3);
             if (FreeBytes(PlacePath()) < (9ull << 30) && _comps[3].on)
-                Error("Внимание: свободно меньше 9 ГБ, навигации может не хватить места.");
+                Error(Tr("wizard.error.low_space"));
             return;
         }
         case 3:
             if (_comps[0].on && (!ValidLogin(_login) || _pass.empty()))
-                return Error("Логин: латинские буквы и цифры, до 16 символов; пароль не пустой.");
+                return Error(Tr("wizard.error.login"));
             if (_realm.empty())
-                return Error("Имя мира не может быть пустым.");
+                return Error(Tr("wizard.error.realm"));
             return Go(4);
         case 4:
             if (_host.serverRunning && _host.serverRunning())
-                return Error("Остановите сервер перед установкой.");
+                return Error(Tr("wizard.error.server_running"));
             StartInstall();
             return Go(5);
         case 5:
@@ -517,11 +546,12 @@ void Wizard::Tick()
         std::string note = s.note;
         if (s.state == StepState::Running && note.empty())
             note = std::to_string(int(s.progress * 100)) + " %";
-        rows.push_back({ s.title, note, st, int(s.progress * 100.f + 0.5f) });
+        // Looked up here rather than taken from s.title, so the rows follow a language switch.
+        rows.push_back({ Tr("install.step." + s.id), note, st, int(s.progress * 100.f + 0.5f) });
     }
     bool changed = rows.size() != _inst.size();
     for (std::size_t i = 0; !changed && i < rows.size(); ++i)
-        changed = rows[i].note != _inst[i].note || rows[i].state != _inst[i].state || rows[i].pct != _inst[i].pct;
+        changed = rows[i].title != _inst[i].title || rows[i].note != _inst[i].note || rows[i].state != _inst[i].state || rows[i].pct != _inst[i].pct;
     if (changed)
     {
         _inst = std::move(rows);
@@ -545,16 +575,7 @@ void Wizard::Tick()
         _reported = true;
         if (_installer.Succeeded())
         {
-            _done.clear();
-            fs::path root = _options.root;
-            if (_options.db)
-                _done.push_back({ "ok", "Базы собраны", Utf8(root / "db") });
-            if (_options.maps || _options.vmaps || _options.mmaps)
-                _done.push_back({ "ok", "Данные клиента", Utf8(root / "data") });
-            if (_options.db && !_options.login.empty())
-                _done.push_back({ "ok", "Аккаунт " + _options.login + (_options.gmLevel ? ", GM " + std::to_string(_options.gmLevel) : ""), "" });
-            if (_options.client_prep && _options.realmlist)
-                _done.push_back({ "ok", "realmlist.wtf → 127.0.0.1", _rlNote });
+            BuildDone();
             if (_host.installed)
                 _host.installed(_options);
         }
@@ -563,6 +584,20 @@ void Wizard::Tick()
     }
     if (_installer.IsRunning())
         _reported = false;
+}
+
+void Wizard::BuildDone()
+{
+    _done.clear();
+    fs::path root = _options.root;
+    if (_options.db)
+        _done.push_back({ "ok", Tr("wizard.done.db"), Utf8(root / "db") });
+    if (_options.maps || _options.vmaps || _options.mmaps)
+        _done.push_back({ "ok", Tr("wizard.done.data"), Utf8(root / "data") });
+    if (_options.db && !_options.login.empty())
+        _done.push_back({ "ok", _options.gmLevel ? Tr("wizard.done.account_gm", _options.login, _options.gmLevel) : Tr("wizard.done.account", _options.login), "" });
+    if (_options.client_prep && _options.realmlist)
+        _done.push_back({ "ok", "realmlist.wtf: 127.0.0.1", _rlNote });
 }
 
 void Wizard::BrowseFolder(bool forClient)

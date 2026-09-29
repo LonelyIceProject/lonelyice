@@ -1,3 +1,4 @@
+#include "Lang.h"
 #include <string_view>
 
 int LauncherMain(int argc, char** argv);
@@ -10,6 +11,7 @@ int PkgMain(int argc, char** argv);
 // client data extractors (--tool), the plugin package manager (--pkg), and at build time the release packer (--pack).
 int main(int argc, char** argv)
 {
+    LonelyIce::Lang::Init();
     for (int i = 1; i < argc; ++i)
     {
         std::string_view a = argv[i];

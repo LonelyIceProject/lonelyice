@@ -11,6 +11,7 @@
 //   LonelyIce.exe --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
 // Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: lonelyice.ini).
 
+#include "Lang.h"
 #include "LauncherSettings.h"
 #include "PackageManager.h"
 #include "TextUtil.h"
@@ -34,7 +35,7 @@ namespace
 
     int Fail(std::string const& s)
     {
-        Print("ошибка: " + s);
+        Print(Tr("pkg.cli.error", s));
         return 1;
     }
 
@@ -88,10 +89,7 @@ int PkgMain(int argc, char** argv)
     }
     if (args.empty())
     {
-        Print("использование: LonelyIce.exe --pkg list | available | install <id>[@<версии>]... | update [<id>...] | remove <id> |");
-        Print("                                enable <id> | disable <id> | apply -c <worldserver.conf> [--client <папка игры>] |");
-        Print("                                pack <папка плагина> [<куда>]");
-        Print("параметры: --plugins <папка>, --index <адреса через ;>");
+        Print(Tr("pkg.cli.usage"));
         return 1;
     }
 
@@ -103,14 +101,15 @@ int PkgMain(int argc, char** argv)
     if (cmd == "list")
     {
         for (Packages::Local const& l : pm.Installed())
-            Print(l.manifest.id + " " + l.manifest.version + (l.enabled ? "" : " (выключен)") + "  " + l.manifest.name);
+            Print(l.enabled ? l.manifest.id + " " + l.manifest.version + "  " + l.manifest.name
+                : Tr("pkg.cli.list_disabled", l.manifest.id, l.manifest.version, l.manifest.name));
         return 0;
     }
 
     if (cmd == "pack")
     {
         if (rest.empty())
-            return Fail("укажите папку плагина");
+            return Fail(Tr("pkg.cli.need_folder"));
         std::string entry;
         if (!Packages::Manager::Pack(fs::u8path(rest[0]), rest.size() > 1 ? fs::u8path(rest[1]) : fs::current_path(), entry, error))
             return Fail(error);
@@ -121,7 +120,7 @@ int PkgMain(int argc, char** argv)
     if (cmd == "apply")
     {
         if (config.empty())
-            return Fail("укажите -c <worldserver.conf>");
+            return Fail(Tr("pkg.cli.need_config"));
         if (!client.empty())
             _putenv_s("LONELYICE_CLIENT", client.c_str());
         _putenv_s("AC_PLUGINS_DIR", pluginsDir.string().c_str());
@@ -135,7 +134,7 @@ int PkgMain(int argc, char** argv)
     if (cmd == "remove" || cmd == "enable" || cmd == "disable")
     {
         if (rest.empty())
-            return Fail("укажите id плагина");
+            return Fail(Tr("pkg.cli.need_id"));
         std::string const& id = rest[0];
         if (cmd != "enable")
         {
@@ -145,19 +144,21 @@ int PkgMain(int argc, char** argv)
                 std::string list;
                 for (std::string const& d : deps)
                     list += (list.empty() ? "" : ", ") + d;
-                return Fail(id + " нужен плагинам: " + list);
+                return Fail(Tr("pkg.cli.needed_by", id, list));
             }
         }
         bool const ok = cmd == "remove" ? pm.Remove(id, error) : pm.SetEnabled(id, cmd == "enable", error);
         if (!ok)
             return Fail(error);
-        Print(id + (cmd == "remove" ? ": удалён" : cmd == "enable" ? ": включён" : ": выключен")
-            + ". Базы и клиент обновятся при следующем запуске сервера.");
+        Print(Tr(cmd == "remove" ? "pkg.cli.removed" : cmd == "enable" ? "pkg.cli.enabled" : "pkg.cli.disabled", id));
         return 0;
     }
 
     if (!pm.LoadIndex(index, error))
-        return Fail("индекс пакетов: " + error);
+        return Fail(Tr("pkg.cli.index_error", error));
+    for (Packages::Source const& s : pm.Sources())
+        if (!s.ok)
+            Print(Tr("pkg.cli.index_skipped", s.location, s.error));
 
     if (cmd == "available")
     {
@@ -165,7 +166,8 @@ int PkgMain(int argc, char** argv)
         for (Packages::Local const& l : pm.Installed())
             installed[l.manifest.id] = l.manifest.version;
         for (Packages::Package const& p : pm.Available())
-            Print(p.id + " " + p.version + (installed.count(p.id) ? " (установлен " + installed[p.id] + ")" : "") + "  " + p.name);
+            Print(installed.count(p.id) ? Tr("pkg.cli.available_installed", p.id, p.version, installed[p.id], p.name)
+                : p.id + " " + p.version + "  " + p.name);
         return 0;
     }
 
@@ -173,7 +175,7 @@ int PkgMain(int argc, char** argv)
     if (cmd == "install")
     {
         if (rest.empty())
-            return Fail("укажите id плагина");
+            return Fail(Tr("pkg.cli.need_id"));
         std::map<std::string, std::string> requests;
         for (std::string const& r : rest)
         {
@@ -195,19 +197,19 @@ int PkgMain(int argc, char** argv)
         }
     }
     else
-        return Fail("неизвестная команда " + cmd);
+        return Fail(Tr("pkg.cli.unknown_command", cmd));
 
     if (!plan.error.empty())
         return Fail(plan.error);
     if (plan.steps.empty())
     {
-        Print("Нечего устанавливать.");
+        Print(Tr("pkg.cli.nothing_to_install"));
         return 0;
     }
-    Print("Будет установлено:");
+    Print(Tr("pkg.cli.will_install"));
     PrintPlan(plan);
     if (!pm.Install(plan, error, [](std::string const& line) { Print(line); }))
         return Fail(error);
-    Print("Готово. Базы и клиент обновятся при следующем запуске сервера.");
+    Print(Tr("pkg.cli.done"));
     return 0;
 }

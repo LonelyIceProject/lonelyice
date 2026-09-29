@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string_view>
@@ -41,6 +42,60 @@ namespace
             path.erase(0, 1);
         return path;
     }
+
+    std::string DiskRoot()
+    {
+        char buf[MAX_PATH];
+        DWORD n = GetEnvironmentVariableA("LONELYICE_ASSETS", buf, MAX_PATH);
+        return n > 0 && n < MAX_PATH ? Normalize(buf) + "/" : std::string();
+    }
+}
+
+bool LonelyIce::ReadAsset(std::string const& rawPath, std::string& out)
+{
+    std::string const path = Normalize(rawPath);
+    if (std::string const root = DiskRoot(); !root.empty())
+    {
+        std::ifstream f(root + path, std::ios::binary);
+        if (f)
+        {
+            out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+            return true;
+        }
+    }
+    for (std::size_t i = 0; i < g_assetCount; ++i)
+    {
+        if (path != g_assetIndex[i].path)
+            continue;
+        HRSRC res = FindResourceA(nullptr, MAKEINTRESOURCEA(g_assetIndex[i].id), MAKEINTRESOURCEA(10) /* RT_RCDATA */);
+        HGLOBAL mem = res ? LoadResource(nullptr, res) : nullptr;
+        if (!mem)
+            return false;
+        out.assign(static_cast<char const*>(LockResource(mem)), SizeofResource(nullptr, res));
+        return true;
+    }
+    return false;
+}
+
+std::vector<std::string> LonelyIce::ListAssets(std::string_view folder)
+{
+    std::vector<std::string> out;
+    if (std::string const root = DiskRoot(); !root.empty())
+    {
+        std::error_code ec;
+        for (auto const& e : std::filesystem::directory_iterator(root + std::string(folder), ec))
+            if (e.is_regular_file(ec))
+                out.push_back(std::string(folder) + e.path().filename().string());
+    }
+    if (out.empty())
+        for (std::size_t i = 0; i < g_assetCount; ++i)
+        {
+            std::string_view const p = g_assetIndex[i].path;
+            if (p.substr(0, folder.size()) == folder && p.find('/', folder.size()) == std::string_view::npos)
+                out.emplace_back(p);
+        }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 LonelyIce::AssetFileInterface::AssetFileInterface()

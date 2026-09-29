@@ -1,5 +1,6 @@
 #include "PackageManager.h"
 #include "CryptoHash.h"
+#include "Lang.h"
 #include "PluginApi.h"
 #include "PluginMgr.h"
 #include <algorithm>
@@ -13,6 +14,7 @@
 
 namespace fs = std::filesystem;
 using namespace LonelyIce::Packages;
+using LonelyIce::Tr;
 
 namespace
 {
@@ -22,10 +24,11 @@ namespace
             return n.get_value<std::string>();
         if (!n.is_mapping())
             return {};
-        for (char const* locale : { "ru", "en" })
-            if (n.contains(locale) && n[locale].is_string())
-                return n[locale].get_value<std::string>();
-        return {};
+        std::map<std::string, std::string> texts;
+        for (auto const& [k, v] : n.as_map())
+            if (k.is_string() && v.is_string())
+                texts[k.get_value<std::string>()] = v.get_value<std::string>();
+        return LonelyIce::Lang::Pick(texts);
     }
 
     std::string Str(fkyaml::node const& n, char const* key)
@@ -94,7 +97,7 @@ namespace
         mz_zip_archive a{};
         if (!mz_zip_reader_init_mem(&a, zip.data(), zip.size(), 0))
         {
-            error = "это не zip";
+            error = Tr("pkg.error.not_zip");
             return false;
         }
         mz_uint const count = mz_zip_reader_get_num_files(&a);
@@ -114,7 +117,7 @@ namespace
                     prefix = n.substr(0, slash + 1);
             if (prefix.empty())
             {
-                error = "в пакете нет plugin.json";
+                error = Tr("pkg.error.no_manifest_in_package");
                 mz_zip_reader_end(&a);
                 return false;
             }
@@ -130,7 +133,7 @@ namespace
             std::string const rel = n.substr(prefix.size());
             if (!SafeRelative(rel))
             {
-                error = "недопустимый путь в пакете: " + n;
+                error = Tr("pkg.error.bad_path", n);
                 ok = false;
                 break;
             }
@@ -138,7 +141,7 @@ namespace
             fs::create_directories(out.parent_path(), ec);
             if (!mz_zip_reader_extract_to_file(&a, i, out.string().c_str(), 0))
             {
-                error = "не удалось распаковать " + n;
+                error = Tr("pkg.error.unpack_failed", n);
                 ok = false;
             }
         }
@@ -146,19 +149,35 @@ namespace
         return ok;
     }
 
-    std::vector<std::string> SplitSources(std::string const& s)
+    bool IsUrl(std::string const& s)
     {
-        std::vector<std::string> out;
-        std::stringstream ss(s);
-        for (std::string part; std::getline(ss, part, ';');)
-        {
-            part.erase(0, part.find_first_not_of(" \t"));
-            part.erase(part.find_last_not_of(" \t") + 1);
-            if (!part.empty())
-                out.push_back(part);
-        }
-        return out;
+        return s.rfind("http://", 0) == 0 || s.rfind("https://", 0) == 0 || s.rfind("file://", 0) == 0;
     }
+}
+
+std::vector<std::string> Manager::SplitSources(std::string const& s)
+{
+    std::vector<std::string> out;
+    std::stringstream ss(s);
+    for (std::string part; std::getline(ss, part, ';');)
+    {
+        part.erase(0, part.find_first_not_of(" \t"));
+        part.erase(part.find_last_not_of(" \t") + 1);
+        if (!part.empty())
+            out.push_back(part);
+    }
+    return out;
+}
+
+std::string Manager::IndexLocation(std::string const& source)
+{
+    std::error_code ec;
+    if (!IsUrl(source) && fs::is_directory(fs::u8path(source), ec))
+    {
+        std::u8string const p = (fs::u8path(source) / "index.json").u8string();
+        return std::string(p.begin(), p.end());
+    }
+    return source;
 }
 
 Manager::Manager(fs::path pluginsDir) : _dir(std::move(pluginsDir))
@@ -196,16 +215,27 @@ int Manager::CompareVersions(std::string const& a, std::string const& b)
 bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Progress const& progress)
 {
     _available.clear();
-    for (std::string const& source : SplitSources(sources))
+    _sources.clear();
+    error.clear();
+    for (std::string const& location : SplitSources(sources))
     {
+        Source& src = _sources.emplace_back();
+        src.location = location;
+        std::string const source = IndexLocation(location);
         std::vector<uint8_t> data;
-        if (!Http::Get(source, data, error, progress))
-            return false;
+        if (!Http::Get(source, data, src.error, progress))
+        {
+            error += (error.empty() ? "" : "; ") + location + ": " + src.error;
+            continue;
+        }
+        std::vector<Package> found;
         try
         {
             fkyaml::node root = fkyaml::node::deserialize(std::string(data.begin(), data.end()));
             if (!root.contains("packages") || !root["packages"].is_sequence())
                 throw std::runtime_error("no packages");
+            if (root.contains("name"))
+                src.name = Localized(root["name"]);
             for (fkyaml::node const& p : root["packages"].as_seq())
             {
                 Package pkg;
@@ -215,6 +245,9 @@ bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Pr
                 pkg.name = p.contains("name") ? Localized(p["name"]) : pkg.id;
                 pkg.description = p.contains("description") ? Localized(p["description"]) : std::string();
                 pkg.url = Http::Resolve(source, Str(p, "url"));
+                if (std::string const icon = Str(p, "icon"); !icon.empty())
+                    pkg.icon = Http::Resolve(source, icon);
+                pkg.source = location;
                 pkg.sha256 = Str(p, "sha256");
                 if (p.contains("size") && p["size"].is_integer())
                     pkg.size = uint64_t(p["size"].get_value<int64_t>());
@@ -234,16 +267,37 @@ bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Pr
                     continue;
                 if (server && (pkg.core != CoreAbi() || std::find(pkg.platforms.begin(), pkg.platforms.end(), Platform()) == pkg.platforms.end()))
                     continue;
-                _available.push_back(std::move(pkg));
+                found.push_back(std::move(pkg));
             }
         }
         catch (std::exception const& e)
         {
-            error = source + ": " + e.what();
-            return false;
+            src.error = Tr("pkg.error.not_index", e.what());
+            error += (error.empty() ? "" : "; ") + location + ": " + src.error;
+            continue;
         }
+        src.ok = true;
+        src.packages = found.size();
+        std::move(found.begin(), found.end(), std::back_inserter(_available));
     }
-    return true;
+    return _sources.empty() || std::any_of(_sources.begin(), _sources.end(), [](Source const& s) { return s.ok; });
+}
+
+void Manager::FetchIcons()
+{
+    std::error_code ec;
+    fs::create_directories(IconCache(), ec);
+    for (Package const& p : _available)
+    {
+        fs::path const file = IconFile(p);
+        if (p.icon.empty() || fs::exists(file, ec))
+            continue;
+        std::vector<uint8_t> data;
+        std::string error;
+        if (!Http::Get(p.icon, data, error) || data.size() < 8 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G')
+            continue;
+        std::ofstream(file, std::ios::binary).write(reinterpret_cast<char const*>(data.data()), std::streamsize(data.size()));
+    }
 }
 
 std::vector<Local> Manager::Installed() const
@@ -273,7 +327,7 @@ Plan Manager::Resolve(std::map<std::string, std::string> const& requests, bool u
     std::set<std::string> want;
     for (auto const& [id, range] : requests)
     {
-        ranges[id].emplace_back(range, "запрос");
+        ranges[id].emplace_back(range, Tr("pkg.resolve.requested"));
         want.insert(id);
     }
 
@@ -306,7 +360,7 @@ Plan Manager::Resolve(std::map<std::string, std::string> const& requests, bool u
                 std::string need;
                 for (auto const& [range, who] : ranges[id])
                     need += (need.empty() ? "" : ", ") + range + " (" + who + ")";
-                plan.error = "нет подходящей версии " + id + ": нужно " + need;
+                plan.error = Tr("pkg.error.no_version", id, need);
                 return plan;
             }
             if (chosen[id] != best)
@@ -334,7 +388,7 @@ Plan Manager::Resolve(std::map<std::string, std::string> const& requests, bool u
         for (std::string const& c : p->conflicts)
             if (present.count(c))
             {
-                plan.error = id + " несовместим с " + c;
+                plan.error = Tr("pkg.error.conflict", id, c);
                 return plan;
             }
 
@@ -376,13 +430,13 @@ bool Manager::Install(Plan const& plan, std::string& error, std::function<void(s
     {
         Package const& p = step.package;
         if (log)
-            log("Загрузка " + p.id + " " + p.version);
+            log(Tr("pkg.log.downloading", p.id, p.version));
         std::vector<uint8_t> zip;
         if (!Http::Get(p.url, zip, error, progress))
             return false;
         if ((p.size && zip.size() != p.size) || (!p.sha256.empty() && Sha256(zip.data(), zip.size()) != p.sha256))
         {
-            error = p.id + ": пакет повреждён (размер или sha256 не совпадают)";
+            error = Tr("pkg.error.corrupt", p.id);
             return false;
         }
 
@@ -398,7 +452,7 @@ bool Manager::Install(Plan const& plan, std::string& error, std::function<void(s
         auto m = std::find_if(check.begin(), check.end(), [&](PluginManifest const& x) { return x.dir.filename() == p.id; });
         if (m == check.end() || m->id != p.id || m->version != p.version)
         {
-            error = p.id + ": plugin.json пакета не совпадает с индексом";
+            error = Tr("pkg.error.manifest_mismatch", p.id);
             return false;
         }
 
@@ -409,18 +463,18 @@ bool Manager::Install(Plan const& plan, std::string& error, std::function<void(s
                 fs::remove_all(l.manifest.dir, ec);
                 if (ec)
                 {
-                    error = p.id + ": не удалось удалить старую версию, сервер запущен? (" + ec.message() + ")";
+                    error = Tr("pkg.error.remove_old_failed", p.id, ec.message());
                     return false;
                 }
             }
         fs::rename(dst, _dir / p.id, ec);
         if (ec)
         {
-            error = p.id + ": не удалось установить (" + ec.message() + ")";
+            error = Tr("pkg.error.install_failed", p.id, ec.message());
             return false;
         }
         if (log)
-            log(step.from.empty() ? "Установлен " + p.id + " " + p.version : "Обновлён " + p.id + " " + step.from + " → " + p.version);
+            log(step.from.empty() ? Tr("pkg.log.installed", p.id, p.version) : Tr("pkg.log.updated", p.id, step.from, p.version));
     }
     fs::remove_all(staging, ec);
     return true;
@@ -456,12 +510,12 @@ bool Manager::Remove(std::string const& id, std::string& error)
             fs::remove_all(l.manifest.dir, ec);
             if (ec)
             {
-                error = id + ": не удалось удалить, сервер запущен? (" + ec.message() + ")";
+                error = Tr("pkg.error.remove_failed", id, ec.message());
                 return false;
             }
             return true;
         }
-    error = id + " не установлен";
+    error = Tr("pkg.error.not_installed", id);
     return false;
 }
 
@@ -479,12 +533,12 @@ bool Manager::SetEnabled(std::string const& id, bool enabled, std::string& error
         fs::rename(l.manifest.dir, to, ec);
         if (ec)
         {
-            error = id + ": не удалось переместить, сервер запущен? (" + ec.message() + ")";
+            error = Tr("pkg.error.move_failed", id, ec.message());
             return false;
         }
         return true;
     }
-    error = id + " не установлен";
+    error = Tr("pkg.error.not_installed", id);
     return false;
 }
 
@@ -495,7 +549,7 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
     {
         std::ifstream in(pluginDir / "plugin.json", std::ios::binary);
         if (!in)
-            throw std::runtime_error("нет plugin.json");
+            throw std::runtime_error(Tr("pkg.error.no_manifest"));
         root = fkyaml::node::deserialize(in);
     }
     catch (std::exception const& e)
@@ -506,7 +560,7 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
     std::string const id = Str(root, "id"), version = Str(root, "version");
     if (id.empty() || version.empty())
     {
-        error = "в plugin.json нет id или version";
+        error = Tr("pkg.error.manifest_no_id");
         return false;
     }
 
@@ -533,13 +587,13 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
     mz_zip_archive a{};
     if (!mz_zip_writer_init_file(&a, out.string().c_str(), 0))
     {
-        error = "не удалось создать " + out.string();
+        error = Tr("pkg.error.create_failed", out.string());
         return false;
     }
     for (auto const& [name, path] : files)
         if (!mz_zip_writer_add_file(&a, name.c_str(), path.string().c_str(), nullptr, 0, MZ_BEST_COMPRESSION))
         {
-            error = "не удалось добавить " + name;
+            error = Tr("pkg.error.add_failed", name);
             mz_zip_writer_end(&a);
             return false;
         }
@@ -578,6 +632,14 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
             first = false;
         }
         e << " }";
+    }
+    // The icon also goes next to the zip, so the launcher can show it before the package is installed.
+    if (fs::exists(pluginDir / "icon.png", ec))
+    {
+        std::string const iconName = id + "-" + version + ".png";
+        fs::copy_file(pluginDir / "icon.png", outDir / iconName, fs::copy_options::overwrite_existing, ec);
+        if (!ec)
+            e << ", \"icon\": " << JsonString(iconName);
     }
     e << ", \"url\": " << JsonString(fileName) << ", \"sha256\": " << JsonString(Sha256(zip.data(), zip.size())) << ", \"size\": " << zip.size() << " }";
     entry = e.str();

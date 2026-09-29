@@ -44,6 +44,8 @@ namespace LonelyIce
         bool IsOpen() const { return _open; }
         bool IsInstalling() const { return _installer.IsRunning(); }
         void Tick();
+        // Rebuilds all language-dependent model data (after a language switch) and marks the model dirty.
+        void Relocalize();
 
         struct CheckRow { Rml::String cls, text, detail; };
         struct PlaceRow { Rml::String id, title, path, free, detail; };
@@ -61,6 +63,7 @@ namespace LonelyIce
         void BuildComponents();
         void RefreshTotal();
         void RefreshFooter();
+        void BuildDone();
         void StartInstall();
         std::filesystem::path PlacePath() const;
         void Error(std::string text);
@@ -79,6 +82,7 @@ namespace LonelyIce
         bool _nextOk = true, _backVisible = false;
 
         // 0 client
+        std::filesystem::path _clientInput;     // folder last passed to Inspect
         Rml::String _clientPath, _clientTitle;
         bool _clientFound = false;
         std::vector<CheckRow> _checks;

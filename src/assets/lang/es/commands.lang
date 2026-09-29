@@ -1,0 +1,96 @@
+# Página de comandos: grupos, títulos y descripciones de comandos, etiquetas de opciones, textos predeterminados
+
+cmd.group.srv = Servidor
+cmd.group.chr = Personaje
+cmd.group.bots = Bots
+cmd.group.acc = Cuentas
+cmd.group.world = Mundo
+
+cmd.srv.info = Estado del servidor
+cmd.srv.info.desc = Jugadores, bots, tiempo activo, latencia
+cmd.srv.saveall = Guardar todo
+cmd.srv.saveall.desc = Escribe todos los personajes en la base de datos
+cmd.srv.announce = Anuncio en el chat
+cmd.srv.announce.desc = Un mensaje para todos en el chat del servidor
+cmd.srv.announce.text = Reinicio en 5 minutos
+cmd.srv.notify = Mensaje en pantalla
+cmd.srv.notify.desc = Texto grande en el centro de la pantalla
+cmd.srv.notify.text = Hola desde LonelyIce
+cmd.srv.motd = Mensaje del día
+cmd.srv.motd.desc = Se muestra al iniciar sesión
+cmd.srv.motd.text = Bienvenido
+cmd.srv.reload_config = Recargar configuración
+cmd.srv.reload_config.desc = Aplica los ajustes marcados con .reload
+cmd.srv.restart = Reiniciar
+cmd.srv.restart.desc = Tras el número de segundos indicado
+cmd.srv.shutdown = Apagar
+cmd.srv.shutdown.desc = El servidor guarda a todos y se detiene
+cmd.srv.shutdown_cancel = Cancelar apagado
+
+cmd.chr.teleport = Teletransportar
+cmd.chr.teleport.desc = Mueve al personaje seleccionado
+cmd.chr.level = Nivel
+cmd.chr.level.desc = Establecer el nivel
+cmd.chr.revive = Resucitar
+cmd.chr.revive.desc = Si se queda atrapado como fantasma
+cmd.chr.unstuck = Desatascar
+cmd.chr.unstuck.desc = A la posada, el cementerio o la zona inicial
+cmd.chr.send_money = Dinero por correo
+cmd.chr.send_money.desc = Cantidad en oro
+cmd.chr.send_items = Objeto por correo
+cmd.chr.send_items.desc = ID del objeto y cantidad
+cmd.chr.reset_talents = Restablecer talentos
+cmd.chr.next_login = En el próximo inicio de sesión
+cmd.chr.next_login.desc = Cambiar apariencia, nombre, facción o raza
+cmd.chr.pinfo = Información
+cmd.chr.pinfo.desc = Cuenta, tiempo jugado, dinero
+cmd.chr.kick = Expulsar del juego
+
+cmd.loc.dalaran = Dalaran
+cmd.loc.stormwind = Ventormenta
+cmd.loc.orgrimmar = Orgrimmar
+cmd.loc.ironforge = Forjaz
+cmd.loc.undercity = Entrañas
+cmd.loc.shattrath = Shattrath
+
+cmd.opt.unstuck.inn = posada
+cmd.opt.unstuck.graveyard = cementerio
+cmd.opt.unstuck.startzone = zona inicial
+
+cmd.opt.next_login.customize = apariencia
+cmd.opt.next_login.rename = nombre
+cmd.opt.next_login.changefaction = facción
+cmd.opt.next_login.changerace = raza
+
+cmd.bots.stats = Estadísticas de bots
+cmd.bots.stats.desc = Cuántos hay en el mundo, por nivel y actividad
+cmd.bots.reload = Recargar ajustes de bots
+cmd.bots.reload.desc = playerbots.conf sin reiniciar
+cmd.bots.update = Actualizar bots
+cmd.bots.update.desc = Un ciclo de actualización adicional
+cmd.bots.reset = Restablecer todos los bots
+cmd.bots.reset.desc = Elimina y vuelve a crear bots aleatorios
+
+cmd.acc.create = Crear cuenta
+cmd.acc.gmlevel = Nivel de acceso
+cmd.acc.gmlevel.desc = 0 — jugador, 3 — administrador
+cmd.acc.password = Cambiar contraseña
+cmd.acc.ban = Bloquear
+cmd.acc.ban.desc = Duración: 1d, 2h, -1 para siempre
+cmd.acc.ban.reason = —
+cmd.acc.unban = Desbloquear
+
+cmd.world.events = Eventos activos
+cmd.world.events.desc = Festividades y eventos del juego
+cmd.world.event_start = Iniciar evento
+cmd.world.event_start.desc = ID de game_event
+cmd.world.event_stop = Detener evento
+cmd.world.instances = Estadísticas de instancias
+cmd.world.instances.desc = Instancias cargadas y vínculos
+cmd.world.reload_all = Recargar tablas del mundo
+cmd.world.reload_all.desc = Tras editar manualmente la base de datos del mundo
+
+# Asunto del correo de los comandos de dinero y objetos
+cmd.mail.subject = Regalo
+# Se muestra en la vista previa del comando cuando no hay ningún personaje seleccionado
+cmd.no_character = <personaje>

@@ -1,0 +1,81 @@
+# Settings page: groups, setting labels, hints, options, save errors
+
+set.group.realm = Мир
+set.group.realm.hint = Реалм, уровни и старт персонажа
+set.group.rates = Множители
+set.group.rates.hint = Сколько опыта, денег и добычи вы получаете
+set.group.diff = Сложность
+set.group.diff.hint = Для игры с малой группой ботов
+set.group.perf = Сеть и ресурсы
+set.group.perf.hint = Порты, потоки и сохранение
+set.group.launch = Лаунчер
+set.group.launch.hint = Параметры самого LonelyIce, lonelyice.ini
+
+set.realm.name = Имя мира
+set.realm.name.hint = Хранится в базе входа, видно в списке миров
+set.realm.game_type = Тип мира
+set.realm.max_level = Максимальный уровень
+set.realm.start_level = Стартовый уровень
+set.realm.start_level_dk = Стартовый уровень рыцаря смерти
+set.realm.start_money = Стартовые деньги, медь
+set.realm.two_side_accounts = Альянс и Орда на одном аккаунте
+set.realm.two_side_group = Общие группы Альянса и Орды
+set.realm.two_side_group.hint = С ботами обеих фракций в одной группе
+
+set.opt.gametype.normal = Обычный
+set.opt.gametype.pvp = PvP
+set.opt.gametype.rp = RP
+set.opt.gametype.rppvp = RP-PvP
+
+set.rates.xp_kill = Опыт за убийства
+set.rates.xp_quest = Опыт за задания
+set.rates.xp_explore = Опыт за исследование
+set.rates.rest_ingame = Отдых в игре
+set.rates.reputation = Репутация
+set.rates.honor = Очки чести
+set.rates.drop_money = Деньги с монстров
+set.rates.drop_rare = Редкие вещи (синие)
+set.rates.drop_epic = Эпические вещи
+set.rates.skill_crafting = Рост навыков профессий
+
+set.diff.normal_damage = Урон обычных монстров
+set.diff.normal_hp = Здоровье обычных монстров
+set.diff.elite_damage = Урон элитных монстров
+set.diff.ignore_level = Вход в подземелья без требований уровня
+set.diff.ignore_raid = Рейды без требования рейдовой группы
+set.diff.ignore_raid.hint = Позволяет идти в рейд группой из 5 ботов
+set.diff.quests_ignore_raid = Рейдовые задания в обычной группе
+
+set.perf.bind_local = Только этот компьютер
+set.perf.bind_local.hint = Выключите, чтобы подключаться из локальной сети
+set.perf.realm_port = Порт входа
+set.perf.world_port = Порт мира
+set.perf.soap = SOAP для инструментов
+set.perf.soap_port = Порт SOAP
+set.perf.map_threads = Потоки обновления карт
+set.perf.map_threads.hint = Разумно: число ядер минус 4
+set.perf.save_interval = Сохранение персонажей, мин
+
+set.launch.ui_scale = Масштаб интерфейса
+set.launch.ui_scale.hint = Поверх масштаба Windows; также Ctrl + колесо мыши
+set.launch.locale = Язык клиента
+set.launch.locale.hint = Записывается в WTF\Config.wtf перед запуском игры
+set.launch.write_realmlist = Проверять realmlist перед запуском
+set.launch.write_realmlist.hint = Чужой адрес заменяется на 127.0.0.1, старый файл сохраняется как realmlist.wtf.bak
+set.launch.clear_wdb = Очищать кэш клиента (Cache\WDB)
+set.launch.clear_wdb.hint = Нужно после правок базы мира
+set.launch.autostart = Запускать сервер вместе с лаунчером
+set.launch.stop_with_game = Выход из игры останавливает сервер
+set.launch.tray_on_close = Закрытие окна сворачивает в трей
+set.launch.tray_on_close.hint = Сервер продолжает работать, LonelyIce остаётся в области уведомлений
+set.launch.backup_time = Резервная копия, время
+set.launch.backup_time.hint = ЧЧ:ММ, пусто — без расписания
+set.launch.backup_keep = Хранить копий
+
+set.opt.locale.config_wtf = Как в Config.wtf
+
+# {0} = file path
+set.error.open = Не удалось открыть {0}
+set.error.write = Не удалось записать {0}
+# {0} = setting label
+set.error.number = «{0}»: нужно число

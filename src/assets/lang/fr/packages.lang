@@ -1,0 +1,82 @@
+# Paquets de plugins et correctifs du client : gestionnaire de paquets, téléchargements, ligne de commande --pkg, recettes DBC, installation des correctifs
+
+# tools/PkgMain.cpp: LonelyIce.exe --pkg
+pkg.cli.error = erreur : {0}
+pkg.cli.usage = usage : LonelyIce.exe --pkg list | available | install <id>[@<plage>]... | update [<id>...] | remove <id> |\n                            enable <id> | disable <id> | apply -c <worldserver.conf> [--client <dossier du jeu>] |\n                            pack <dossier du plugin> [<dossier de sortie>]\noptions : --plugins <dossier>, --index <urls séparées par ;>
+pkg.cli.list_disabled = {0} {1} (désactivé)  {2}
+pkg.cli.available_installed = {0} {1} (installé : {2})  {3}
+pkg.cli.need_folder = indiquez le dossier du plugin
+pkg.cli.need_config = indiquez -c <worldserver.conf>
+pkg.cli.need_id = indiquez l'id du plugin
+pkg.cli.needed_by = {0} est requis par : {1}
+pkg.cli.removed = {0} : supprimé. Les bases de données et le client seront mis à jour au prochain démarrage du serveur.
+pkg.cli.enabled = {0} : activé. Les bases de données et le client seront mis à jour au prochain démarrage du serveur.
+pkg.cli.disabled = {0} : désactivé. Les bases de données et le client seront mis à jour au prochain démarrage du serveur.
+pkg.cli.index_error = index de paquets : {0}
+pkg.cli.index_skipped = index ignoré {0} : {1}
+pkg.cli.unknown_command = commande inconnue {0}
+pkg.cli.nothing_to_install = Rien à installer.
+pkg.cli.will_install = Sera installé :
+pkg.cli.done = Terminé. Les bases de données et le client seront mis à jour au prochain démarrage du serveur.
+
+# packages/Http.cpp
+pkg.http.no_file = fichier introuvable : {0}
+pkg.http.bad_url = adresse invalide : {0}
+pkg.http.no_response = aucune réponse de {0} ({1})
+pkg.http.interrupted = téléchargement interrompu : {0}
+pkg.http.status = {0} : HTTP {1}
+pkg.http.cancelled = annulé
+
+# packages/PackageManager.cpp
+pkg.error.not_zip = ce n'est pas un fichier zip
+pkg.error.no_manifest_in_package = le paquet n'a pas de plugin.json
+pkg.error.bad_path = chemin invalide dans le paquet : {0}
+pkg.error.unpack_failed = impossible de décompresser {0}
+pkg.error.not_index = pas un index de paquets ({0})
+pkg.resolve.requested = demandé
+pkg.error.no_version = aucune version convenable de {0} : besoin de {1}
+pkg.error.conflict = {0} est en conflit avec {1}
+pkg.log.downloading = Téléchargement de {0} {1}
+pkg.error.corrupt = {0} : le paquet est endommagé (taille ou sha256 incorrects)
+pkg.error.manifest_mismatch = {0} : le plugin.json du paquet ne correspond pas à l'index
+pkg.error.remove_old_failed = {0} : impossible de supprimer l'ancienne version, le serveur tourne-t-il ? ({1})
+pkg.error.install_failed = {0} : impossible d'installer ({1})
+pkg.log.installed = {0} {1} installé
+pkg.log.updated = {0} {1} › {2} mis à jour
+pkg.error.remove_failed = {0} : impossible de supprimer, le serveur tourne-t-il ? ({1})
+pkg.error.not_installed = {0} n'est pas installé
+pkg.error.move_failed = {0} : impossible de déplacer, le serveur tourne-t-il ? ({1})
+pkg.error.no_manifest = pas de plugin.json
+pkg.error.manifest_no_id = plugin.json n'a pas d'id ou de version
+pkg.error.create_failed = impossible de créer {0}
+pkg.error.add_failed = impossible d'ajouter {0}
+
+# packages/ClientPatch.cpp
+patch.mpq.create_failed = impossible de créer {0} ({1})
+patch.mpq.add_failed = impossible d'ajouter {0} ({1})
+patch.mpq.replace_failed = impossible de remplacer {0} : le jeu tourne probablement
+patch.client.foreign_backed_up = {0} : {1} d'un autre serveur enregistré en .bak
+patch.client.removed = {0} : correctif supprimé, aucun plugin n'en a besoin
+patch.client.table_missing = {0} : {1} introuvable dans les archives du client
+patch.client.built = {0} : {1} construit
+patch.addon.copy_failed = addon {0} non copié : {1}
+patch.addon.removed = addon {0} supprimé
+
+# packages/DbcRecipes.cpp ({0} is "plugin, table" or the plugin id)
+patch.recipe.no_file = {0} : fichier {1} introuvable
+patch.recipe.no_id = {0} : pas d'id pour {1}
+patch.recipe.no_id_placeholder = {0} : pas d'id pour {{{{id:{1}}}}}
+patch.recipe.row_no_id = {0} : une ligne n'a pas d'« id »
+patch.recipe.row_exists = {0} : la ligne {1} existe déjà
+patch.recipe.row_missing = {0} : pas de ligne {1}
+patch.recipe.copy_missing = {0} : pas de ligne {1} à copier
+patch.recipe.field_not_number = {0} : les champs se définissent par numéro, pas par « {1} »
+patch.recipe.field_forbidden = {0} : le champ {1} ne peut pas être défini
+
+# packages/PluginPatches.cpp
+patch.plugin.removed = {0} : correctifs du plugin supprimés
+patch.plugin.no_id_table = {0} : pas de table {1} pour attribuer les id
+patch.plugin.no_server_table = {0} : pas de table serveur {1}
+patch.plugin.format_mismatch = {0} : le format du core ne correspond pas au fichier
+patch.plugin.installed = {0} : correctifs installés
+patch.plugin.client_error = client : {0}

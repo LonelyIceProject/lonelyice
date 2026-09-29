@@ -279,20 +279,30 @@ update and removed with the plugin (LonelyIce keeps its list in `Interface/AddOn
 A package is a zip of the plugin folder (at the root of the zip or in one top folder). `LonelyIce.exe --pkg pack
 <plugin folder> [<out dir>]` writes `<id>-<version>.zip` and prints its index entry.
 
-An index lists packages; the launcher's Plugins tab and `--pkg` read it (`[packages] index` in `lonelyice.ini`,
-several indexes separated by `;`, URLs or local paths). Package URLs are relative to the index.
+An index (catalog) lists packages; the launcher's Plugins page and `--pkg` read it. Catalogs are set on the Plugins
+page or in `lonelyice.ini`: `[packages] index` holds the catalogs in use and `disabled` the ones kept but not read,
+both separated by `;`. A catalog is an http(s) URL of an index, a local index file or a folder holding `index.json`.
+A catalog that cannot be read is skipped; the others still work. Package and icon URLs are relative to the index.
 
 ```json
 {
   "format": 1,
+  "name": { "en": "My catalog", "ru": "Мой каталог" },
   "packages": [
     { "id": "lonelyice.tactics", "version": "1.3.0", "name": { "en": "Bot tactics", "ru": "Тактики ботов" },
       "core": "lonelyice-ac-1", "platforms": [ "windows-x64", "linux-x64" ],
       "depends": { "playerbots": ">=1.0.0" },
+      "icon": "lonelyice.tactics-1.3.0.png",
       "url": "lonelyice.tactics-1.3.0.zip", "sha256": "…", "size": 1234567 }
   ]
 }
 ```
+
+`--pkg pack` also copies the plugin's `icon.png` next to the zip and adds `icon` to the entry; the launcher caches
+catalog icons in `plugins/.cache/icons`.
+
+Localized texts (manifest, settings, index) are objects of language code → text. The launcher shows its own
+language (`en`, `de`, `es`, `fr`, `ru`), then `en`, then any.
 
 Packages for another core ABI or without a build for this platform are not offered; client-only plugins (no
 `core`, no `platforms`) work with any server. Installing resolves the dependency tree (newest versions that satisfy

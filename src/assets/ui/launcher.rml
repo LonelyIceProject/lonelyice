@@ -4,248 +4,378 @@
     <link type="text/rcss" href="launcher.rcss"/>
 </head>
 <body>
+<!-- Text: "@{key}" is looked up in assets/lang/<language>/*.lang while the page loads (also inside bound text). -->
 <div id="frame" data-model="li">
 <div id="scene">
     <div id="head">
-        <div id="logo">LONELYICE</div>
-        <div id="sub">одиночный сервер · 3.3.5a</div>
+        <div class="head-side">
+            <div class="navs" data-if="page == 'main'">
+                <div id="nav-settings" class="nav" data-event-click="open_page('settings')">@{page.settings}</div>
+                <div id="nav-plugins" class="nav" data-event-click="open_page('plugins')">@{page.plugins}<span class="count" data-if="pl_updates > 0">{{pl_updates}}</span></div>
+                <div id="nav-service" class="nav" data-event-click="open_page('service')">@{page.service}</div>
+            </div>
+            <div id="page-back" class="btn small" data-if="page != 'main'" data-event-click="open_page('main')">@{ui.back}</div>
+            <div class="page-title" data-if="page == 'settings'">@{page.settings}</div>
+            <div class="page-title" data-if="page == 'plugins'">@{page.plugins}</div>
+            <div class="page-title" data-if="page == 'service'">@{page.service}</div>
+        </div>
+        <div class="head-logo">
+            <div id="logo" data-class-small="page != 'main'">LONELYICE</div>
+            <div id="sub" data-if="page == 'main'">@{ui.subtitle}</div>
+        </div>
+        <div class="head-side right">
+            <select id="ui-lang" class="lang" data-value="ui_lang">
+                <option data-for="l : langs" data-attr-value="l.id">{{l.label}}</option>
+            </select>
+        </div>
     </div>
 
     <div id="main">
-        <div id="left">
-            <div class="plate">
-                <h3>Сервер</h3>
-                <div class="state">
-                    <div class="orb" data-class-ok="state == 'ready'" data-class-busy="state == 'starting' || state == 'loading' || state == 'stopping'" data-class-bad="state == 'failed'"></div>
-                    <div class="state-text">
-                        <div class="st-title">{{state_title}}</div>
-                        <div class="st-sub">{{state_sub}}</div>
+        <!-- ============ main page: kept in the DOM so the console log survives page switches ============ -->
+        <div class="page-main" data-class-hidden="page != 'main'">
+            <div id="left">
+                <div class="plate">
+                    <h3>@{ui.server}</h3>
+                    <div class="state">
+                        <div class="orb" data-class-ok="state == 'ready'" data-class-busy="state == 'starting' || state == 'loading' || state == 'stopping'" data-class-bad="state == 'failed'"></div>
+                        <div class="state-text">
+                            <div class="st-title">{{state_title}}</div>
+                            <div class="st-sub">{{state_sub}}</div>
+                        </div>
+                    </div>
+                    <div class="svc"><div class="dot" data-class-on="auth_on"></div><div class="svc-name">@{ui.svc.auth}</div><div class="port">:{{auth_port}}</div></div>
+                    <div class="svc"><div class="dot" data-class-on="world_on"></div><div class="svc-name">@{ui.svc.world}</div><div class="port">:{{world_port}}</div></div>
+                    <div class="svc" data-if="soap_enabled"><div class="dot" data-class-on="world_on"></div><div class="svc-name">SOAP</div><div class="port">:{{soap_port}}</div></div>
+                    <div class="kv-block">
+                        <div class="kv"><div class="k">@{ui.kv.uptime}</div><div class="v">{{uptime}}</div></div>
+                        <div class="kv"><div class="k">@{ui.kv.players}</div><div class="v">{{players}}</div></div>
+                        <div class="kv"><div class="k">@{ui.kv.bots}</div><div class="v">{{bots}}</div></div>
+                        <div class="kv"><div class="k">@{ui.kv.memory}</div><div class="v">{{memory}}</div></div>
+                        <div class="kv"><div class="k">@{ui.kv.diff}</div><div class="v">{{diff}}</div></div>
+                    </div>
+                    <div class="row">
+                        <div id="btn-toggle" class="btn small" data-class-danger="running" data-event-click="toggle_server">{{toggle_label}}</div>
+                        <div id="btn-restart" class="btn small" data-class-disabled="!running" data-event-click="restart_server">@{ui.restart}</div>
                     </div>
                 </div>
-                <div class="svc"><div class="dot" data-class-on="auth_on"></div><div class="svc-name">Вход (auth)</div><div class="port">:{{auth_port}}</div></div>
-                <div class="svc"><div class="dot" data-class-on="world_on"></div><div class="svc-name">Мир (world)</div><div class="port">:{{world_port}}</div></div>
-                <div class="svc" data-if="soap_enabled"><div class="dot" data-class-on="world_on"></div><div class="svc-name">SOAP</div><div class="port">:{{soap_port}}</div></div>
-                <div class="kv-block">
-                    <div class="kv"><div class="k">Время работы</div><div class="v">{{uptime}}</div></div>
-                    <div class="kv"><div class="k">Игроки онлайн</div><div class="v">{{players}}</div></div>
-                    <div class="kv"><div class="k">Боты в мире</div><div class="v">{{bots}}</div></div>
-                    <div class="kv"><div class="k">Память</div><div class="v">{{memory}}</div></div>
-                    <div class="kv"><div class="k">Задержка мира</div><div class="v">{{diff}}</div></div>
+
+                <div class="plate">
+                    <h3>@{ui.game}</h3>
+                    <div class="path" data-class-missing="!client_ok">{{client_path}}</div>
+                    <div class="chips">
+                        <div class="chip" data-for="l : locales" data-class-ok="l.cls == 'ok'" data-class-warn="l.cls == 'warn'" data-class-bad="l.cls == 'bad'" data-class-launch="l.launch" data-event-click="pick_locale(l.name)">{{l.name}}</div>
+                    </div>
+                    <div class="rlnote">{{rl_note}}</div>
+                    <div class="row">
+                        <div id="btn-browse" class="btn small" data-event-click="browse_client">@{ui.browse}</div>
+                        <div id="btn-realmlist" class="btn small" data-class-disabled="!client_ok" data-event-click="fix_realmlist">@{ui.fix_realmlist}</div>
+                    </div>
                 </div>
-                <div class="row">
-                    <div id="btn-toggle" class="btn small" data-class-danger="running" data-event-click="toggle_server">{{toggle_label}}</div>
-                    <div id="btn-restart" class="btn small" data-class-disabled="!running" data-event-click="restart_server">Перезапуск</div>
-                </div>
+
             </div>
 
-            <div class="plate">
-                <h3>Папка игры</h3>
-                <div class="path" data-class-missing="!client_ok">{{client_path}}</div>
-                <div class="chips">
-                    <div class="chip" data-for="l : locales" data-class-ok="l.cls == 'ok'" data-class-warn="l.cls == 'warn'" data-class-bad="l.cls == 'bad'" data-class-launch="l.launch" data-event-click="pick_locale(l.name)">{{l.name}}</div>
+            <div id="panel">
+                <div id="tabs">
+                    <div id="tab-overview" class="tab" data-class-active="tab == 'overview'" data-event-click="open_tab('overview')">@{tab.overview}</div>
+                    <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="open_tab('console')">@{tab.console}</div>
+                    <div id="tab-commands" class="tab" data-class-active="tab == 'commands'" data-event-click="open_tab('commands')">@{tab.commands}</div>
+                    <div id="tab-accounts" class="tab" data-class-active="tab == 'accounts'" data-event-click="open_tab('accounts')">@{tab.accounts}</div>
                 </div>
-                <div class="rlnote">{{rl_note}}</div>
-                <div class="row">
-                    <div id="btn-browse" class="btn small" data-event-click="browse_client">Обзор…</div>
-                    <div id="btn-realmlist" class="btn small" data-class-disabled="!client_ok" data-event-click="fix_realmlist">Прописать realmlist</div>
+
+                <!-- overview -->
+                <div class="pane" data-if="tab == 'overview'">
+                    <div class="ribbon" data-if="news.size > 0">@{ui.news}</div>
+                    <div class="news" data-for="n : news" data-class-warn="n.kind == 'warn'" data-class-update="n.kind == 'update'">
+                        <div class="news-mark"></div>
+                        <div class="grow"><div class="news-title">{{n.title}}</div><div class="news-text">{{n.text}}</div></div>
+                        <div class="btn small go" data-if="n.action != ''" data-event-click="news_action(n.action)">{{n.button}}</div>
+                    </div>
+                    <div class="ribbon">@{ui.events} <span class="ribbon-note">@{ui.today}</span></div>
+                    <div id="events" class="scroll grow">
+                        <div class="event" data-for="e : events"><div class="time">{{e.time}}</div><div class="msg">{{e.text}}</div></div>
+                        <div class="event empty" data-if="events.size == 0"><div class="msg">@{ui.no_events}</div></div>
+                    </div>
+                    <div class="actions">
+                        <div id="act-backup" class="action" data-class-disabled="backup_busy" data-event-click="backup_now"><div class="a-title">@{act.backup}</div><div class="a-sub">@{act.backup.sub}</div></div>
+                        <div id="act-save" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('saveall')"><div class="a-title">@{act.saveall}</div><div class="a-sub">saveall</div></div>
+                        <div id="act-announce" class="action" data-class-disabled="state != 'ready'" data-event-click="announce"><div class="a-title">@{act.announce}</div><div class="a-sub">@{act.announce.sub}</div></div>
+                        <div id="act-folder" class="action" data-event-click="open_server_dir"><div class="a-title">@{act.folder}</div><div class="a-sub">@{act.folder.sub}</div></div>
+                    </div>
+                </div>
+
+                <!-- console: kept in the DOM so the log survives tab switches -->
+                <div class="pane console" data-class-hidden="tab != 'console'">
+                    <div id="log"></div>
+                    <div class="cmd-row">
+                        <div class="prompt">AC&gt;</div>
+                        <input type="text" id="cmd" class="cmd"/>
+                        <div id="btn-send" class="btn small" data-event-click="send_command">@{ui.run}</div>
+                    </div>
+                </div>
+
+                <!-- commands -->
+                <div class="pane" data-if="tab == 'commands'">
+                    <div class="toolbar">
+                        <div class="f-inline">@{cmd.character}</div>
+                        <select id="cmd-target" class="field target" data-if="cmd_chars.size > 0" data-value="cmd_target">
+                            <option data-for="o : cmd_chars" data-attr-value="o.id">{{o.label}}</option>
+                        </select>
+                        <input type="text" id="cmd-target-text" class="field target" data-if="cmd_chars.size == 0" data-value="cmd_target"/>
+                        <div class="spacer"></div>
+                        <div class="f-inline">@{ui.search}</div>
+                        <input type="text" id="cmd-search" class="field search" data-value="cmd_query"/>
+                    </div>
+                    <div class="cats">
+                        <div class="cat" data-attr-id="'cmd-group-' + g.id" data-for="g : cmd_groups" data-class-active="cmd_query == '' && cmd_group == g.id" data-event-click="cmd_group_pick(g.id)">{{g.name}}</div>
+                    </div>
+                    <div class="scroll grow">
+                        <div class="ccard" data-for="c, ci : cmd_cards" data-class-danger="c.danger">
+                            <div class="cc-main">
+                                <div class="cc-title">{{c.title}}<span class="cc-group" data-if="c.group != ''"> · {{c.group}}</span></div>
+                                <div class="cc-desc" data-if="c.desc != ''">{{c.desc}}</div>
+                                <div class="cc-args" data-if="c.args.size > 0">
+                                    <div class="cc-arg" data-for="a : c.args">
+                                        <input type="text" class="field arg" data-if="a.type != 's'" data-value="a.value"/>
+                                        <select class="field arg" data-if="a.type == 's'" data-value="a.value">
+                                            <option data-for="o : a.opts" data-attr-value="o.id">{{o.label}}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="cc-preview">{{c.preview}}</div>
+                            </div>
+                            <div class="btn small go" data-attr-id="'run-' + ci" data-class-danger="c.danger" data-class-disabled="state != 'ready'" data-event-click="cmd_run(ci)">{{c.button}}</div>
+                        </div>
+                        <div class="note pad" data-if="cmd_cards.size == 0">@{ui.nothing_found}</div>
+                    </div>
+                    <div class="statusbar"><div class="note grow">{{cmd_last}}</div></div>
+                </div>
+
+                <!-- accounts -->
+                <div class="pane" data-if="tab == 'accounts'">
+                    <div class="scroll grow">
+                        <div class="note pad" data-if="!acc_loaded">{{acc_note}}</div>
+                        <div class="trow thead" data-if="acc_loaded"><div class="c1">@{acc.login}</div><div class="c2">@{acc.level}</div><div class="c3">@{acc.chars}</div><div class="c4">@{acc.last_login}</div></div>
+                        <div class="trow" data-for="a : acc_rows"><div class="c1">{{a.name}}</div><div class="c2"><span data-class-gm="a.gm">{{a.level}}</span></div><div class="c3">{{a.chars}}</div><div class="c4">{{a.last}}</div></div>
+                    </div>
+                    <div class="ribbon">@{acc.new}</div>
+                    <div class="form-row">
+                        <div class="f"><div class="f-label">@{acc.login}</div><input type="text" id="acc-login" class="field" data-value="acc_login"/></div>
+                        <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="acc-pass" class="field" data-value="acc_pass"/></div>
+                        <div class="f"><div class="f-label">@{acc.level}</div>
+                            <select id="acc-level" class="field" data-value="acc_level">
+                                <option value="0">@{acc.player}</option><option value="1">GM 1</option><option value="2">GM 2</option><option value="3">GM 3</option>
+                            </select>
+                        </div>
+                        <div id="btn-acc-create" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_create">@{acc.create}</div>
+                        <div id="btn-acc-refresh" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_refresh">@{ui.refresh}</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div id="panel">
-            <div id="tabs">
-                <div id="tab-overview" class="tab" data-class-active="tab == 'overview'" data-event-click="open_tab('overview')">Обзор</div>
-                <div id="tab-accounts" class="tab" data-class-active="tab == 'accounts'" data-event-click="open_tab('accounts')">Аккаунты</div>
-                <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="open_tab('console')">Консоль</div>
-                <div id="tab-commands" class="tab" data-class-active="tab == 'commands'" data-event-click="open_tab('commands')">Команды</div>
-                <div id="tab-settings" class="tab" data-class-active="tab == 'settings'" data-event-click="open_tab('settings')">Настройки</div>
-                <div id="tab-plugins" class="tab" data-class-active="tab == 'plugins'" data-event-click="open_tab('plugins')">Плагины</div>
-                <div id="tab-data" class="tab" data-class-active="tab == 'data'" data-event-click="open_tab('data')">Данные</div>
-            </div>
-
-            <!-- overview -->
-            <div class="pane" data-if="tab == 'overview'">
-                <div class="ribbon">События <span class="ribbon-note">сегодня</span></div>
-                <div id="events" class="scroll grow">
-                    <div class="event" data-for="e : events"><div class="time">{{e.time}}</div><div class="msg">{{e.text}}</div></div>
-                    <div class="event empty" data-if="events.size == 0"><div class="msg">Пока ничего не произошло.</div></div>
-                </div>
-                <div class="ribbon">Быстрые действия</div>
-                <div class="actions">
-                    <div id="act-backup" class="action" data-class-disabled="backup_busy" data-event-click="backup_now"><div class="a-title">Резервная копия</div><div class="a-sub">аккаунты и персонажи в backups</div></div>
-                    <div id="act-save" class="action" data-class-disabled="state != 'ready'" data-event-click="run_command('saveall')"><div class="a-title">Сохранить всех</div><div class="a-sub">saveall</div></div>
-                    <div id="act-announce" class="action" data-class-disabled="state != 'ready'" data-event-click="announce"><div class="a-title">Объявление</div><div class="a-sub">сообщение в чат сервера</div></div>
-                    <div id="act-logs" class="action" data-event-click="open_logs"><div class="a-title">Папка логов</div><div class="a-sub">{{logs_dir}}</div></div>
+        <!-- ============ settings page ============ -->
+        <div class="page-sub" data-if="page == 'settings'" data-class-nokeys="!set_show_keys">
+            <div class="side">
+                <div data-for="g : set_groups">
+                    <div class="side-sect" data-if="g.section != ''">{{g.section}}</div>
+                    <div class="side-item" data-attr-id="'set-group-' + g.id" data-class-active="set_group == g.id" data-event-click="set_group_pick(g.id)">{{g.name}}<span class="count" data-if="g.changed > 0">{{g.changed}}</span></div>
                 </div>
             </div>
-
-            <!-- accounts -->
-            <div class="pane" data-if="tab == 'accounts'">
-                <div class="scroll grow">
-                    <div class="note pad" data-if="!acc_loaded">{{acc_note}}</div>
-                    <div class="trow thead" data-if="acc_loaded"><div class="c1">Логин</div><div class="c2">Уровень</div><div class="c3">Персонажи</div><div class="c4">Последний вход</div></div>
-                    <div class="trow" data-for="a : acc_rows"><div class="c1">{{a.name}}</div><div class="c2"><span data-class-gm="a.gm">{{a.level}}</span></div><div class="c3">{{a.chars}}</div><div class="c4">{{a.last}}</div></div>
-                </div>
-                <div class="ribbon">Новый аккаунт</div>
-                <div class="form-row">
-                    <div class="f"><div class="f-label">Логин</div><input type="text" id="acc-login" class="field" data-value="acc_login"/></div>
-                    <div class="f"><div class="f-label">Пароль</div><input type="password" id="acc-pass" class="field" data-value="acc_pass"/></div>
-                    <div class="f"><div class="f-label">Уровень</div>
-                        <select id="acc-level" class="field" data-value="acc_level">
-                            <option value="0">Игрок</option><option value="1">GM 1</option><option value="2">GM 2</option><option value="3">GM 3</option>
-                        </select>
+            <div id="panel" class="sub">
+                <div class="pane" data-if="set_group != 'about'">
+                    <div class="toolbar" data-if="set_group == 'rates'">
+                        <div class="f-inline">@{set.preset}</div>
+                        <div class="pre" data-class-active="set_preset == 1" data-event-click="set_preset_pick(1)">@{set.preset.x1}</div>
+                        <div class="pre" data-class-active="set_preset == 2" data-event-click="set_preset_pick(2)">@{set.preset.x2}</div>
+                        <div class="pre" data-class-active="set_preset == 5" data-event-click="set_preset_pick(5)">@{set.preset.x5}</div>
                     </div>
-                    <div id="btn-acc-create" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_create">Создать</div>
-                    <div id="btn-acc-refresh" class="btn small" data-class-disabled="state != 'ready'" data-event-click="acc_refresh">Обновить</div>
-                </div>
-            </div>
-
-            <!-- console: kept in the DOM (data-visible) so the log survives tab switches -->
-            <div class="pane console" data-visible="tab == 'console'" data-class-hidden="tab != 'console'">
-                <div id="log"></div>
-                <div class="cmd-row">
-                    <div class="prompt">AC&gt;</div>
-                    <input type="text" id="cmd" class="cmd"/>
-                    <div id="btn-send" class="btn small" data-event-click="send_command">Выполнить</div>
-                </div>
-            </div>
-
-            <!-- commands -->
-            <div class="pane" data-if="tab == 'commands'">
-                <div class="toolbar">
-                    <div class="f-inline">Персонаж</div>
-                    <select id="cmd-target" class="field target" data-if="cmd_chars.size > 0" data-value="cmd_target">
-                        <option data-for="o : cmd_chars" data-attr-value="o.id">{{o.label}}</option>
-                    </select>
-                    <input type="text" id="cmd-target-text" class="field target" data-if="cmd_chars.size == 0" data-value="cmd_target"/>
-                    <div class="spacer"></div>
-                    <div class="f-inline">Поиск</div>
-                    <input type="text" id="cmd-search" class="field search" data-value="cmd_query"/>
-                </div>
-                <div class="cats">
-                    <div class="cat" data-attr-id="'cmd-group-' + g.id" data-for="g : cmd_groups" data-class-active="cmd_query == '' && cmd_group == g.id" data-event-click="cmd_group_pick(g.id)">{{g.name}}</div>
-                </div>
-                <div class="scroll grow">
-                    <div class="ccard" data-for="c, ci : cmd_cards" data-class-danger="c.danger">
-                        <div class="cc-main">
-                            <div class="cc-title">{{c.title}}<span class="cc-group" data-if="c.group != ''"> · {{c.group}}</span></div>
-                            <div class="cc-desc" data-if="c.desc != ''">{{c.desc}}</div>
-                            <div class="cc-args" data-if="c.args.size > 0">
-                                <div class="cc-arg" data-for="a : c.args">
-                                    <input type="text" class="field arg" data-if="a.type != 's'" data-value="a.value"/>
-                                    <select class="field arg" data-if="a.type == 's'" data-value="a.value">
-                                        <option data-for="o : a.opts" data-attr-value="o.id">{{o.label}}</option>
-                                    </select>
-                                </div>
+                    <div class="toolbar">
+                        <div class="group-hint grow">{{set_hint}}</div>
+                        <input type="checkbox" id="set-keys" class="check" data-checked="set_show_keys"/><div class="f-inline">@{set.show_keys}</div>
+                    </div>
+                    <div class="scroll grow">
+                        <div class="fld" data-for="f : set_fields" data-class-changed="f.changed">
+                            <div class="fld-main">
+                                <div class="fld-label">{{f.label}} <span class="ap" data-class-now="f.apply == 'now'" data-class-rel="f.apply == 'rel'" data-class-rst="f.apply == 'rst'">{{f.apply_text}}</span></div>
+                                <div class="fld-key">{{f.key}}</div>
+                                <div class="fld-hint" data-if="f.hint != ''">{{f.hint}}</div>
                             </div>
-                            <div class="cc-preview">{{c.preview}}</div>
-                        </div>
-                        <div class="btn small go" data-attr-id="'run-' + ci" data-class-danger="c.danger" data-class-disabled="state != 'ready'" data-event-click="cmd_run(ci)">{{c.button}}</div>
-                    </div>
-                    <div class="note pad" data-if="cmd_cards.size == 0">Ничего не найдено.</div>
-                </div>
-                <div class="statusbar"><div class="note grow">{{cmd_last}}</div></div>
-            </div>
-
-            <!-- settings -->
-            <div class="pane" data-if="tab == 'settings'" data-class-nokeys="!set_show_keys">
-                <div class="toolbar">
-                    <div class="f-inline">Пресет</div>
-                    <div class="pre" data-class-active="set_preset == 1" data-event-click="set_preset_pick(1)">Классика ×1</div>
-                    <div class="pre" data-class-active="set_preset == 2" data-event-click="set_preset_pick(2)">Быстрее ×2</div>
-                    <div class="pre" data-class-active="set_preset == 5" data-event-click="set_preset_pick(5)">Казуал ×5</div>
-                    <div class="spacer"></div>
-                    <input type="checkbox" id="set-keys" class="check" data-checked="set_show_keys"/><div class="f-inline">ключи конфига</div>
-                </div>
-                <div class="cats">
-                    <div class="cat" data-attr-id="'set-group-' + g.id" data-for="g : set_groups" data-class-active="set_group == g.id" data-event-click="set_group_pick(g.id)">{{g.name}}<span class="count" data-if="g.changed > 0">{{g.changed}}</span></div>
-                </div>
-                <div class="scroll grow">
-                    <div class="group-hint">{{set_hint}}</div>
-                    <div class="fld" data-for="f : set_fields" data-class-changed="f.changed">
-                        <div class="fld-main">
-                            <div class="fld-label">{{f.label}} <span class="ap" data-class-now="f.apply == 'now'" data-class-rel="f.apply == 'rel'" data-class-rst="f.apply == 'rst'">{{f.apply_text}}</span></div>
-                            <div class="fld-key">{{f.key}}</div>
-                            <div class="fld-hint" data-if="f.hint != ''">{{f.hint}}</div>
-                        </div>
-                        <div class="fld-ctl">
-                            <input type="checkbox" class="check" data-attr-id="'chk-' + f.key" data-if="f.type == 'b'" data-checked="f.on"/>
-                            <input type="text" class="field" data-attr-id="'set-' + f.key" data-if="f.type == 'n' || f.type == 't'" data-value="f.value"/>
-                            <select class="field" data-attr-id="'sel-' + f.key" data-if="f.type == 's'" data-value="f.value">
-                                <option data-for="o : f.opts" data-attr-value="o.id">{{o.label}}</option>
-                            </select>
+                            <div class="fld-ctl">
+                                <input type="checkbox" class="check" data-attr-id="'chk-' + f.key" data-if="f.type == 'b'" data-checked="f.on"/>
+                                <input type="text" class="field" data-attr-id="'set-' + f.key" data-if="f.type == 'n' || f.type == 't'" data-value="f.value"/>
+                                <select class="field" data-attr-id="'sel-' + f.key" data-if="f.type == 's'" data-value="f.value">
+                                    <option data-for="o : f.opts" data-attr-value="o.id">{{o.label}}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
+                    <div class="statusbar">
+                        <div class="note grow">{{set_status}}</div>
+                        <span class="ap now">@{apply.now}</span><span class="ap rel">@{apply.reload}</span><span class="ap rst">@{apply.restart}</span>
+                        <div id="btn-set-save" class="btn small" data-class-disabled="!set_can_save" data-event-click="set_save">{{set_save_label}}</div>
+                    </div>
                 </div>
-                <div class="statusbar">
-                    <div class="note grow">{{set_status}}</div>
-                    <span class="ap now">сразу</span><span class="ap rel">.reload</span><span class="ap rst">перезапуск</span>
-                    <div id="btn-set-save" class="btn small" data-class-disabled="!set_can_save" data-event-click="set_save">{{set_save_label}}</div>
+                <div class="pane" data-if="set_group == 'about'">
+                    <div class="about-logo">LONELYICE</div>
+                    <div class="group-hint">@{about.hint}</div>
+                    <div class="scroll grow">
+                        <div class="drow" data-for="r : about_rows">
+                            <div class="d-main"><div class="d-title">{{r.title}}</div><div class="d-detail sel">{{r.detail}}</div></div>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- plugins -->
-            <div class="pane" data-if="tab == 'plugins'">
-                <div class="scroll grow">
-                    <div class="ccard" data-for="p, pi : pl_rows" data-class-off="p.installed && !p.enabled">
-                        <div class="cc-main">
-                            <div class="cc-title">{{p.name}}<span class="cc-group"> · {{p.version}}</span><span class="cc-group" data-if="p.update != ''"> · доступна {{p.update}}</span></div>
-                            <div class="cc-desc" data-if="p.desc != ''">{{p.desc}}</div>
-                            <div class="cc-preview">{{p.note}}</div>
-                        </div>
-                        <div class="btn small go" data-attr-id="'pl-install-' + p.id" data-if="!p.installed || p.update != ''" data-class-disabled="pl_busy" data-event-click="pl_install(pi)">{{p.installed ? 'Обновить' : 'Установить'}}</div>
-                        <div class="btn small go" data-attr-id="'pl-toggle-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_toggle(pi)">{{p.enabled ? 'Выключить' : 'Включить'}}</div>
-                        <div class="btn small go danger" data-attr-id="'pl-remove-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_remove(pi)">Удалить</div>
-                    </div>
-                    <div class="note pad" data-if="pl_rows.size == 0">Плагинов нет.</div>
+        <!-- ============ plugins page ============ -->
+        <div class="page-sub" data-if="page == 'plugins'">
+            <div class="side">
+                <div class="side-sect">@{pl.show}</div>
+                <div id="pl-view-installed" class="side-item" data-class-active="pl_view == 'installed'" data-event-click="pl_view_pick('installed')">@{pl.view.installed}</div>
+                <div id="pl-view-updates" class="side-item" data-class-active="pl_view == 'updates'" data-event-click="pl_view_pick('updates')">@{pl.view.updates}<span class="count" data-if="pl_updates > 0">{{pl_updates}}</span></div>
+                <div id="pl-view-catalog" class="side-item" data-class-active="pl_view == 'catalog'" data-event-click="pl_view_pick('catalog')">@{pl.view.catalog}</div>
+                <div class="side-sect">@{pl.repos}</div>
+                <div class="side-repo" data-for="r : pl_repos" data-class-off="!r.enabled">
+                    <div class="dot" data-class-on="r.ok" data-class-warn="!r.enabled || (!r.ok && !r.failed)"></div>
+                    <div class="grow"><div>{{r.title}}</div><div class="side-note">{{r.kind}} · {{r.note}}</div></div>
                 </div>
-                <div class="statusbar">
-                    <div class="note grow">{{pl_status}}</div>
-                    <div id="btn-pl-check" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_check">Обновить каталог</div>
-                    <div id="btn-pl-update" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_update_all">Обновить все</div>
+                <div class="spacer"></div>
+                <div id="pl-view-repos" class="btn small wide" data-event-click="pl_view_pick('repos')">@{pl.manage_repos}</div>
+            </div>
+            <div id="panel" class="sub">
+                <div class="pane" data-if="pl_view != 'repos'">
+                    <div class="scroll grow">
+                        <div class="ccard" data-for="p, pi : pl_rows" data-class-off="p.installed && !p.enabled">
+                            <img class="pl-icon" data-if="p.icon != ''" data-attr-src="p.icon"/>
+                            <div class="pl-icon pl-letter" data-if="p.icon == ''"><span>{{p.letter}}</span></div>
+                            <div class="cc-main">
+                                <div class="cc-title">{{p.name}}<span class="cc-group"> · {{p.version}}</span><span class="upd" data-if="p.update != ''">{{p.update}}</span></div>
+                                <div class="cc-desc" data-if="p.desc != ''">{{p.desc}}</div>
+                                <div class="cc-preview">{{p.note}}</div>
+                            </div>
+                            <div class="btn small go" data-attr-id="'pl-install-' + p.id" data-if="!p.installed || p.update != ''" data-class-disabled="pl_busy" data-event-click="pl_install(pi)">{{p.installed ? '@{pl.update}' : '@{pl.install}'}}</div>
+                            <div class="btn small go" data-attr-id="'pl-toggle-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_toggle(pi)">{{p.enabled ? '@{ui.disable}' : '@{ui.enable}'}}</div>
+                            <div class="btn small go danger" data-attr-id="'pl-remove-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_remove(pi)">@{ui.remove}</div>
+                        </div>
+                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'installed'">@{pl.empty.installed}</div>
+                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'updates'">@{pl.empty.updates}</div>
+                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'catalog'">@{pl.empty.catalog}</div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">{{pl_status}}</div>
+                        <div id="btn-pl-check" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_check">@{pl.check}</div>
+                        <div id="btn-pl-update" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_update_all">@{pl.update_all}</div>
+                    </div>
+                </div>
+                <div class="pane" data-if="pl_view == 'repos'">
+                    <div class="ribbon">@{pl.repos}</div>
+                    <div class="scroll grow">
+                        <div class="drow" data-for="r, ri : pl_repos">
+                            <div class="dot big" data-class-on="r.ok" data-class-warn="!r.enabled || (!r.ok && !r.failed)"></div>
+                            <div class="d-main">
+                                <div class="d-title">{{r.title}}<span class="cc-group"> · {{r.kind}}</span></div>
+                                <div class="cc-preview">{{r.location}}</div>
+                                <div class="d-detail">{{r.note}}</div>
+                            </div>
+                            <div class="btn small go" data-attr-id="'repo-toggle-' + ri" data-class-disabled="pl_busy" data-event-click="pl_repo_toggle(ri)">{{r.enabled ? '@{ui.disable}' : '@{ui.enable}'}}</div>
+                            <div class="btn small go danger" data-attr-id="'repo-remove-' + ri" data-class-disabled="pl_busy" data-event-click="pl_repo_remove(ri)">@{ui.remove}</div>
+                        </div>
+                        <div class="note pad" data-if="pl_repos.size == 0">@{pl.repos.empty}</div>
+                        <div class="ribbon">@{pl.repos.add}</div>
+                        <div class="repo-add">
+                            <input type="text" id="repo-new" class="field" data-value="pl_repo_new"/>
+                            <div id="btn-repo-add" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_repo_add">@{ui.add}</div>
+                            <div id="btn-repo-browse" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_repo_browse">@{ui.folder}</div>
+                        </div>
+                        <div class="note pad">@{pl.repos.help}</div>
+                        <div class="row" data-if="!pl_has_official"><div id="btn-repo-official" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_repo_official">@{pl.repos.official}</div></div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">{{pl_status}}</div>
+                        <div id="btn-repos-back" class="btn small" data-event-click="pl_view_pick('installed')">@{pl.back_to_list}</div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- data -->
-            <div class="pane" data-if="tab == 'data'">
-                <div class="ribbon">Данные сервера <span class="ribbon-note">{{data_sum}}</span></div>
-                <div class="scroll grow">
-                    <div class="drow" data-for="d : data_rows">
-                        <div class="dot big" data-class-on="d.status == 'ok'" data-class-warn="d.status == 'warn'"></div>
-                        <div class="d-main"><div class="d-title">{{d.title}}</div><div class="d-detail">{{d.detail}}</div></div>
-                        <div class="d-size">{{d.size}}</div>
+        <!-- ============ service page ============ -->
+        <div class="page-sub" data-if="page == 'service'">
+            <div class="side">
+                <div id="svc-data" class="side-item" data-class-active="svc_section == 'data'" data-event-click="svc_pick('data')">@{svc.data}</div>
+                <div id="svc-backups" class="side-item" data-class-active="svc_section == 'backups'" data-event-click="svc_pick('backups')">@{svc.backups}</div>
+                <div id="svc-logs" class="side-item" data-class-active="svc_section == 'logs'" data-event-click="svc_pick('logs')">@{svc.logs}</div>
+            </div>
+            <div id="panel" class="sub">
+                <div class="pane" data-if="svc_section == 'data'">
+                    <div class="ribbon">@{svc.data} <span class="ribbon-note">{{data_sum}}</span></div>
+                    <div class="scroll grow">
+                        <div class="drow" data-for="d : data_rows">
+                            <div class="dot big" data-class-on="d.status == 'ok'" data-class-warn="d.status == 'warn'"></div>
+                            <div class="d-main"><div class="d-title">{{d.title}}</div><div class="d-detail">{{d.detail}}</div></div>
+                            <div class="d-size">{{d.size}}</div>
+                        </div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">@{svc.data.note}</div>
+                        <div id="btn-data-wizard" class="btn small" data-event-click="open_wizard">@{svc.wizard}</div>
+                        <div id="btn-data-check" class="btn small" data-event-click="data_check">@{svc.check}</div>
+                        <div id="btn-data-open" class="btn small" data-event-click="open_data">@{ui.open_folder}</div>
                     </div>
                 </div>
-                <div class="statusbar">
-                    <div class="note grow">Мастер соберёт базы из SQL и карты из клиента игры.</div>
-                    <div id="btn-data-wizard" class="btn small" data-event-click="open_wizard">Мастер установки…</div>
-                    <div id="btn-data-check" class="btn small" data-event-click="data_check">Проверить файлы</div>
-                    <div id="btn-data-open" class="btn small" data-event-click="open_data">Открыть папку</div>
+                <div class="pane" data-if="svc_section == 'backups'">
+                    <div class="ribbon">@{svc.backups} <span class="ribbon-note">{{backup_sum}}</span></div>
+                    <div class="scroll grow">
+                        <div class="drow" data-for="d : backup_rows">
+                            <div class="d-main"><div class="d-title">{{d.title}}</div><div class="d-detail">{{d.detail}}</div></div>
+                            <div class="d-size">{{d.size}}</div>
+                        </div>
+                        <div class="note pad" data-if="backup_rows.size == 0">@{svc.backups.empty}</div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">@{svc.backups.note}</div>
+                        <div id="btn-backup-now" class="btn small" data-class-disabled="backup_busy" data-event-click="backup_now">@{svc.backup_now}</div>
+                        <div id="btn-backup-open" class="btn small" data-event-click="open_backups">@{ui.open_folder}</div>
+                    </div>
+                </div>
+                <div class="pane" data-if="svc_section == 'logs'">
+                    <div class="ribbon">@{svc.logs} <span class="ribbon-note">{{logs_dir}}</span></div>
+                    <div class="scroll grow">
+                        <div class="drow" data-for="d : log_rows">
+                            <div class="d-main"><div class="d-title">{{d.title}}</div></div>
+                            <div class="d-size">{{d.size}}</div>
+                        </div>
+                        <div class="note pad" data-if="log_rows.size == 0">@{svc.logs.empty}</div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">@{svc.logs.note}</div>
+                        <div id="btn-logs-open" class="btn small" data-event-click="open_logs">@{ui.open_folder}</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <div id="foot">
-        <div id="btn-foot-settings" class="btn foot-btn" data-event-click="open_tab('settings')">Настройки</div>
-        <div id="btn-foot-backups" class="btn foot-btn" data-event-click="open_backups">Бэкапы</div>
-        <div id="btn-foot-server" class="btn foot-btn" data-event-click="open_server_dir">Папка сервера</div>
-        <div id="message">{{message}}</div>
+        <div class="foot-info">
+            <div id="message" data-if="message != ''">{{message}}</div>
+            <div class="foot-status">{{foot_status}}</div>
+            <div class="foot-bar"><div class="foot-fill" data-class-busy="foot_busy"></div></div>
+        </div>
         <div id="play" data-class-disabled="!play_enabled" data-event-click="play">
             <div class="play-title">{{play_label}}</div>
             <div class="play-sub">{{play_sub}}</div>
         </div>
     </div>
-    <div id="credit">LonelyIce на базе AzerothCore · GPL-2.0</div>
+    <div id="credit">@{ui.credit}</div>
 
     <div id="wiz" data-if="wz_open">
         <div class="wbox">
-            <div class="whead"><div class="wtitle">Подготовка LonelyIce</div><div class="wcount">{{wz_counter}}</div></div>
+            <div class="whead"><div class="wtitle">@{wz.title}</div><div class="wcount">{{wz_counter}}</div></div>
             <div class="wsteps"><div class="wst" data-for="s : wz_steps" data-class-done="s.cls == 'done'" data-class-cur="s.cls == 'cur'">{{s.name}}</div></div>
             <div class="wbody scroll">
                 <!-- 0 client -->
                 <div data-if="wz_step == 0">
-                    <div class="wh">Клиент игры</div>
+                    <div class="wh">@{wz.client}</div>
                     <div class="detect">
                         <div class="orb" data-class-ok="wz_client_found" data-class-bad="!wz_client_found"></div>
                         <div class="grow"><div class="d-title">{{wz_client_title}}</div><div class="path">{{wz_client_path}}</div></div>
@@ -254,30 +384,30 @@
                         <div class="ic" data-class-ok="c.cls == 'ok'" data-class-warn="c.cls == 'warn'" data-class-bad="c.cls == 'bad'">{{c.cls == 'ok' ? '+' : '!'}}</div>
                         <div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
                     </div>
-                    <div class="note">Порядок поиска: сохранённая папка, папка LonelyIce.exe и её родитель, папки рядом, путь из реестра.</div>
-                    <div class="row"><div id="wz-browse-client" class="btn small" data-event-click="wz_browse_client">Выбрать другую папку…</div></div>
+                    <div class="note">@{wz.client.order}</div>
+                    <div class="row"><div id="wz-browse-client" class="btn small" data-event-click="wz_browse_client">@{wz.client.browse}</div></div>
                 </div>
                 <!-- 1 place -->
                 <div data-if="wz_step == 1">
-                    <div class="wh">Где хранить данные сервера</div>
+                    <div class="wh">@{wz.place}</div>
                     <div class="opt" data-for="p : wz_places" data-attr-id="'wz-place-' + p.id" data-class-active="wz_place == p.id" data-event-click="wz_pick_place(p.id)">
                         <div class="radio"></div>
                         <div class="grow"><div class="o-title">{{p.title}}</div><div class="path small">{{p.path}}</div><div class="o-desc">{{p.detail}}</div></div>
                         <div class="o-size">{{p.free}}</div>
                     </div>
-                    <div class="row"><div id="wz-browse-place" class="btn small" data-event-click="wz_browse_place">Выбрать папку…</div></div>
-                    <div class="note">Внутри: configs — настройки, db — базы, data — dbc, maps, vmaps, mmaps, logs — журналы, backups — копии.</div>
+                    <div class="row"><div id="wz-browse-place" class="btn small" data-event-click="wz_browse_place">@{wz.place.browse}</div></div>
+                    <div class="note">@{wz.place.note}</div>
                 </div>
                 <!-- 2 components -->
                 <div data-if="wz_step == 2">
-                    <div class="wh">Что подготовить</div>
+                    <div class="wh">@{wz.comps}</div>
                     <div class="opt comp" data-for="c : wz_comps" data-class-locked="c.locked">
                         <input type="checkbox" class="check" data-attr-id="'wz-comp-' + c.id" data-checked="c.on"/>
                         <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
                         <div class="o-size">{{c.size}}</div>
                     </div>
                     <div class="form-row wz-threads">
-                        <div class="f-inline">Потоков для навигации</div>
+                        <div class="f-inline">@{wz.threads}</div>
                         <input type="text" id="wz-threads" class="field short" data-value="wz_threads"/>
                         <div class="f-inline">{{wz_cores_note}}</div>
                     </div>
@@ -285,37 +415,37 @@
                 </div>
                 <!-- 3 world and account -->
                 <div data-if="wz_step == 3">
-                    <div class="wh">Мир и ваш аккаунт</div>
+                    <div class="wh">@{wz.world}</div>
                     <div class="form-row">
-                        <div class="f"><div class="f-label">Имя мира</div><input type="text" id="wz-realm" class="field" data-value="wz_realm"/></div>
-                        <div class="f"><div class="f-label">Множители</div>
-                            <select id="wz-rate" class="field" data-value="wz_rate"><option value="1">Классика ×1</option><option value="2">Быстрее ×2</option><option value="5">Казуал ×5</option></select></div>
-                        <div class="f"><div class="f-label">Случайных ботов</div>
-                            <select id="wz-bots" class="field" data-value="wz_bots"><option value="0">0 — пустой мир</option><option value="100">100 — тихо</option><option value="500">500 — живой мир</option><option value="1000">1000 — мощный ПК</option></select></div>
+                        <div class="f"><div class="f-label">@{wz.realm_name}</div><input type="text" id="wz-realm" class="field" data-value="wz_realm"/></div>
+                        <div class="f"><div class="f-label">@{wz.rates}</div>
+                            <select id="wz-rate" class="field" data-value="wz_rate"><option value="1">@{set.preset.x1}</option><option value="2">@{set.preset.x2}</option><option value="5">@{set.preset.x5}</option></select></div>
+                        <div class="f"><div class="f-label">@{wz.bots}</div>
+                            <select id="wz-bots" class="field" data-value="wz_bots"><option value="0">@{wz.bots.0}</option><option value="100">@{wz.bots.100}</option><option value="500">@{wz.bots.500}</option><option value="1000">@{wz.bots.1000}</option></select></div>
                     </div>
                     <div class="form-row">
-                        <div class="f"><div class="f-label">Логин</div><input type="text" id="wz-login" class="field" data-value="wz_login"/></div>
-                        <div class="f"><div class="f-label">Пароль</div><input type="password" id="wz-pass" class="field" data-value="wz_pass"/></div>
-                        <div class="f"><div class="f-label">Права</div>
-                            <select id="wz-gm" class="field" data-value="wz_gm"><option value="0">Игрок</option><option value="3">Администратор (GM 3)</option></select></div>
+                        <div class="f"><div class="f-label">@{acc.login}</div><input type="text" id="wz-login" class="field" data-value="wz_login"/></div>
+                        <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="wz-pass" class="field" data-value="wz_pass"/></div>
+                        <div class="f"><div class="f-label">@{wz.rights}</div>
+                            <select id="wz-gm" class="field" data-value="wz_gm"><option value="0">@{acc.player}</option><option value="3">@{wz.rights.admin}</option></select></div>
                     </div>
-                    <div class="note">Аккаунт создаётся в новой базе. Всё остальное можно поменять позже во вкладке «Настройки».</div>
+                    <div class="note">@{wz.world.note}</div>
                 </div>
                 <!-- 4 client preparation -->
                 <div data-if="wz_step == 4">
-                    <div class="wh">Подготовка клиента</div>
+                    <div class="wh">@{wz.prep}</div>
                     <div class="opt comp"><input type="checkbox" id="wz-rl" class="check" data-checked="wz_rl"/>
-                        <div class="grow"><div class="o-title">Прописать realmlist 127.0.0.1</div><div class="o-desc">Старый realmlist.wtf сохранится как realmlist.wtf.bak</div></div><div class="o-size">{{wz_rl_note}}</div></div>
+                        <div class="grow"><div class="o-title">@{wz.prep.rl}</div><div class="o-desc">@{wz.prep.rl.desc}</div></div><div class="o-size">{{wz_rl_note}}</div></div>
                     <div class="opt comp"><input type="checkbox" id="wz-wdb" class="check" data-checked="wz_wdb"/>
-                        <div class="grow"><div class="o-title">Очистить кэш клиента</div><div class="o-desc">Кэш от другого сервера показывает неверные предметы и задания</div></div><div class="o-size">Cache\WDB</div></div>
+                        <div class="grow"><div class="o-title">@{wz.prep.wdb}</div><div class="o-desc">@{wz.prep.wdb.desc}</div></div><div class="o-size">Cache\WDB</div></div>
                     <div class="opt comp"><input type="checkbox" id="wz-accname" class="check" data-checked="wz_accname"/>
-                        <div class="grow"><div class="o-title">Подставить логин в окно входа</div><div class="o-desc">SET accountName "{{wz_login}}"</div></div><div class="o-size">WTF\Config.wtf</div></div>
+                        <div class="grow"><div class="o-title">@{wz.prep.accname}</div><div class="o-desc">SET accountName "{{wz_login}}"</div></div><div class="o-size">WTF\Config.wtf</div></div>
                     <div class="opt comp"><input type="checkbox" id="wz-lnk" class="check" data-checked="wz_lnk"/>
-                        <div class="grow"><div class="o-title">Ярлык на рабочем столе</div><div class="o-desc">Запускает LonelyIce, а он — сервер и игру</div></div></div>
+                        <div class="grow"><div class="o-title">@{wz.prep.lnk}</div><div class="o-desc">@{wz.prep.lnk.desc}</div></div></div>
                 </div>
                 <!-- 5 install -->
                 <div data-if="wz_step == 5">
-                    <div class="wh">Установка</div>
+                    <div class="wh">@{wz.install}</div>
                     <div class="istep" data-for="r, ri : wz_inst" data-class-done="r.state == 'done'" data-class-run="r.state == 'run'" data-class-fail="r.state == 'fail'">
                         <div class="inum">{{r.state == 'done' ? '+' : r.state == 'fail' ? '!' : ri + 1}}</div>
                         <div class="grow">
@@ -324,22 +454,22 @@
                         </div>
                     </div>
                     <div class="wlog"><div data-for="l : wz_log">{{l}}</div></div>
-                    <div class="note">Можно свернуть окно: установка идёт в фоне с пониженным приоритетом.</div>
+                    <div class="note">@{wz.install.note}</div>
                 </div>
                 <!-- 6 done -->
                 <div data-if="wz_step == 6">
-                    <div class="wh">Всё готово</div>
+                    <div class="wh">@{wz.done}</div>
                     <div class="check" data-for="c : wz_done">
                         <div class="ic ok">+</div><div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
                     </div>
-                    <div class="pad">Нажмите «Играть»: LonelyIce запустит сервер и откроет игру. Первый запуск мира занимает около минуты.</div>
+                    <div class="pad">@{wz.done.note}</div>
                 </div>
             </div>
             <div class="werr" data-if="wz_error != ''">{{wz_error}}</div>
             <div class="wfoot">
                 <div id="wz-cancel" class="btn small" data-event-click="wz_cancel">{{wz_cancel_label}}</div>
                 <div class="spacer"></div>
-                <div id="wz-back" class="btn small" data-if="wz_back_visible" data-event-click="wz_back">Назад</div>
+                <div id="wz-back" class="btn small" data-if="wz_back_visible" data-event-click="wz_back">@{ui.back_step}</div>
                 <div id="wz-next" class="btn next" data-class-disabled="!wz_next_ok" data-event-click="wz_next">{{wz_next_label}}</div>
             </div>
         </div>
@@ -347,8 +477,8 @@
 
     <div id="overlay" data-if="closing">
         <div class="overlay-box">
-            <div class="ov-title">Остановка сервера</div>
-            <div class="ov-text">Сохраняем персонажей и выключаем мир. Закройте окно ещё раз, чтобы остановить сервер немедленно.</div>
+            <div class="ov-title">@{ui.closing}</div>
+            <div class="ov-text">@{ui.closing.text}</div>
         </div>
     </div>
 </div>

@@ -3,6 +3,7 @@
 #include "ConfFile.h"
 #include "ConfigEnv.h"
 #include "GameClient.h"
+#include "Lang.h"
 #include "Pak.h"
 #include "Plugins.h"
 #include "TextUtil.h"
@@ -63,7 +64,7 @@ namespace
         if (SUCCEEDED(init))
             CoUninitialize();
         if (!ok)
-            error = "не удалось создать ярлык";
+            error = Tr("install.error.shortcut");
         return ok;
     }
 }
@@ -90,18 +91,18 @@ void Installer::Start(InstallOptions const& options)
         _error.clear();
         _log.clear();
         _steps.clear();
-        auto add = [&](bool on, char const* id, char const* title)
+        auto add = [&](bool on, std::string const& id)
         {
-            InstallStep s{ id, title };
+            InstallStep s{ id, Tr("install.step." + id) };
             if (!on)
                 s.state = StepState::Skipped;
             _steps.push_back(s);
         };
-        add(_o.db, "db", "Базы данных");
-        add(_o.maps, "maps", "DBC и карты");
-        add(_o.vmaps, "vmaps", "Модели зданий (vmaps)");
-        add(_o.mmaps, "mmaps", "Навигация (mmaps)");
-        add(_o.client_prep, "client", "Подготовка клиента");
+        add(_o.db, "db");
+        add(_o.maps, "maps");
+        add(_o.vmaps, "vmaps");
+        add(_o.mmaps, "mmaps");
+        add(_o.client_prep, "client");
     }
     _running = true;
     _thread = std::thread([this] { Run(); });
@@ -175,8 +176,8 @@ void Installer::Fail(std::string const& id, std::string const& why)
         if (_error.empty())
             _error = why;
     }
-    SetStep(id, StepState::Failed, 0.f, _cancel ? "прервано" : why);
-    Log("Ошибка: " + why);
+    SetStep(id, StepState::Failed, 0.f, _cancel ? Tr("install.note.aborted") : why);
+    Log(Tr("install.log.error", why));
 }
 
 void Installer::Run()
@@ -200,10 +201,10 @@ void Installer::Run()
             ok = false;
             break;
         }
-        SetStep(s.id, StepState::Done, 1.f, "готово");
+        SetStep(s.id, StepState::Done, 1.f, Tr("install.note.done"));
     }
     _ok = ok && !_cancel;
-    Log(_ok ? "Готово." : _cancel ? "Установка прервана." : "Установка остановлена из-за ошибки.");
+    Log(Tr(_ok ? "install.log.done" : _cancel ? "install.log.aborted" : "install.log.failed"));
     _finished = true;
     _running = false;
     if (_wake)
@@ -394,7 +395,7 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
         }
         if (!f.Save())
         {
-            error = "не удалось записать " + WideToUtf8(conf.wstring());
+            error = Tr("install.error.write", WideToUtf8(conf.wstring()));
             return false;
         }
     }
@@ -416,7 +417,7 @@ bool Installer::RunDatabases()
     fs::remove_all(sql, ec);
     std::map<std::string, uint64_t> sizes;
     uint64_t total = 0;
-    Log("Распаковка SQL…");
+    Log(Tr("install.log.unpack"));
     bool unpacked = Pak::Read(_o.setupDir / "sql.pak", [&](std::string const& path, std::string const& data)
     {
         fs::path file = sql / fs::u8path(path);
@@ -425,16 +426,16 @@ bool Installer::RunDatabases()
         sizes[file.filename().string()] = data.size();
         total += data.size();
         return !_cancel;
-    }, error, [&](uint64_t done, uint64_t all) { Progress("db", 0.1f * float(done) / float(std::max<uint64_t>(all, 1)), "распаковка SQL"); });
+    }, error, [&](uint64_t done, uint64_t all) { Progress("db", 0.1f * float(done) / float(std::max<uint64_t>(all, 1)), Tr("install.note.unpack")); });
     if (!unpacked || _cancel)
     {
-        Fail("db", unpacked ? "прервано" : error);
+        Fail("db", unpacked ? Tr("install.note.aborted") : error);
         return false;
     }
     for (char const* d : { "custom/db_auth", "custom/db_characters", "custom/db_world", "updates/pending_db_auth",
              "updates/pending_db_characters", "updates/pending_db_world" })
         fs::create_directories(sql / "data" / "sql" / d, ec);
-    Log("SQL: " + std::to_string(sizes.size()) + " файлов, " + std::to_string(total >> 20) + " МБ");
+    Log(Tr("install.log.sql", sizes.size(), Tr("unit.mb", total >> 20)));
 
     std::vector<std::pair<std::wstring, std::wstring>> env = {
         { L"AC_DISABLE_INTERACTIVE", L"1" },
@@ -447,7 +448,7 @@ bool Installer::RunDatabases()
         env.push_back({ L"LONELYICE_ACCOUNT", Utf8ToWide(_o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel)) });
 
     uint64_t applied = 0;
-    std::string current = "создание баз";
+    std::string current = Tr("install.note.create_db");
     bool deployed = false;
     std::string failure;
     int rc = RunChild(L"--server --deploy -c \"" + (_o.root / "configs" / "worldserver.conf").wstring() + L"\"", _o.root, env,
@@ -471,19 +472,19 @@ bool Installer::RunDatabases()
                 return;
             }
             if (line.find("Updating ") != std::string::npos && line.find("database") != std::string::npos)
-                current = "обновления: " + line.substr(line.find("Updating ") + 9);
+                current = Tr("install.note.updates", line.substr(line.find("Updating ") + 9));
             else if (line.find("is empty, auto populating") != std::string::npos)
-                current = "заполнение: " + line.substr(line.find("Database ") + 9, line.find(" is empty") - line.find("Database ") - 9);
+                current = Tr("install.note.populate", line.substr(line.find("Database ") + 9, line.find(" is empty") - line.find("Database ") - 9));
             if (line.find("ERROR") != std::string::npos || line.find("Creating database") != std::string::npos || line.find("Account") != std::string::npos)
                 Log(line);
         });
     if (rc != 0 || !deployed)
     {
-        Fail("db", _cancel ? "прервано" : "сервер не смог создать базы (" + (failure.empty() ? "код " + std::to_string(rc) : failure) + "), подробности в logs\\");
+        Fail("db", _cancel ? Tr("install.note.aborted") : Tr("install.error.deploy", failure.empty() ? Tr("install.error.code", rc) : failure));
         return false;
     }
     fs::remove_all(sql, ec);
-    Log("Базы данных готовы.");
+    Log(Tr("install.log.db_ready"));
     return true;
 }
 
@@ -505,7 +506,7 @@ bool Installer::RunMaps()
                     done = atoi(line.c_str() + p + 1);
                     total = atoi(line.c_str() + s + 1);
                     _mapCount = total;
-                    Progress("maps", 0.1f + 0.9f * float(done) / float(std::max(total, 1)), "карта " + std::to_string(done) + " из " + std::to_string(total));
+                    Progress("maps", 0.1f + 0.9f * float(done) / float(std::max(total, 1)), Tr("install.note.map", done, total));
                 }
                 return;
             }
@@ -514,15 +515,15 @@ bool Installer::RunMaps()
             if (line.find("DBC") != std::string::npos || line.find("locale") != std::string::npos || line.find("camera") != std::string::npos || line.rfind("@@LI fail", 0) == 0)
             {
                 Log(line);
-                Progress("maps", 0.05f, "DBC и камеры");
+                Progress("maps", 0.05f, Tr("install.note.dbc"));
             }
         });
     if (rc != 0)
     {
-        Fail("maps", "map_extractor завершился с кодом " + std::to_string(rc));
+        Fail("maps", Tr("install.error.exit_code", "map_extractor", rc));
         return false;
     }
-    Log("Карты извлечены: " + std::to_string(total));
+    Log(Tr("install.log.maps", total));
     return true;
 }
 
@@ -537,14 +538,14 @@ bool Installer::RunVmaps()
             if (line.rfind("Processing Map", 0) == 0)
             {
                 ++maps;
-                Progress("vmaps", 0.75f * float(std::min(maps, total)) / float(total), "модели карты " + std::to_string(maps) + " из " + std::to_string(total));
+                Progress("vmaps", 0.75f * float(std::min(maps, total)) / float(total), Tr("install.note.vmap", maps, total));
             }
             else if (line.find("GameObject") != std::string::npos || line.rfind("@@LI fail", 0) == 0 || line.find("rror") != std::string::npos)
                 Log(line);
         });
     if (rc != 0)
     {
-        Fail("vmaps", "vmap4_extractor завершился с кодом " + std::to_string(rc));
+        Fail("vmaps", Tr("install.error.exit_code", "vmap4_extractor", rc));
         return false;
     }
 
@@ -555,17 +556,17 @@ bool Installer::RunVmaps()
             if (line.rfind("Creating map tree", 0) == 0)
             {
                 ++trees;
-                Progress("vmaps", 0.75f + 0.25f * float(std::min(trees, total)) / float(total), "сборка тайлов");
+                Progress("vmaps", 0.75f + 0.25f * float(std::min(trees, total)) / float(total), Tr("install.note.assemble"));
             }
             else if (line.rfind("@@LI fail", 0) == 0)
                 Log(line);
         });
     if (rc != 0)
     {
-        Fail("vmaps", "сборка vmaps завершилась с кодом " + std::to_string(rc));
+        Fail("vmaps", Tr("install.error.assemble", rc));
         return false;
     }
-    Log("vmaps готовы.");
+    Log(Tr("install.log.vmaps_ready"));
     return true;
 }
 
@@ -580,7 +581,7 @@ bool Installer::RunMmaps()
             if (pct != std::string::npos && pct > 0 && pct < 4)
             {
                 std::size_t m = pct + 7;
-                Progress("mmaps", float(atoi(line.c_str())) / 100.f, "карта " + line.substr(m, line.find(']', m) - m) + ", " + line.substr(0, pct) + " %");
+                Progress("mmaps", float(atoi(line.c_str())) / 100.f, Tr("install.note.mmap", line.substr(m, line.find(']', m) - m), line.substr(0, pct)));
                 return;
             }
             if (line.find("We have") != std::string::npos || line.find("threads") != std::string::npos || line.rfind("@@LI fail", 0) == 0)
@@ -588,10 +589,10 @@ bool Installer::RunMmaps()
         });
     if (rc != 0)
     {
-        Fail("mmaps", "mmaps_generator завершился с кодом " + std::to_string(rc));
+        Fail("mmaps", Tr("install.error.exit_code", "mmaps_generator", rc));
         return false;
     }
-    Log("mmaps готовы.");
+    Log(Tr("install.log.mmaps_ready"));
     return true;
 }
 
@@ -600,7 +601,7 @@ bool Installer::RunClient()
     ClientInfo info = GameClient::Inspect(_o.client);
     if (!info.valid)
     {
-        Fail("client", "клиент не найден");
+        Fail("client", Tr("install.error.no_client"));
         return false;
     }
     std::string error;
@@ -611,13 +612,13 @@ bool Installer::RunClient()
             Fail("client", error);
             return false;
         }
-        Log("realmlist.wtf → 127.0.0.1");
+        Log("realmlist.wtf: 127.0.0.1");
     }
     Progress("client", 0.4f);
     if (_o.clearWdb)
     {
         GameClient::ClearWdb(_o.client);
-        Log("Кэш клиента очищен");
+        Log(Tr("install.log.wdb"));
     }
     // Addons of the installed plugins (their client patches were built by the database step).
     ClientPatch::Result sync = ClientPatch::SyncAddons(_o.client, ReadPlugins(_o.exe.parent_path() / "plugins"));
@@ -640,7 +641,7 @@ bool Installer::RunClient()
         if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktop)))
         {
             if (CreateShortcut(_o.exe, fs::path(desktop) / L"LonelyIce.lnk", error))
-                Log("Ярлык на рабочем столе");
+                Log(Tr("install.log.shortcut"));
             else
                 Log(error);
             CoTaskMemFree(desktop);

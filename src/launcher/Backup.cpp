@@ -1,5 +1,6 @@
 #include "Backup.h"
 #include "ConfFile.h"
+#include "Lang.h"
 #include "TextUtil.h"
 #include <algorithm>
 #include <ctime>
@@ -54,7 +55,7 @@ BackupResult LonelyIce::BackupDatabases(std::vector<DatabaseFile> const& dbs, fs
     fs::create_directories(res.dir, ec);
     if (ec)
     {
-        res.message = "Не удалось создать папку " + WideToUtf8(res.dir.wstring());
+        res.message = Tr("backup.error.mkdir", WideToUtf8(res.dir.wstring()));
         return res;
     }
 
@@ -90,7 +91,7 @@ BackupResult LonelyIce::BackupDatabases(std::vector<DatabaseFile> const& dbs, fs
             }
         }
         if (!ok)
-            res.message = db.name + ": " + (dst ? sqlite3_errmsg(dst) : src ? sqlite3_errmsg(src) : "не открывается");
+            res.message = db.name + ": " + (dst ? sqlite3_errmsg(dst) : src ? sqlite3_errmsg(src) : Tr("backup.error.open"));
         sqlite3_close(src);
         sqlite3_close(dst);
         if (!ok)
@@ -103,7 +104,7 @@ BackupResult LonelyIce::BackupDatabases(std::vector<DatabaseFile> const& dbs, fs
     if (!copied)
     {
         fs::remove(res.dir, ec);
-        res.message = "Нет файлов баз данных для копирования";
+        res.message = Tr("backup.error.nothing");
         return res;
     }
 

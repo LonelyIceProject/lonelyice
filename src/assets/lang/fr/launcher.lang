@@ -1,0 +1,367 @@
+# Fenêtre du lanceur : pages, onglets, messages (Launcher.cpp, launcher.rml)
+
+lang.self = Français
+
+# pages et navigation
+page.settings = Paramètres
+page.plugins = Plugins
+page.service = Maintenance
+tab.overview = Aperçu
+tab.console = Console
+tab.commands = Commandes
+tab.accounts = Comptes
+
+# mots communs
+ui.back = ‹ Accueil
+ui.back_step = Retour
+ui.subtitle = serveur solo · 3.3.5a
+ui.server = Serveur
+ui.game = Jeu
+ui.svc.auth = Connexion (auth)
+ui.svc.world = Monde
+ui.kv.uptime = Temps de fonctionnement
+ui.kv.players = Joueurs en ligne
+ui.kv.bots = Bots dans le monde
+ui.kv.memory = Mémoire
+ui.kv.diff = Latence du monde
+ui.restart = Redémarrer
+ui.browse = Parcourir…
+ui.fix_realmlist = Corriger realmlist
+ui.news = Actualités
+ui.events = Événements
+ui.today = aujourd'hui
+ui.no_events = Rien ne s'est encore passé.
+ui.run = Exécuter
+ui.search = Rechercher
+ui.nothing_found = Rien trouvé.
+ui.refresh = Actualiser
+ui.add = Ajouter
+ui.folder = Dossier…
+ui.open_folder = Ouvrir le dossier
+ui.enable = Activer
+ui.disable = Désactiver
+ui.remove = Supprimer
+ui.credit = LonelyIce, basé sur AzerothCore · GPL-2.0
+ui.closing = Arrêt du serveur
+ui.closing.text = Sauvegarde des personnages et arrêt du monde en cours. Fermez de nouveau la fenêtre pour arrêter le serveur immédiatement.
+
+# actions rapides
+act.backup = Sauvegarde
+act.backup.sub = comptes et personnages dans backups
+act.saveall = Sauvegarder tout le monde
+act.announce = Annonce
+act.announce.sub = un message dans le chat du serveur
+act.folder = Dossier du serveur
+act.folder.sub = configs, bases de données, journaux
+
+# état du serveur
+state.stopped = Arrêté
+state.stopped.sub = appuyez sur « Démarrer » ou « Jouer »
+state.starting = Démarrage
+state.starting.sub = config et base de données
+state.loading = Chargement
+state.loading.sub = chargement du monde
+state.loading_for = chargement, {0} s
+state.ready = En cours
+state.ready.sub = connexion ouverte
+state.stopping = Arrêt en cours
+state.stopping.sub = sauvegarde des personnages
+state.failed = Erreur
+server.start = Démarrer
+server.stop = Arrêter
+
+# bouton Jouer
+play.play = JOUER
+play.install = INSTALLER
+play.sub.install = préparer les données
+play.sub.no_client = choisissez le dossier du jeu
+play.sub.ready = démarrer Wow.exe
+play.sub.stopping = le serveur s'arrête
+play.sub.pending = le jeu s'ouvre quand le monde est chargé
+play.sub.start = démarrer le serveur et le jeu
+
+# pied de page
+foot.installing = Installation en cours…
+foot.preparing_client = Préparation du client : addons de plugins…
+foot.backup = Sauvegarde en cours…
+foot.ready = Monde ouvert · joueurs : {0} · bots : {1}
+
+# temps et unités
+time.seconds = {0} s
+time.minutes = {0} min
+time.hours_minutes = {0} h {1} min
+time.days_hours = {0} j {1} h
+time.ms = {0} ms
+time.today_at = aujourd'hui, {0}
+time.date = {0}/{1}/{2}
+unit.kb = {0} Ko
+
+# client du jeu
+client.not_found = Client 3.3.5a introuvable
+client.not_found.hint = Choisissez le dossier avec Wow.exe via « Parcourir… ».
+client.wrong_version = Wow.exe {0}, 3.3.5a (12340) est nécessaire.
+client.unknown_version = de version inconnue
+client.no_locales = Aucune langue trouvée dans Data\.
+client.rl_foreign = {0} : adresse étrangère.
+client.rl_foreign_fix = {0} : adresse étrangère, le lanceur la corrige au démarrage du jeu.
+client.rl_some_foreign = La langue de lancement est en surbrillance ; adresse étrangère dans d'autres langues : {0}.
+client.rl_ok = La langue de lancement est en surbrillance ; 127.0.0.1 partout.
+
+# actualités sur l'aperçu
+news.setup = Les données du serveur ne sont pas encore prêtes
+news.setup.text = L'assistant construit les bases de données et extrait les cartes de votre client de jeu.
+news.setup.button = Ouvrir l'assistant
+news.failed = Le serveur s'est arrêté avec une erreur
+news.updates = Mises à jour de plugins disponibles : {0}
+news.updates.text = Elles s'installent pendant que le serveur est arrêté.
+news.backup = Dernière sauvegarde
+news.backup.text = {0} · {1}
+news.no_backup = Aucune sauvegarde pour l'instant
+news.no_backup.text = Faites-en une maintenant ou définissez une heure quotidienne dans Paramètres › Lanceur.
+news.open = Ouvrir
+
+# événements
+event.install_done = Installation terminée : {0}
+event.sql_updates = setup\sql.pak contient de nouvelles mises à jour de bases de données : Maintenance › Assistant › Bases de données.
+event.game_closed = Jeu fermé
+event.stop_with_game = Le serveur s'arrête avec le jeu
+event.client_line = Client : {0}
+event.client_failed = Client non préparé : {0}
+event.backup_done = Sauvegarde : {0}, backups\{1}
+event.backup_failed = Échec de la sauvegarde : {0}
+event.server_starting = Démarrage du serveur
+event.world_ready = Monde prêt en {0} s, connexion ouverte
+event.realm_renamed = Royaume renommé en « {0} », visible après un redémarrage
+event.server_stopped = Serveur arrêté
+event.server_failed = Le serveur s'est arrêté avec une erreur : {0}. Détails dans l'onglet Console.
+event.game_started = Jeu démarré
+event.game_started_locale = Jeu démarré ({0})
+event.acc_created = Compte {0} créé
+event.acc_created_gm = Compte {0} créé, GM {1}
+event.plugin_settings_bad = Paramètres du plugin non lus : {0}
+event.plugins_line = Plugins : {0}
+event.plugin_removed = Plugin {0} supprimé.
+event.plugin_disabled = Plugin {0} désactivé.
+event.plugin_enabled = Plugin {0} activé.
+event.repo_added = Catalogue de paquets ajouté : {0}
+event.repo_removed = Catalogue de paquets supprimé : {0}
+event.repo_disabled = Catalogue de paquets désactivé : {0}
+event.repo_enabled = Catalogue de paquets activé : {0}
+event.repo_failed = Catalogue {0} : {1}
+
+# messages
+msg.ui_scale = Échelle de l'interface : {0} %
+msg.launch_locale = Langue de lancement : {0}
+msg.announce_hint = Tapez le texte dans « Annonce dans le chat » et appuyez sur « Exécuter ».
+msg.client_saved = Dossier du jeu enregistré.
+msg.not_client_dir = Ce dossier ne contient pas Wow.exe ni Data\common.MPQ.
+msg.installing = L'installation est en cours, le serveur démarre après.
+msg.no_config = Config du serveur introuvable : {0}
+msg.start_failed = Impossible de démarrer le serveur : {0}
+msg.need_client = Choisissez d'abord le dossier du client 3.3.5a.
+msg.game_running = Le jeu est déjà en cours d'exécution.
+msg.preparing_client = Préparation du client : addons de plugins…
+msg.realmlist_ok = realmlist pointe déjà vers cet ordinateur.
+msg.cmd_not_ready = Les commandes sont acceptées une fois le monde en cours d'exécution.
+msg.cmd_not_sent = Commande non envoyée : le serveur ne répond pas.
+msg.acc_invalid = L'identifiant et le mot de passe ne doivent pas être vides ni contenir d'espaces.
+msg.pick_character = Choisissez un personnage.
+msg.plugins_locked = Arrêtez le serveur : les plugins changent pendant qu'il est arrêté.
+msg.all_installed = Tout est déjà installé.
+msg.load_index_first = Chargez d'abord la liste des paquets.
+msg.plugin_needed_by = {0} est requis par : {1}.
+msg.repo_semicolon = L'adresse d'un catalogue ne peut pas contenir « ; ».
+msg.repo_missing = Aucun fichier ou dossier de ce type : {0}
+msg.repo_no_index = Ce dossier n'a pas d'index.json. Créez-le avec LonelyIce.exe --pkg pack.
+msg.repo_exists = Ce catalogue est déjà ajouté.
+msg.backup_files_only = Les sauvegardes ne fonctionnent qu'avec des bases de données en fichiers.
+msg.backup_running = Sauvegarde en cours…
+log.starting = -- démarrage : {0}
+
+# comptes
+acc.start_server = Démarrez le serveur pour voir les comptes.
+acc.loading = Chargement…
+acc.player = joueur
+acc.gm = GM {0}
+acc.bots = bots
+acc.bots_row = RNDBOT… ({0})
+acc.service = service
+acc.login = Identifiant
+acc.password = Mot de passe
+acc.level = Niveau
+acc.chars = Personnages
+acc.last_login = Dernière connexion
+acc.new = Nouveau compte
+acc.create = Créer
+
+# onglet des commandes
+cmd.character = Personnage
+cmd.char = {0} · {1}
+cmd.char_online = {0} · {1} · en jeu
+cmd.last_hint = La réponse du serveur apparaît dans l'onglet Console.
+cmd.run = Exécuter
+cmd.run_danger = Exécuter…
+cmd.sure = Sûr ?
+cmd.sent = Envoyé : {0}. La réponse est dans l'onglet Console.
+
+# page des paramètres
+set.section.world = Serveur
+set.section.plugins = Plugins
+set.section.launcher = Lanceur
+set.preset = Préréglage
+set.preset.x1 = Classique ×1
+set.preset.x2 = Rapide ×2
+set.preset.x5 = Décontracté ×5
+set.show_keys = clés de config
+set.save = Enregistrer
+set.save_restart = Enregistrer et redémarrer
+set.changed = Modifié : {0}
+set.changed_restart = Modifié : {0}, un redémarrage est nécessaire
+set.unchanged = Aucun changement
+set.saved = Paramètres enregistrés.
+set.saved_reloaded = Paramètres enregistrés, config rechargée.
+set.saved_restarting = Paramètres enregistrés, le serveur redémarre.
+apply.now = maintenant
+apply.reload = .reload
+apply.restart = redémarrage
+
+# à propos (un groupe de paramètres)
+about.title = À propos
+about.hint = Un serveur World of Warcraft 3.3.5a solo avec un lanceur.
+about.version = Version
+about.core = Cœur du serveur
+about.core.text = AzerothCore avec le module playerbots
+about.license = Licence
+about.license.text = GNU GPL 2.0 ou ultérieure ; les plugins ont leurs propres licences.
+about.fonts = Polices
+about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
+about.app_dir = Dossier du programme
+about.data_dir = Données du serveur
+about.config = Config du serveur
+about.plugins_dir = Dossier des plugins
+
+# page des plugins
+pl.show = Afficher
+pl.view.installed = Installés
+pl.view.updates = Mises à jour
+pl.view.catalog = Catalogue
+pl.repos = Catalogues de paquets
+pl.manage_repos = Catalogues…
+pl.back_to_list = Vers la liste
+pl.install = Installer
+pl.update = Mettre à jour
+pl.check = Vérifier les mises à jour
+pl.update_all = Tout mettre à jour
+pl.empty.installed = Aucun plugin installé.
+pl.empty.updates = Tout est à jour.
+pl.empty.catalog = Le catalogue n'a rien de nouveau pour cette version.
+pl.note.needs = nécessite {0}
+pl.note.disabled = désactivé
+pl.applies_on_start = Les bases de données et le client suivent au prochain démarrage du serveur.
+pl.repos.empty = Aucun catalogue : les plugins ne peuvent être installés qu'à la main.
+pl.repos.add = Ajouter un catalogue
+pl.repos.help = Un catalogue distant est l'adresse d'un index.json (https://…). Un catalogue local est un dossier avec index.json ou le fichier lui-même ; LonelyIce.exe --pkg pack le construit.
+pl.repos.official = Restaurer le catalogue LonelyIce
+pl.status.not_loaded = La liste des paquets n'est pas encore chargée.
+pl.status.loading = Chargement de la liste des paquets…
+pl.status.no_repos = Aucun catalogue ajouté ; ajoutez-en sous « Catalogues… ».
+pl.status.loaded = Paquets dans les catalogues : {0}.
+pl.status.loaded_some = Paquets dans les catalogues : {0}, catalogues indisponibles : {1}.
+pl.status.repos_down = Catalogues indisponibles, détails sous « Catalogues… ».
+pl.status.installing = Installation en cours…
+pl.status.done = Terminé. Les bases de données et le client suivent au prochain démarrage du serveur.
+pl.status.failed = Échec, détails dans l'onglet Aperçu.
+repo.official = Catalogue LonelyIce
+repo.remote = distant
+repo.local = local
+repo.not_loaded = non chargé
+repo.disabled = désactivé
+repo.packages = paquets : {0}
+
+# page de maintenance
+svc.data = Données du serveur
+svc.backups = Sauvegardes
+svc.logs = Journaux
+svc.data.note = L'assistant construit les bases de données depuis le SQL et les cartes depuis le client de jeu.
+svc.wizard = Assistant d'installation…
+svc.check = Vérifier les fichiers
+svc.backups.empty = Aucune sauvegarde pour l'instant.
+svc.backups.note = Comptes, personnages et bots ; les copies au-delà de la limite sont supprimées.
+svc.backup_now = Sauvegarder maintenant
+svc.logs.empty = Aucun fichier journal pour l'instant.
+svc.logs.note = Journaux du serveur ; le journal en direct est dans l'onglet Console.
+backup.files = fichiers : {0}
+backup.sum = copies : {0} · {1} · quotidien à {2}, conserver {3}
+backup.sum_manual = copies : {0} · {1} · sans planification
+data.db.auth = Base de connexion
+data.db.auth.detail = comptes, droits, liste des royaumes
+data.db.characters = Base des personnages
+data.db.characters.detail = personnages, objets, courrier, guildes
+data.db.world = Base du monde
+data.db.world.detail = créatures, quêtes, butin, objets
+data.db.playerbots = Base des bots
+data.db.playerbots.detail = comportement et itinéraires des bots
+data.external_db = serveur de base de données externe
+data.none = aucune
+data.dbc = DBC
+data.dbc.detail = tables du client
+data.maps = Cartes
+data.maps.detail = cartes de hauteur et de zone
+data.cameras = Caméras
+data.cameras.detail = cinématiques et vols
+data.vmaps = Modèles de construction (vmaps)
+data.vmaps.detail = ligne de vue, grottes
+data.mmaps = Navigation (mmaps)
+data.mmaps.detail = chemins pour les créatures et les bots
+data.detail_files = {0}, fichiers : {1}
+data.all_present = tout est présent · {0}
+data.missing = manquant : {0}
+
+# barre système
+tray.open = Ouvrir LonelyIce
+tray.play = Jouer
+tray.start = Démarrer le serveur
+tray.stop = Arrêter le serveur
+tray.restart = Redémarrer le serveur
+tray.backup = Sauvegarder maintenant
+tray.quit = Quitter
+tray.status = Serveur : {0}
+tray.tooltip_hidden = LonelyIce — {0}. Menu : clic droit
+
+# erreurs avant la fenêtre
+error.no_opengl = Impossible de créer une fenêtre avec OpenGL 3.3.
+error.no_ui = Impossible de charger l'interface (ui/launcher.rml).
+
+# assistant d'installation : texte dans le balisage
+wz.title = Préparation de LonelyIce
+wz.client = Client de jeu
+wz.client.order = Ordre de recherche : le dossier enregistré, le dossier de LonelyIce.exe et son parent, les dossiers voisins, le chemin du registre.
+wz.client.browse = Choisir un autre dossier…
+wz.place = Où conserver les données du serveur
+wz.place.browse = Choisir un dossier…
+wz.place.note = À l'intérieur : configs — paramètres, db — bases de données, data — dbc, maps, vmaps, mmaps, logs — journaux, backups — copies.
+wz.comps = Que préparer
+wz.threads = Threads pour la navigation
+wz.world = Royaume et votre compte
+wz.realm_name = Nom du royaume
+wz.rates = Taux
+wz.bots = Bots aléatoires
+wz.bots.0 = 0 — monde vide
+wz.bots.100 = 100 — calme
+wz.bots.500 = 500 — monde vivant
+wz.bots.1000 = 1000 — PC puissant
+wz.rights = Droits
+wz.rights.admin = Administrateur (GM 3)
+wz.world.note = Le compte est créé dans la nouvelle base de données. Tout le reste peut être modifié plus tard dans les Paramètres.
+wz.prep = Préparation du client
+wz.prep.rl = Régler realmlist sur 127.0.0.1
+wz.prep.rl.desc = L'ancien realmlist.wtf est conservé sous realmlist.wtf.bak
+wz.prep.wdb = Vider le cache du client
+wz.prep.wdb.desc = Un cache d'un autre serveur affiche des objets et des quêtes incorrects
+wz.prep.accname = Remplir l'identifiant sur l'écran de connexion
+wz.prep.lnk = Raccourci sur le bureau
+wz.prep.lnk.desc = Démarre LonelyIce, qui démarre le serveur et le jeu
+wz.install = Installation
+wz.install.note = Vous pouvez réduire la fenêtre : l'installation tourne en arrière-plan à faible priorité.
+wz.done = Tout est prêt
+wz.done.note = Appuyez sur « Jouer » : LonelyIce démarre le serveur et ouvre le jeu. Le premier démarrage du monde prend environ une minute.

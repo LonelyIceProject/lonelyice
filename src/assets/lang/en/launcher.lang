@@ -1,0 +1,367 @@
+# Launcher window: pages, tabs, messages (Launcher.cpp, launcher.rml)
+
+lang.self = English
+
+# pages and navigation
+page.settings = Settings
+page.plugins = Plugins
+page.service = Maintenance
+tab.overview = Overview
+tab.console = Console
+tab.commands = Commands
+tab.accounts = Accounts
+
+# common words
+ui.back = ‹ Main
+ui.back_step = Back
+ui.subtitle = single-player server · 3.3.5a
+ui.server = Server
+ui.game = Game
+ui.svc.auth = Login (auth)
+ui.svc.world = World
+ui.kv.uptime = Uptime
+ui.kv.players = Players online
+ui.kv.bots = Bots in the world
+ui.kv.memory = Memory
+ui.kv.diff = World latency
+ui.restart = Restart
+ui.browse = Browse…
+ui.fix_realmlist = Set realmlist
+ui.news = News
+ui.events = Events
+ui.today = today
+ui.no_events = Nothing has happened yet.
+ui.run = Run
+ui.search = Search
+ui.nothing_found = Nothing found.
+ui.refresh = Refresh
+ui.add = Add
+ui.folder = Folder…
+ui.open_folder = Open folder
+ui.enable = Enable
+ui.disable = Disable
+ui.remove = Remove
+ui.credit = LonelyIce, based on AzerothCore · GPL-2.0
+ui.closing = Stopping the server
+ui.closing.text = Saving characters and shutting the world down. Close the window again to stop the server at once.
+
+# quick actions
+act.backup = Backup
+act.backup.sub = accounts and characters into backups
+act.saveall = Save everyone
+act.announce = Announcement
+act.announce.sub = a message to the server chat
+act.folder = Server folder
+act.folder.sub = configs, databases, logs
+
+# server state
+state.stopped = Stopped
+state.stopped.sub = press “Start” or “Play”
+state.starting = Starting
+state.starting.sub = config and database
+state.loading = Loading
+state.loading.sub = loading the world
+state.loading_for = loading, {0} s
+state.ready = Running
+state.ready.sub = login is open
+state.stopping = Stopping
+state.stopping.sub = saving characters
+state.failed = Error
+server.start = Start
+server.stop = Stop
+
+# play button
+play.play = PLAY
+play.install = INSTALL
+play.sub.install = prepare the data
+play.sub.no_client = choose the game folder
+play.sub.ready = start Wow.exe
+play.sub.stopping = the server is stopping
+play.sub.pending = the game opens when the world is loaded
+play.sub.start = start the server and the game
+
+# footer
+foot.installing = Installing…
+foot.preparing_client = Preparing the client: plugin add-ons…
+foot.backup = Making a backup…
+foot.ready = World open · players: {0} · bots: {1}
+
+# time and units
+time.seconds = {0} s
+time.minutes = {0} min
+time.hours_minutes = {0} h {1} min
+time.days_hours = {0} d {1} h
+time.ms = {0} ms
+time.today_at = today, {0}
+time.date = {1}/{0}/{2}
+unit.kb = {0} KB
+
+# game client
+client.not_found = 3.3.5a client not found
+client.not_found.hint = Choose the folder with Wow.exe using “Browse…”.
+client.wrong_version = Wow.exe {0}, 3.3.5a (12340) is needed.
+client.unknown_version = of unknown version
+client.no_locales = No locales found in Data\.
+client.rl_foreign = {0}: foreign address.
+client.rl_foreign_fix = {0}: foreign address, the launcher fixes it when the game starts.
+client.rl_some_foreign = The launch language is highlighted; foreign address in other locales: {0}.
+client.rl_ok = The launch language is highlighted; 127.0.0.1 everywhere.
+
+# news on the overview
+news.setup = Server data is not prepared yet
+news.setup.text = The wizard builds the databases and extracts maps from your game client.
+news.setup.button = Open the wizard
+news.failed = The server stopped with an error
+news.updates = Plugin updates available: {0}
+news.updates.text = They install while the server is stopped.
+news.backup = Latest backup
+news.backup.text = {0} · {1}
+news.no_backup = No backups yet
+news.no_backup.text = Make one now or set a daily time in Settings › Launcher.
+news.open = Open
+
+# events
+event.install_done = Installation finished: {0}
+event.sql_updates = setup\sql.pak has new database updates: Maintenance › Wizard › Databases.
+event.game_closed = Game closed
+event.stop_with_game = The server stops together with the game
+event.client_line = Client: {0}
+event.client_failed = Client not prepared: {0}
+event.backup_done = Backup: {0}, backups\{1}
+event.backup_failed = Backup failed: {0}
+event.server_starting = Starting the server
+event.world_ready = World ready in {0} s, login is open
+event.realm_renamed = Realm renamed to “{0}”, visible after a restart
+event.server_stopped = Server stopped
+event.server_failed = The server stopped with an error: {0}. Details in the Console tab.
+event.game_started = Game started
+event.game_started_locale = Game started ({0})
+event.acc_created = Account {0} created
+event.acc_created_gm = Account {0} created, GM {1}
+event.plugin_settings_bad = Plugin settings not read: {0}
+event.plugins_line = Plugins: {0}
+event.plugin_removed = Plugin {0} removed.
+event.plugin_disabled = Plugin {0} disabled.
+event.plugin_enabled = Plugin {0} enabled.
+event.repo_added = Package catalog added: {0}
+event.repo_removed = Package catalog removed: {0}
+event.repo_disabled = Package catalog disabled: {0}
+event.repo_enabled = Package catalog enabled: {0}
+event.repo_failed = Catalog {0}: {1}
+
+# messages
+msg.ui_scale = Interface scale: {0} %
+msg.launch_locale = Launch language: {0}
+msg.announce_hint = Type the text into “Chat announcement” and press “Run”.
+msg.client_saved = Game folder saved.
+msg.not_client_dir = This folder has no Wow.exe and Data\common.MPQ.
+msg.installing = Installation is running, the server starts after it.
+msg.no_config = Server config not found: {0}
+msg.start_failed = Could not start the server: {0}
+msg.need_client = Choose the 3.3.5a client folder first.
+msg.game_running = The game is already running.
+msg.preparing_client = Preparing the client: plugin add-ons…
+msg.realmlist_ok = realmlist already points to this computer.
+msg.cmd_not_ready = Commands are accepted once the world is running.
+msg.cmd_not_sent = Command not sent: the server does not respond.
+msg.acc_invalid = Login and password must not be empty or contain spaces.
+msg.pick_character = Choose a character.
+msg.plugins_locked = Stop the server: plugins change while it is off.
+msg.all_installed = Everything is already installed.
+msg.load_index_first = Load the package list first.
+msg.plugin_needed_by = {0} is needed by: {1}.
+msg.repo_semicolon = A catalog address cannot contain “;”.
+msg.repo_missing = No such file or folder: {0}
+msg.repo_no_index = The folder has no index.json. Build it with LonelyIce.exe --pkg pack.
+msg.repo_exists = This catalog is already added.
+msg.backup_files_only = Backups work only with databases in files.
+msg.backup_running = Making a backup…
+log.starting = -- starting: {0}
+
+# accounts
+acc.start_server = Start the server to see the accounts.
+acc.loading = Loading…
+acc.player = player
+acc.gm = GM {0}
+acc.bots = bots
+acc.bots_row = RNDBOT… ({0})
+acc.service = service
+acc.login = Login
+acc.password = Password
+acc.level = Level
+acc.chars = Characters
+acc.last_login = Last login
+acc.new = New account
+acc.create = Create
+
+# commands tab
+cmd.character = Character
+cmd.char = {0} · {1}
+cmd.char_online = {0} · {1} · in game
+cmd.last_hint = The server’s answer appears in the Console tab.
+cmd.run = Run
+cmd.run_danger = Run…
+cmd.sure = Sure?
+cmd.sent = Sent: {0}. The answer is in the Console tab.
+
+# settings page
+set.section.world = Server
+set.section.plugins = Plugins
+set.section.launcher = Launcher
+set.preset = Preset
+set.preset.x1 = Classic ×1
+set.preset.x2 = Faster ×2
+set.preset.x5 = Casual ×5
+set.show_keys = config keys
+set.save = Save
+set.save_restart = Save and restart
+set.changed = Changed: {0}
+set.changed_restart = Changed: {0}, a restart is needed
+set.unchanged = No changes
+set.saved = Settings saved.
+set.saved_reloaded = Settings saved, config reloaded.
+set.saved_restarting = Settings saved, the server is restarting.
+apply.now = now
+apply.reload = .reload
+apply.restart = restart
+
+# about (a settings group)
+about.title = About
+about.hint = A single-player World of Warcraft 3.3.5a server with a launcher.
+about.version = Version
+about.core = Server core
+about.core.text = AzerothCore with the playerbots module
+about.license = License
+about.license.text = GNU GPL 2.0 or later; plugins carry their own licenses.
+about.fonts = Fonts
+about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
+about.app_dir = Program folder
+about.data_dir = Server data
+about.config = Server config
+about.plugins_dir = Plugins folder
+
+# plugins page
+pl.show = Show
+pl.view.installed = Installed
+pl.view.updates = Updates
+pl.view.catalog = Catalog
+pl.repos = Package catalogs
+pl.manage_repos = Catalogs…
+pl.back_to_list = To the list
+pl.install = Install
+pl.update = Update
+pl.check = Check for updates
+pl.update_all = Update all
+pl.empty.installed = No plugins installed.
+pl.empty.updates = Everything is up to date.
+pl.empty.catalog = The catalog has nothing new for this version.
+pl.note.needs = needs {0}
+pl.note.disabled = disabled
+pl.applies_on_start = Databases and the client follow on the next server start.
+pl.repos.empty = No catalogs: plugins can only be installed by hand.
+pl.repos.add = Add a catalog
+pl.repos.help = A remote catalog is the address of an index.json (https://…). A local one is a folder with index.json or the file itself; LonelyIce.exe --pkg pack builds it.
+pl.repos.official = Bring back the LonelyIce catalog
+pl.status.not_loaded = The package list is not loaded yet.
+pl.status.loading = Loading the package list…
+pl.status.no_repos = No catalogs added; add them under “Catalogs…”.
+pl.status.loaded = Packages in the catalogs: {0}.
+pl.status.loaded_some = Packages in the catalogs: {0}, catalogs unavailable: {1}.
+pl.status.repos_down = Catalogs unavailable, details under “Catalogs…”.
+pl.status.installing = Installing…
+pl.status.done = Done. Databases and the client follow on the next server start.
+pl.status.failed = Failed, details on the Overview tab.
+repo.official = LonelyIce catalog
+repo.remote = remote
+repo.local = local
+repo.not_loaded = not loaded
+repo.disabled = disabled
+repo.packages = packages: {0}
+
+# maintenance page
+svc.data = Server data
+svc.backups = Backups
+svc.logs = Logs
+svc.data.note = The wizard builds the databases from SQL and the maps from the game client.
+svc.wizard = Setup wizard…
+svc.check = Check files
+svc.backups.empty = No backups yet.
+svc.backups.note = Accounts, characters and bots; older copies beyond the limit are deleted.
+svc.backup_now = Back up now
+svc.logs.empty = No log files yet.
+svc.logs.note = Server logs; the live log is on the Console tab.
+backup.files = files: {0}
+backup.sum = copies: {0} · {1} · daily at {2}, keep {3}
+backup.sum_manual = copies: {0} · {1} · no schedule
+data.db.auth = Login database
+data.db.auth.detail = accounts, rights, realm list
+data.db.characters = Characters database
+data.db.characters.detail = characters, items, mail, guilds
+data.db.world = World database
+data.db.world.detail = creatures, quests, loot, items
+data.db.playerbots = Bots database
+data.db.playerbots.detail = bot behaviour and routes
+data.external_db = external database server
+data.none = none
+data.dbc = DBC
+data.dbc.detail = client tables
+data.maps = Maps
+data.maps.detail = height and zone maps
+data.cameras = Cameras
+data.cameras.detail = cinematics and flights
+data.vmaps = Building models (vmaps)
+data.vmaps.detail = line of sight, caves
+data.mmaps = Navigation (mmaps)
+data.mmaps.detail = paths for creatures and bots
+data.detail_files = {0}, files: {1}
+data.all_present = everything present · {0}
+data.missing = missing: {0}
+
+# tray
+tray.open = Open LonelyIce
+tray.play = Play
+tray.start = Start the server
+tray.stop = Stop the server
+tray.restart = Restart the server
+tray.backup = Back up now
+tray.quit = Quit
+tray.status = Server: {0}
+tray.tooltip_hidden = LonelyIce — {0}. Menu: right click
+
+# errors before the window
+error.no_opengl = Could not create a window with OpenGL 3.3.
+error.no_ui = Could not load the interface (ui/launcher.rml).
+
+# setup wizard: text in the markup
+wz.title = Preparing LonelyIce
+wz.client = Game client
+wz.client.order = Search order: the saved folder, the LonelyIce.exe folder and its parent, folders next to it, the path from the registry.
+wz.client.browse = Choose another folder…
+wz.place = Where to keep the server data
+wz.place.browse = Choose a folder…
+wz.place.note = Inside: configs — settings, db — databases, data — dbc, maps, vmaps, mmaps, logs — logs, backups — copies.
+wz.comps = What to prepare
+wz.threads = Threads for navigation
+wz.world = Realm and your account
+wz.realm_name = Realm name
+wz.rates = Rates
+wz.bots = Random bots
+wz.bots.0 = 0 — empty world
+wz.bots.100 = 100 — quiet
+wz.bots.500 = 500 — lively world
+wz.bots.1000 = 1000 — powerful PC
+wz.rights = Rights
+wz.rights.admin = Administrator (GM 3)
+wz.world.note = The account is created in the new database. Everything else can be changed later under Settings.
+wz.prep = Client preparation
+wz.prep.rl = Set realmlist to 127.0.0.1
+wz.prep.rl.desc = The old realmlist.wtf is kept as realmlist.wtf.bak
+wz.prep.wdb = Clear the client cache
+wz.prep.wdb.desc = A cache from another server shows wrong items and quests
+wz.prep.accname = Fill the login into the login screen
+wz.prep.lnk = Desktop shortcut
+wz.prep.lnk.desc = Starts LonelyIce, which starts the server and the game
+wz.install = Installation
+wz.install.note = You can minimize the window: installation runs in the background at low priority.
+wz.done = All set
+wz.done.note = Press “Play”: LonelyIce starts the server and opens the game. The first world start takes about a minute.

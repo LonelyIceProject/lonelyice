@@ -1,5 +1,6 @@
 #include "SettingsModel.h"
 #include "ConfFile.h"
+#include "Lang.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -55,60 +56,63 @@ namespace
 
 SettingsModel::SettingsModel()
 {
+    // Group names and hints, labels, hints and option labels are Lang keys (settings.lang), translated when
+    // shown; plugin settings bring their own text, which passes through the translation unchanged.
     _coreGroups = {
-        { "realm", "Мир", "Реалм, уровни и старт персонажа" },
-        { "rates", "Множители", "Сколько опыта, денег и добычи вы получаете" },
-        { "diff", "Сложность", "Для игры с малой группой ботов" },
-        { "perf", "Сеть и ресурсы", "Порты, потоки и сохранение" },
-        { "launch", "Лаунчер", "Параметры самого LonelyIce, lonelyice.ini" },
+        { "realm", "set.group.realm", "set.group.realm.hint" },
+        { "rates", "set.group.rates", "set.group.rates.hint" },
+        { "diff", "set.group.diff", "set.group.diff.hint" },
+        { "perf", "set.group.perf", "set.group.perf.hint" },
+        { "launch", "set.group.launch", "set.group.launch.hint" },
     };
 
     _coreDefs = {
-        { "realm", "Имя мира", "realmlist.name", SetSource::Realm, {}, 't', "rst", "Хранится в базе входа, видно в списке миров", {}, "LonelyIce" },
-        W("realm", "Тип мира", "GameType", 's', "rst", "0", {}, { { "0", "Обычный" }, { "1", "PvP" }, { "6", "RP" }, { "8", "RP-PvP" } }),
-        W("realm", "Максимальный уровень", "MaxPlayerLevel", 'n', "rst", "80"),
-        W("realm", "Стартовый уровень", "StartPlayerLevel", 'n', "rel", "1"),
-        W("realm", "Стартовый уровень рыцаря смерти", "StartHeroicPlayerLevel", 'n', "rel", "55"),
-        W("realm", "Стартовые деньги, медь", "StartPlayerMoney", 'n', "rel", "0"),
-        W("realm", "Альянс и Орда на одном аккаунте", "AllowTwoSide.Accounts", 'b', "rel", "1"),
-        W("realm", "Общие группы Альянса и Орды", "AllowTwoSide.Interaction.Group", 'b', "rel", "0", "С ботами обеих фракций в одной группе"),
+        { "realm", "set.realm.name", "realmlist.name", SetSource::Realm, {}, 't', "rst", "set.realm.name.hint", {}, "LonelyIce" },
+        W("realm", "set.realm.game_type", "GameType", 's', "rst", "0", {}, { { "0", "set.opt.gametype.normal" }, { "1", "set.opt.gametype.pvp" },
+            { "6", "set.opt.gametype.rp" }, { "8", "set.opt.gametype.rppvp" } }),
+        W("realm", "set.realm.max_level", "MaxPlayerLevel", 'n', "rst", "80"),
+        W("realm", "set.realm.start_level", "StartPlayerLevel", 'n', "rel", "1"),
+        W("realm", "set.realm.start_level_dk", "StartHeroicPlayerLevel", 'n', "rel", "55"),
+        W("realm", "set.realm.start_money", "StartPlayerMoney", 'n', "rel", "0"),
+        W("realm", "set.realm.two_side_accounts", "AllowTwoSide.Accounts", 'b', "rel", "1"),
+        W("realm", "set.realm.two_side_group", "AllowTwoSide.Interaction.Group", 'b', "rel", "0", "set.realm.two_side_group.hint"),
 
-        Rate("Опыт за убийства", "Rate.XP.Kill"),
-        Rate("Опыт за задания", "Rate.XP.Quest"),
-        Rate("Опыт за исследование", "Rate.XP.Explore"),
-        Rate("Отдых в игре", "Rate.Rest.InGame"),
-        Rate("Репутация", "Rate.Reputation.Gain"),
-        Rate("Очки чести", "Rate.Honor"),
-        Rate("Деньги с монстров", "Rate.Drop.Money"),
-        Rate("Редкие вещи (синие)", "Rate.Drop.Item.Rare"),
-        Rate("Эпические вещи", "Rate.Drop.Item.Epic"),
-        W("rates", "Рост навыков профессий", "SkillGain.Crafting", 'n', "rel", "1"),
+        Rate("set.rates.xp_kill", "Rate.XP.Kill"),
+        Rate("set.rates.xp_quest", "Rate.XP.Quest"),
+        Rate("set.rates.xp_explore", "Rate.XP.Explore"),
+        Rate("set.rates.rest_ingame", "Rate.Rest.InGame"),
+        Rate("set.rates.reputation", "Rate.Reputation.Gain"),
+        Rate("set.rates.honor", "Rate.Honor"),
+        Rate("set.rates.drop_money", "Rate.Drop.Money"),
+        Rate("set.rates.drop_rare", "Rate.Drop.Item.Rare"),
+        Rate("set.rates.drop_epic", "Rate.Drop.Item.Epic"),
+        W("rates", "set.rates.skill_crafting", "SkillGain.Crafting", 'n', "rel", "1"),
 
-        W("diff", "Урон обычных монстров", "Rate.Creature.Normal.Damage", 'n', "rel", "1"),
-        W("diff", "Здоровье обычных монстров", "Rate.Creature.Normal.HP", 'n', "rel", "1"),
-        W("diff", "Урон элитных монстров", "Rate.Creature.Elite.Elite.Damage", 'n', "rel", "1"),
-        W("diff", "Вход в подземелья без требований уровня", "Instance.IgnoreLevel", 'b', "rel", "0"),
-        W("diff", "Рейды без требования рейдовой группы", "Instance.IgnoreRaid", 'b', "rel", "0", "Позволяет идти в рейд группой из 5 ботов"),
-        W("diff", "Рейдовые задания в обычной группе", "Quests.IgnoreRaid", 'b', "rel", "0"),
+        W("diff", "set.diff.normal_damage", "Rate.Creature.Normal.Damage", 'n', "rel", "1"),
+        W("diff", "set.diff.normal_hp", "Rate.Creature.Normal.HP", 'n', "rel", "1"),
+        W("diff", "set.diff.elite_damage", "Rate.Creature.Elite.Elite.Damage", 'n', "rel", "1"),
+        W("diff", "set.diff.ignore_level", "Instance.IgnoreLevel", 'b', "rel", "0"),
+        W("diff", "set.diff.ignore_raid", "Instance.IgnoreRaid", 'b', "rel", "0", "set.diff.ignore_raid.hint"),
+        W("diff", "set.diff.quests_ignore_raid", "Quests.IgnoreRaid", 'b', "rel", "0"),
 
-        W("perf", "Только этот компьютер", "BindIP", 'b', "rst", "0.0.0.0", "Выключите, чтобы подключаться из локальной сети"),
-        W("perf", "Порт входа", "RealmServerPort", 'n', "rst", "3724"),
-        W("perf", "Порт мира", "WorldServerPort", 'n', "rst", "8085"),
-        W("perf", "SOAP для инструментов", "SOAP.Enabled", 'b', "rst", "0"),
-        W("perf", "Порт SOAP", "SOAP.Port", 'n', "rst", "7878"),
-        W("perf", "Потоки обновления карт", "MapUpdate.Threads", 'n', "rst", "1", "Разумно: число ядер минус 4"),
-        W("perf", "Сохранение персонажей, мин", "PlayerSaveInterval", 'n', "rel", "900000"),
+        W("perf", "set.perf.bind_local", "BindIP", 'b', "rst", "0.0.0.0", "set.perf.bind_local.hint"),
+        W("perf", "set.perf.realm_port", "RealmServerPort", 'n', "rst", "3724"),
+        W("perf", "set.perf.world_port", "WorldServerPort", 'n', "rst", "8085"),
+        W("perf", "set.perf.soap", "SOAP.Enabled", 'b', "rst", "0"),
+        W("perf", "set.perf.soap_port", "SOAP.Port", 'n', "rst", "7878"),
+        W("perf", "set.perf.map_threads", "MapUpdate.Threads", 'n', "rst", "1", "set.perf.map_threads.hint"),
+        W("perf", "set.perf.save_interval", "PlayerSaveInterval", 'n', "rel", "900000"),
 
-        L("launch", "Масштаб интерфейса", "Launcher.UiScale", 's', "Поверх масштаба Windows; также Ctrl + колесо мыши",
+        L("launch", "set.launch.ui_scale", "Launcher.UiScale", 's', "set.launch.ui_scale.hint",
             { { "100", "100 %" }, { "125", "125 %" }, { "150", "150 %" }, { "175", "175 %" }, { "200", "200 %" } }),
-        L("launch", "Язык клиента", "Launcher.Locale", 's', "Записывается в WTF\\Config.wtf перед запуском игры"),
-        L("launch", "Проверять realmlist перед запуском", "Launcher.WriteRealmlist", 'b', "Чужой адрес заменяется на 127.0.0.1, старый файл сохраняется как realmlist.wtf.bak"),
-        L("launch", "Очищать кэш клиента (Cache\\WDB)", "Launcher.ClearWdb", 'b', "Нужно после правок базы мира"),
-        L("launch", "Запускать сервер вместе с лаунчером", "Launcher.AutoStart", 'b'),
-        L("launch", "Выход из игры останавливает сервер", "Launcher.StopWithGame", 'b'),
-        L("launch", "Закрытие окна сворачивает в трей", "Launcher.TrayOnClose", 'b', "Сервер продолжает работать, LonelyIce остаётся в области уведомлений"),
-        L("launch", "Резервная копия, время", "Backup.Time", 't', "ЧЧ:ММ, пусто — без расписания"),
-        L("launch", "Хранить копий", "Backup.Keep", 'n'),
+        L("launch", "set.launch.locale", "Launcher.Locale", 's', "set.launch.locale.hint"),
+        L("launch", "set.launch.write_realmlist", "Launcher.WriteRealmlist", 'b', "set.launch.write_realmlist.hint"),
+        L("launch", "set.launch.clear_wdb", "Launcher.ClearWdb", 'b', "set.launch.clear_wdb.hint"),
+        L("launch", "set.launch.autostart", "Launcher.AutoStart", 'b'),
+        L("launch", "set.launch.stop_with_game", "Launcher.StopWithGame", 'b'),
+        L("launch", "set.launch.tray_on_close", "Launcher.TrayOnClose", 'b', "set.launch.tray_on_close.hint"),
+        L("launch", "set.launch.backup_time", "Backup.Time", 't', "set.launch.backup_time.hint"),
+        L("launch", "set.launch.backup_keep", "Backup.Keep", 'n'),
     };
 
     for (SetDef& d : _coreDefs)
@@ -200,7 +204,7 @@ void SettingsModel::Load(fs::path const& worldConf, std::vector<PluginManifest> 
                 if (d.key == "Launcher.Locale")
                 {
                     d.options.clear();
-                    d.options.push_back({ "", "Как в Config.wtf" });
+                    d.options.push_back({ "", "set.opt.locale.config_wtf" });
                     for (std::string const& l : locales)
                         d.options.push_back({ l, l });
                     v = ls.locale;
@@ -252,7 +256,7 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
                     }
                     if (!f.Load(p))
                     {
-                        res.error = "Не удалось открыть " + p.string();
+                        res.error = Tr("set.error.open", p.string());
                         return res;
                     }
                 }
@@ -269,7 +273,7 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
                     double n = std::strtod(v.cur.c_str(), &end);
                     if (end == v.cur.c_str())
                     {
-                        res.error = "«" + d.label + "»: нужно число";
+                        res.error = Tr("set.error.number", Tr(d.label));
                         return res;
                     }
                     if (d.min)
@@ -311,7 +315,7 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
     {
         if (!f.Save())
         {
-            res.error = "Не удалось записать " + path;
+            res.error = Tr("set.error.write", path);
             return res;
         }
     }

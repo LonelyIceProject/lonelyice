@@ -1,0 +1,81 @@
+# Settings page: groups, setting labels, hints, options, save errors
+
+set.group.realm = Realm
+set.group.realm.hint = Realm, levels and character start
+set.group.rates = Rates
+set.group.rates.hint = How much experience, money and loot you get
+set.group.diff = Difficulty
+set.group.diff.hint = For playing with a small group of bots
+set.group.perf = Network and resources
+set.group.perf.hint = Ports, threads and saving
+set.group.launch = Launcher
+set.group.launch.hint = LonelyIce's own options, lonelyice.ini
+
+set.realm.name = Realm name
+set.realm.name.hint = Stored in the login database, shown in the realm list
+set.realm.game_type = Realm type
+set.realm.max_level = Maximum level
+set.realm.start_level = Starting level
+set.realm.start_level_dk = Death Knight starting level
+set.realm.start_money = Starting money, copper
+set.realm.two_side_accounts = Alliance and Horde on one account
+set.realm.two_side_group = Mixed Alliance and Horde groups
+set.realm.two_side_group.hint = Bots of both factions in one group
+
+set.opt.gametype.normal = Normal
+set.opt.gametype.pvp = PvP
+set.opt.gametype.rp = RP
+set.opt.gametype.rppvp = RP-PvP
+
+set.rates.xp_kill = Experience from kills
+set.rates.xp_quest = Experience from quests
+set.rates.xp_explore = Experience from exploration
+set.rates.rest_ingame = Rested experience in game
+set.rates.reputation = Reputation
+set.rates.honor = Honor points
+set.rates.drop_money = Money from creatures
+set.rates.drop_rare = Rare items (blue)
+set.rates.drop_epic = Epic items
+set.rates.skill_crafting = Profession skill gain
+
+set.diff.normal_damage = Normal creature damage
+set.diff.normal_hp = Normal creature health
+set.diff.elite_damage = Elite creature damage
+set.diff.ignore_level = Enter dungeons without level requirements
+set.diff.ignore_raid = Raids without a raid group
+set.diff.ignore_raid.hint = Lets you raid with a group of 5 bots
+set.diff.quests_ignore_raid = Raid quests in a normal group
+
+set.perf.bind_local = This computer only
+set.perf.bind_local.hint = Turn off to connect from the local network
+set.perf.realm_port = Login port
+set.perf.world_port = World port
+set.perf.soap = SOAP for tools
+set.perf.soap_port = SOAP port
+set.perf.map_threads = Map update threads
+set.perf.map_threads.hint = Sensible: number of cores minus 4
+set.perf.save_interval = Character save interval, min
+
+set.launch.ui_scale = Interface scale
+set.launch.ui_scale.hint = On top of the Windows scale; also Ctrl + mouse wheel
+set.launch.locale = Client language
+set.launch.locale.hint = Written to WTF\Config.wtf before the game starts
+set.launch.write_realmlist = Check realmlist before launch
+set.launch.write_realmlist.hint = A foreign address is replaced with 127.0.0.1, the old file is kept as realmlist.wtf.bak
+set.launch.clear_wdb = Clear the client cache (Cache\WDB)
+set.launch.clear_wdb.hint = Needed after editing the world database
+set.launch.autostart = Start the server with the launcher
+set.launch.stop_with_game = Quitting the game stops the server
+set.launch.tray_on_close = Closing the window minimizes to tray
+set.launch.tray_on_close.hint = The server keeps running, LonelyIce stays in the notification area
+set.launch.backup_time = Backup, time
+set.launch.backup_time.hint = HH:MM, empty for no schedule
+set.launch.backup_keep = Backups to keep
+
+set.opt.locale.config_wtf = As in Config.wtf
+
+# {0} = file path
+set.error.open = Could not open {0}
+set.error.write = Could not write {0}
+# {0} = setting label
+set.error.number = "{0}": a number is required

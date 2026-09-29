@@ -1,0 +1,81 @@
+# Page des paramètres : groupes, libellés, infobulles, options, erreurs de sauvegarde
+
+set.group.realm = Royaume
+set.group.realm.hint = Royaume, niveaux et début de personnage
+set.group.rates = Taux
+set.group.rates.hint = Expérience, argent et butin obtenus
+set.group.diff = Difficulté
+set.group.diff.hint = Pour jouer avec un petit groupe de bots
+set.group.perf = Réseau et ressources
+set.group.perf.hint = Ports, threads et sauvegarde
+set.group.launch = Lanceur
+set.group.launch.hint = Options propres à LonelyIce, lonelyice.ini
+
+set.realm.name = Nom du royaume
+set.realm.name.hint = Stocké dans la base de connexion, affiché dans la liste des royaumes
+set.realm.game_type = Type de royaume
+set.realm.max_level = Niveau maximum
+set.realm.start_level = Niveau de départ
+set.realm.start_level_dk = Niveau de départ du chevalier de la mort
+set.realm.start_money = Argent de départ, en cuivre
+set.realm.two_side_accounts = Alliance et Horde sur un même compte
+set.realm.two_side_group = Groupes mixtes Alliance et Horde
+set.realm.two_side_group.hint = Bots des deux factions dans un même groupe
+
+set.opt.gametype.normal = Normal
+set.opt.gametype.pvp = JcJ
+set.opt.gametype.rp = RP
+set.opt.gametype.rppvp = RP-JcJ
+
+set.rates.xp_kill = Expérience des mises à mort
+set.rates.xp_quest = Expérience des quêtes
+set.rates.xp_explore = Expérience de l'exploration
+set.rates.rest_ingame = Expérience de repos en jeu
+set.rates.reputation = Réputation
+set.rates.honor = Points d'honneur
+set.rates.drop_money = Argent des créatures
+set.rates.drop_rare = Objets rares (bleus)
+set.rates.drop_epic = Objets épiques
+set.rates.skill_crafting = Gain de compétence de métier
+
+set.diff.normal_damage = Dégâts des créatures normales
+set.diff.normal_hp = Santé des créatures normales
+set.diff.elite_damage = Dégâts des créatures d'élite
+set.diff.ignore_level = Entrer dans les donjons sans condition de niveau
+set.diff.ignore_raid = Raids sans groupe de raid
+set.diff.ignore_raid.hint = Permet de partir en raid avec un groupe de 5 bots
+set.diff.quests_ignore_raid = Quêtes de raid dans un groupe normal
+
+set.perf.bind_local = Cet ordinateur uniquement
+set.perf.bind_local.hint = Désactiver pour se connecter depuis le réseau local
+set.perf.realm_port = Port de connexion
+set.perf.world_port = Port du monde
+set.perf.soap = SOAP pour les outils
+set.perf.soap_port = Port SOAP
+set.perf.map_threads = Threads de mise à jour des cartes
+set.perf.map_threads.hint = Raisonnable : nombre de cœurs moins 4
+set.perf.save_interval = Intervalle de sauvegarde des personnages, min
+
+set.launch.ui_scale = Échelle de l'interface
+set.launch.ui_scale.hint = En plus de l'échelle Windows ; aussi Ctrl + molette de la souris
+set.launch.locale = Langue du client
+set.launch.locale.hint = Écrit dans WTF\Config.wtf avant le lancement du jeu
+set.launch.write_realmlist = Vérifier realmlist avant le lancement
+set.launch.write_realmlist.hint = Une adresse étrangère est remplacée par 127.0.0.1, l'ancien fichier est conservé sous realmlist.wtf.bak
+set.launch.clear_wdb = Vider le cache du client (Cache\WDB)
+set.launch.clear_wdb.hint = Nécessaire après modification de la base du monde
+set.launch.autostart = Démarrer le serveur avec le lanceur
+set.launch.stop_with_game = Quitter le jeu arrête le serveur
+set.launch.tray_on_close = Fermer la fenêtre réduit dans la barre système
+set.launch.tray_on_close.hint = Le serveur continue de tourner, LonelyIce reste dans la zone de notification
+set.launch.backup_time = Sauvegarde, heure
+set.launch.backup_time.hint = HH:MM, vide pour aucune planification
+set.launch.backup_keep = Sauvegardes à conserver
+
+set.opt.locale.config_wtf = Comme dans Config.wtf
+
+# {0} = chemin du fichier
+set.error.open = Impossible d'ouvrir {0}
+set.error.write = Impossible d'écrire {0}
+# {0} = libellé du paramètre
+set.error.number = « {0} » : un nombre est requis

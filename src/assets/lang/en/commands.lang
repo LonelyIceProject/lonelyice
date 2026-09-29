@@ -1,0 +1,96 @@
+# Commands page: groups, command titles and descriptions, option labels, default texts
+
+cmd.group.srv = Server
+cmd.group.chr = Character
+cmd.group.bots = Bots
+cmd.group.acc = Accounts
+cmd.group.world = World
+
+cmd.srv.info = Server status
+cmd.srv.info.desc = Players, bots, uptime, latency
+cmd.srv.saveall = Save all
+cmd.srv.saveall.desc = Write all characters to the database
+cmd.srv.announce = Chat announcement
+cmd.srv.announce.desc = A message to everyone in server chat
+cmd.srv.announce.text = Restart in 5 minutes
+cmd.srv.notify = On-screen message
+cmd.srv.notify.desc = Large text in the center of the screen
+cmd.srv.notify.text = Hello from LonelyIce
+cmd.srv.motd = Message of the day
+cmd.srv.motd.desc = Shown at login
+cmd.srv.motd.text = Welcome
+cmd.srv.reload_config = Reload config
+cmd.srv.reload_config.desc = Apply settings marked .reload
+cmd.srv.restart = Restart
+cmd.srv.restart.desc = After the given number of seconds
+cmd.srv.shutdown = Shutdown
+cmd.srv.shutdown.desc = The server saves everyone and stops
+cmd.srv.shutdown_cancel = Cancel shutdown
+
+cmd.chr.teleport = Teleport
+cmd.chr.teleport.desc = Move the selected character
+cmd.chr.level = Level
+cmd.chr.level.desc = Set the level
+cmd.chr.revive = Resurrect
+cmd.chr.revive.desc = If stuck as a ghost
+cmd.chr.unstuck = Unstuck
+cmd.chr.unstuck.desc = To the inn, graveyard or starting zone
+cmd.chr.send_money = Money by mail
+cmd.chr.send_money.desc = Amount in gold
+cmd.chr.send_items = Item by mail
+cmd.chr.send_items.desc = Item ID and count
+cmd.chr.reset_talents = Reset talents
+cmd.chr.next_login = At next login
+cmd.chr.next_login.desc = Change appearance, name, faction or race
+cmd.chr.pinfo = Info
+cmd.chr.pinfo.desc = Account, played time, money
+cmd.chr.kick = Kick from the game
+
+cmd.loc.dalaran = Dalaran
+cmd.loc.stormwind = Stormwind
+cmd.loc.orgrimmar = Orgrimmar
+cmd.loc.ironforge = Ironforge
+cmd.loc.undercity = Undercity
+cmd.loc.shattrath = Shattrath
+
+cmd.opt.unstuck.inn = inn
+cmd.opt.unstuck.graveyard = graveyard
+cmd.opt.unstuck.startzone = starting zone
+
+cmd.opt.next_login.customize = appearance
+cmd.opt.next_login.rename = name
+cmd.opt.next_login.changefaction = faction
+cmd.opt.next_login.changerace = race
+
+cmd.bots.stats = Bot statistics
+cmd.bots.stats.desc = How many are in the world, by level and activity
+cmd.bots.reload = Reload bot settings
+cmd.bots.reload.desc = playerbots.conf without a restart
+cmd.bots.update = Update bots
+cmd.bots.update.desc = An extra update cycle
+cmd.bots.reset = Reset all bots
+cmd.bots.reset.desc = Deletes and recreates random bots
+
+cmd.acc.create = Create account
+cmd.acc.gmlevel = Access level
+cmd.acc.gmlevel.desc = 0 — player, 3 — administrator
+cmd.acc.password = Change password
+cmd.acc.ban = Ban
+cmd.acc.ban.desc = Duration: 1d, 2h, -1 forever
+cmd.acc.ban.reason = —
+cmd.acc.unban = Unban
+
+cmd.world.events = Active events
+cmd.world.events.desc = Holidays and game events
+cmd.world.event_start = Start event
+cmd.world.event_start.desc = ID from game_event
+cmd.world.event_stop = Stop event
+cmd.world.instances = Instance statistics
+cmd.world.instances.desc = Loaded instances and binds
+cmd.world.reload_all = Reload world tables
+cmd.world.reload_all.desc = After manual edits of the world database
+
+# Mail subject of the money and item commands
+cmd.mail.subject = Gift
+# Shown in the command preview while no character is selected
+cmd.no_character = <character>

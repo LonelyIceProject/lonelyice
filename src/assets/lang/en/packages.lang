@@ -1,0 +1,82 @@
+# Plugin packages and client patches: package manager, downloads, --pkg command line, DBC recipes, patch install
+
+# tools/PkgMain.cpp: LonelyIce.exe --pkg
+pkg.cli.error = error: {0}
+pkg.cli.usage = usage: LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |\n                           enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |\n                           pack <plugin folder> [<out dir>]\noptions: --plugins <dir>, --index <urls separated by ;>
+pkg.cli.list_disabled = {0} {1} (disabled)  {2}
+pkg.cli.available_installed = {0} {1} (installed: {2})  {3}
+pkg.cli.need_folder = specify the plugin folder
+pkg.cli.need_config = specify -c <worldserver.conf>
+pkg.cli.need_id = specify the plugin id
+pkg.cli.needed_by = {0} is required by: {1}
+pkg.cli.removed = {0}: removed. Databases and the client will be updated on the next server start.
+pkg.cli.enabled = {0}: enabled. Databases and the client will be updated on the next server start.
+pkg.cli.disabled = {0}: disabled. Databases and the client will be updated on the next server start.
+pkg.cli.index_error = package index: {0}
+pkg.cli.index_skipped = skipped index {0}: {1}
+pkg.cli.unknown_command = unknown command {0}
+pkg.cli.nothing_to_install = Nothing to install.
+pkg.cli.will_install = Will install:
+pkg.cli.done = Done. Databases and the client will be updated on the next server start.
+
+# packages/Http.cpp
+pkg.http.no_file = file not found: {0}
+pkg.http.bad_url = invalid address: {0}
+pkg.http.no_response = no response from {0} ({1})
+pkg.http.interrupted = download interrupted: {0}
+pkg.http.status = {0}: HTTP {1}
+pkg.http.cancelled = cancelled
+
+# packages/PackageManager.cpp
+pkg.error.not_zip = not a zip file
+pkg.error.no_manifest_in_package = the package has no plugin.json
+pkg.error.bad_path = invalid path in the package: {0}
+pkg.error.unpack_failed = could not unpack {0}
+pkg.error.not_index = not a package index ({0})
+pkg.resolve.requested = requested
+pkg.error.no_version = no suitable version of {0}: needs {1}
+pkg.error.conflict = {0} conflicts with {1}
+pkg.log.downloading = Downloading {0} {1}
+pkg.error.corrupt = {0}: the package is damaged (size or sha256 mismatch)
+pkg.error.manifest_mismatch = {0}: the package's plugin.json does not match the index
+pkg.error.remove_old_failed = {0}: could not remove the old version, is the server running? ({1})
+pkg.error.install_failed = {0}: could not install ({1})
+pkg.log.installed = Installed {0} {1}
+pkg.log.updated = Updated {0} {1} › {2}
+pkg.error.remove_failed = {0}: could not remove, is the server running? ({1})
+pkg.error.not_installed = {0} is not installed
+pkg.error.move_failed = {0}: could not move, is the server running? ({1})
+pkg.error.no_manifest = no plugin.json
+pkg.error.manifest_no_id = plugin.json has no id or version
+pkg.error.create_failed = could not create {0}
+pkg.error.add_failed = could not add {0}
+
+# packages/ClientPatch.cpp
+patch.mpq.create_failed = could not create {0} ({1})
+patch.mpq.add_failed = could not add {0} ({1})
+patch.mpq.replace_failed = could not replace {0}: the game is probably running
+patch.client.foreign_backed_up = {0}: someone else's {1} saved as .bak
+patch.client.removed = {0}: patch removed, no plugin needs it
+patch.client.table_missing = {0}: {1} not found in the client archives
+patch.client.built = {0}: built {1}
+patch.addon.copy_failed = addon {0} not copied: {1}
+patch.addon.removed = addon {0} removed
+
+# packages/DbcRecipes.cpp ({0} is "plugin, table" or the plugin id)
+patch.recipe.no_file = {0}: file {1} not found
+patch.recipe.no_id = {0}: no id for {1}
+patch.recipe.no_id_placeholder = {0}: no id for {{{{id:{1}}}}}
+patch.recipe.row_no_id = {0}: a row has no "id"
+patch.recipe.row_exists = {0}: row {1} already exists
+patch.recipe.row_missing = {0}: no row {1}
+patch.recipe.copy_missing = {0}: no row {1} to copy
+patch.recipe.field_not_number = {0}: fields are set by number, not "{1}"
+patch.recipe.field_forbidden = {0}: field {1} cannot be set
+
+# packages/PluginPatches.cpp
+patch.plugin.removed = {0}: plugin patches removed
+patch.plugin.no_id_table = {0}: no table {1} to assign ids from
+patch.plugin.no_server_table = {0}: no server table {1}
+patch.plugin.format_mismatch = {0}: the core format does not match the file
+patch.plugin.installed = {0}: patches installed
+patch.plugin.client_error = client: {0}

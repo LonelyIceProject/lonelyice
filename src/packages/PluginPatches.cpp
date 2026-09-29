@@ -5,6 +5,7 @@
 #include "DatabaseEnv.h"
 #include "DbcRecipes.h"
 #include "Field.h"
+#include "Lang.h"
 #include "Plugins.h"
 #include "QueryResult.h"
 #include <algorithm>
@@ -192,7 +193,7 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
     for (std::string const& plugin : gone)
     {
         uninstall(plugin, true);
-        res.log.push_back(plugin + ": патчи плагина удалены");
+        res.log.push_back(Tr("patch.plugin.removed", plugin));
     }
 
     // Stock tables of the server, read once.
@@ -243,7 +244,7 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
                 continue;
             DbcRecipes::Table const* t = stockTable(n.table);
             if (!t)
-                return fail(r.Plugin() + ": нет таблицы " + n.table + " для выдачи id");
+                return fail(Tr("patch.plugin.no_id_table", r.Plugin(), n.table));
             uint32 next = t->MaxKey(n.keyField);
             for (auto const& [q, id] : ids)
                 if (idTable[q] == n.table)
@@ -286,9 +287,9 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
                 continue;       // client-only table
             DbcRecipes::Table const* base = stockTable(table);
             if (!base)
-                return fail(r.Plugin() + ": нет серверной таблицы " + table);
+                return fail(Tr("patch.plugin.no_server_table", r.Plugin(), table));
             if (std::strlen(st->fmt) != base->fields)
-                return fail(table + ": формат ядра не совпадает с файлом");
+                return fail(Tr("patch.plugin.format_mismatch", table));
             DbcRecipes::Table t = *base;
             std::set<uint32_t> touched;
             if (!r.Patch(table, t, ids, "*", &touched, error))
@@ -314,7 +315,7 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
             + hash + "', '" + Escaped(undo) + "')");
         installed[r.Plugin()] = { hash, undo };
         res.changed = true;
-        res.log.push_back(r.Plugin() + ": патчи установлены");
+        res.log.push_back(Tr("patch.plugin.installed", r.Plugin()));
     }
 
     if (!o.clientDir.empty())
@@ -322,7 +323,7 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
         ClientPatch::Result client = ClientPatch::Apply(o.clientDir, recipes, ids);
         res.log.insert(res.log.end(), client.log.begin(), client.log.end());
         if (!client.ok)
-            return fail("клиент: " + client.error);
+            return fail(Tr("patch.plugin.client_error", client.error));
     }
     return res;
 }

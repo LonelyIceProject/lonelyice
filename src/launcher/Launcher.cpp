@@ -3,6 +3,8 @@
 #include "CommandCatalog.h"
 #include "ConfFile.h"
 #include "GameClient.h"
+#include "GitRevision.h"
+#include "Lang.h"
 #include "LauncherSettings.h"
 #include "ServerProcess.h"
 #include "SettingsModel.h"
@@ -19,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <ctime>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -49,7 +52,7 @@ namespace
         std::vector<CmdArgView> args;
         int groupIdx = 0, cmdIdx = 0;
     };
-    struct GroupView { Rml::String id, name; int changed = 0; };
+    struct GroupView { Rml::String id, name; int changed = 0; Rml::String section; };   // section: settings side list heading
     struct FieldView
     {
         Rml::String label, key, type, value, apply, apply_text, hint;
@@ -58,11 +61,60 @@ namespace
         int index = 0;
     };
     struct DataRow { Rml::String title, detail, status, size; };
+    struct NewsView { Rml::String kind, title, text, action, button; };   // kind: info, warn, update
+    struct NavItem { Rml::String id, name, section; int badge = 0; };
     struct PluginView
     {
         Rml::String id, name, version, desc, note, update;   // update: newer version in the index
+        Rml::String icon, letter;                            // icon: absolute path of a PNG; letter: shown without one
         bool installed = false, enabled = false;
     };
+    struct RepoView
+    {
+        Rml::String location, title, kind, note;
+        bool enabled = false, ok = false, failed = false;
+    };
+
+    bool IsRemote(std::string const& location)
+    {
+        return location.rfind("http://", 0) == 0 || location.rfind("https://", 0) == 0;
+    }
+
+    // First character of a UTF-8 string, upper-cased for Latin and Cyrillic.
+    std::string Initial(std::string const& s)
+    {
+        std::wstring w = Utf8ToWide(s);
+        if (w.empty())
+            return "?";
+        wchar_t c[2] = { w[0], 0 };
+        CharUpperW(c);
+        return WideToUtf8(c);
+    }
+
+    std::string UiPath(fs::path const& p)
+    {
+        std::u8string const s = p.generic_u8string();
+        return std::string(s.begin(), s.end());
+    }
+
+    // Short name of a package index: its own name, else the host or the folder.
+    std::string RepoTitle(std::string const& location, std::string const& name)
+    {
+        if (!name.empty())
+            return name;
+        if (location == LauncherSettings::DefaultPackageIndex)
+            return Tr("repo.official");
+        if (IsRemote(location))
+        {
+            std::size_t const start = location.find("://") + 3;
+            return location.substr(start, location.find('/', start) - start);
+        }
+        fs::path p = fs::u8path(location);
+        if (p.filename() == "index.json")
+            p = p.parent_path();
+        std::u8string const s = p.filename().u8string();
+        return s.empty() ? location : std::string(s.begin(), s.end());
+    }
 
     std::string Now(char const* fmt = "%H:%M")
     {
@@ -77,37 +129,38 @@ namespace
     std::string FormatUptime(uint64_t s)
     {
         if (s < 60)
-            return std::to_string(s) + " с";
+            return Tr("time.seconds", s);
         uint64_t m = s / 60, h = m / 60, d = h / 24;
         if (d)
-            return std::to_string(d) + " д " + std::to_string(h % 24) + " ч";
+            return Tr("time.days_hours", d, h % 24);
         if (h)
-            return std::to_string(h) + " ч " + std::to_string(m % 60) + " мин";
-        return std::to_string(m) + " мин";
+            return Tr("time.hours_minutes", h, m % 60);
+        return Tr("time.minutes", m);
     }
 
     std::string FormatBytes(uint64_t b)
     {
         char buf[32];
         if (b >= (1ull << 30))
-            snprintf(buf, sizeof(buf), "%.1f ГБ", double(b) / double(1ull << 30));
-        else if (b >= (1ull << 20))
-            snprintf(buf, sizeof(buf), "%llu МБ", (unsigned long long)(b >> 20));
-        else
-            snprintf(buf, sizeof(buf), "%llu КБ", (unsigned long long)((b + 1023) >> 10));
-        std::string s = buf;
-        std::replace(s.begin(), s.end(), '.', ',');
-        return s;
+        {
+            snprintf(buf, sizeof(buf), "%.1f", double(b) / double(1ull << 30));
+            std::string n = buf;
+            std::replace(n.begin(), n.end(), '.', Tr("unit.decimal").front());
+            return Tr("unit.gb", n);
+        }
+        if (b >= (1ull << 20))
+            return Tr("unit.mb", b >> 20);
+        return Tr("unit.kb", (b + 1023) >> 10);
     }
 
-    // "2026-09-28 19:12:40" -> "сегодня, 19:12" or "28.09.2026"
+    // "2026-09-28 19:12:40" -> "today, 19:12" or the date
     std::string FormatLogin(std::string const& ts)
     {
         if (ts.size() < 16 || ts.rfind("0000", 0) == 0)
             return "—";
         if (ts.substr(0, 10) == Now("%Y-%m-%d"))
-            return "сегодня, " + ts.substr(11, 5);
-        return ts.substr(8, 2) + "." + ts.substr(5, 2) + "." + ts.substr(0, 4);
+            return Tr("time.today_at", ts.substr(11, 5));
+        return Tr("time.date", ts.substr(8, 2), ts.substr(5, 2), ts.substr(0, 4));
     }
 
     struct DirStats
@@ -164,6 +217,13 @@ namespace
         void AddEvent(std::string text);
         void Message(std::string text);
         void OpenTab(std::string const& tab);
+        void OpenPage(std::string const& page, std::string const& section = {});
+        bool LoadDocument();
+        void Relocalize();
+        void RefreshNews();
+        void RefreshFooter();
+        void RefreshBackups();
+        void RefreshAbout();
         void ShowWindow();
         void BeginQuit();
         void SetUiScale(int percent);
@@ -195,9 +255,14 @@ namespace
         void RefreshData();
         void RefreshPlugins();
         void CheckPackageIndex();
+        std::string IndexStatus() const;
         void InstallPackages(std::map<std::string, std::string> const& requests, bool update);
         void PluginAction(std::string const& action, int index);
         bool PluginsLocked();
+        void RefreshRepos();
+        void RepoAction(std::string const& action, int index);
+        void AddRepo(std::string location);
+        void SaveRepos(std::vector<std::string> const& on, std::vector<std::string> const& off);
         void StartBackup(bool scheduled);
         void CheckScheduledBackup();
 
@@ -226,22 +291,31 @@ namespace
         Rml::String _state = "stopped", _stateTitle, _stateSub, _toggleLabel, _uptime = "—", _players = "—", _bots = "—", _diff = "—", _memory = "—";
         Rml::String _authPort = "3724", _worldPort = "8085", _soapPort = "7878", _clientPath, _rlNote, _message, _playLabel, _playSub, _tab = "overview", _shownTab = "overview";
         Rml::String _logsDir;
+        // pages: main (tabs), settings, plugins, service; the footer and the language switch are on every page
+        Rml::String _page = "main", _uiLang = "en", _footStatus;
+        bool _footBusy = false;
+        std::vector<Opt> _langs;
+        std::vector<NewsView> _news;
+        std::deque<std::pair<std::string, std::string>> _logLines;   // text, class: re-added after a language switch
+        Rml::String _svcSection = "data";
+        std::vector<DataRow> _backupRows, _logRows, _aboutRows;
+        Rml::String _backupSum;
         bool _running = false, _authOn = false, _worldOn = false, _soapEnabled = false, _clientOk = false, _playEnabled = true, _closing = false, _backupBusy = false;
         std::vector<LocaleChip> _locales;
         std::vector<EventRow> _events;
         // accounts
         std::vector<AccRow> _accRows;
-        Rml::String _accNote = "Запустите сервер, чтобы увидеть аккаунты.", _accLogin, _accPass, _accLevel = "0";
+        Rml::String _accNote = Tr("acc.start_server"), _accLogin, _accPass, _accLevel = "0";
         bool _accLoaded = false;
         // commands
         std::vector<GroupView> _cmdGroups;
         std::vector<CmdCardView> _cmdCards;
         std::vector<Opt> _cmdChars;
-        Rml::String _cmdGroup = "srv", _cmdQuery, _cmdQueryShown, _cmdTarget, _cmdLast = "Ответ сервера появится во вкладке «Консоль».";
+        Rml::String _cmdGroup = "srv", _cmdQuery, _cmdQueryShown, _cmdTarget, _cmdLast = Tr("cmd.last_hint");
         // settings
         std::vector<GroupView> _setGroups;
         std::vector<FieldView> _setFields;
-        Rml::String _setGroup = "rates", _setHint, _setStatus, _setSaveLabel = "Сохранить";
+        Rml::String _setGroup = "rates", _setHint, _setStatus, _setSaveLabel = Tr("set.save");
         bool _setCanSave = false, _setShowKeys = true;
         int _setPreset = 0;
         // data
@@ -250,7 +324,12 @@ namespace
         // plugins
         std::unique_ptr<Packages::Manager> _packages;
         std::vector<PluginView> _plRows;
-        Rml::String _plStatus = "Список пакетов ещё не загружен.";
+        std::vector<RepoView> _plRepos;
+        Rml::String _plView = "installed", _plRepoNew;     // installed, updates, catalog, repos
+        int _plUpdates = 0;
+        bool _plHasOfficial = true;
+        std::wstring _pickedRepo;
+        Rml::String _plStatus = Tr("pl.status.not_loaded");
         bool _plBusy = false, _plIndexLoaded = false;
         std::thread _plThread;
         std::atomic<bool> _plDone{ false };
@@ -329,6 +408,9 @@ namespace
         _settings.file = _exeDir / "lonelyice.ini";
         _packages = std::make_unique<Packages::Manager>(_exeDir / "plugins");
         _settings.Load();
+        _uiLang = Lang::Code();
+        for (Lang::Info const& l : Lang::Available())
+            _langs.push_back({ l.code, l.name });
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
         _wizard = std::make_unique<Wizard>(Wizard::Host{ _exe, _exeDir, [this] { return Root(); }, [this] { return _server->IsRunning(); },
@@ -347,13 +429,13 @@ namespace
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
-                AddEvent("Установка завершена: " + WideToUtf8(o.root.wstring()));
+                AddEvent(Tr("event.install_done", WideToUtf8(o.root.wstring())));
             },
             [this] { Play(); }, [] { UiBackend::Wake(); } });
 
         if (!UiBackend::Initialize("LonelyIce", 960, 680, _settings.uiScale / 100.f))
         {
-            MessageBoxW(nullptr, L"Не удалось создать окно с OpenGL 3.3.", L"LonelyIce", MB_ICONERROR);
+            MessageBoxW(nullptr, Utf8ToWide(Tr("error.no_opengl")).c_str(), L"LonelyIce", MB_ICONERROR);
             return 1;
         }
         _settings.uiScale = int(UiBackend::GetUiScale() * 100.f + 0.5f);
@@ -368,7 +450,7 @@ namespace
         {
             Rml::Shutdown();
             UiBackend::Shutdown();
-            MessageBoxW(nullptr, L"Не удалось загрузить интерфейс (ui/launcher.rml).", L"LonelyIce", MB_ICONERROR);
+            MessageBoxW(nullptr, Utf8ToWide(Tr("error.no_ui")).c_str(), L"LonelyIce", MB_ICONERROR);
             return 1;
         }
 
@@ -384,12 +466,14 @@ namespace
         {
             std::string stamp = Installer::SqlStamp(_exeDir / "setup");
             if (!stamp.empty() && stamp != _settings.sqlStamp)
-                AddEvent("В setup\\sql.pak новые обновления баз: вкладка «Данные», кнопка «Мастер установки…», пункт «Базы данных».");
+                AddEvent(Tr("event.sql_updates"));
             if (_startHidden && _settings.trayOnClose)
                 UiBackend::HideWindow();
             if (_settings.autoStart)
                 StartServer();
+            CheckPackageIndex();    // news about plugin updates
         }
+        RefreshNews();
 
         for (;;)
         {
@@ -413,7 +497,7 @@ namespace
                 if (_settings.trayOnClose)
                 {
                     UiBackend::HideWindow();
-                    _tray.SetTooltip("LonelyIce — " + _stateTitle + ". Меню: правый клик");
+                    _tray.SetTooltip(Tr("tray.tooltip_hidden", _stateTitle));
                 }
                 else
                     BeginQuit();
@@ -489,9 +573,9 @@ namespace
         for (SetValue& sv : _settingsModel.Values())
             if (sv.def->key == "Launcher.UiScale")
                 sv.orig = sv.cur = std::to_string(percent);
-        if (_tab == "settings")
+        if (_page == "settings")
             BuildSettingsFields();
-        Message("Масштаб интерфейса: " + std::to_string(percent) + " %");
+        Message(Tr("msg.ui_scale", percent));
     }
 
     bool Launcher::SetupUi()
@@ -533,6 +617,17 @@ namespace
         _model = c.GetModelHandle();
         _wizard->SetModel(_model);
 
+        return LoadDocument();
+    }
+
+    // (Re)loads the page markup; static text is translated while it loads (UiBackend: "@{key}").
+    bool Launcher::LoadDocument()
+    {
+        if (_doc)
+        {
+            _doc->Close();
+            _ctx->Update();
+        }
         _doc = _ctx->LoadDocument("ui/launcher.rml");
         if (!_doc)
             return false;
@@ -541,26 +636,59 @@ namespace
         _log = _doc->GetElementById("log");
         if (Rml::Element* input = _doc->GetElementById("cmd"))
             input->AddEventListener(Rml::EventId::Keydown, this);
+        for (auto const& [text, cls] : _logLines)
+        {
+            Rml::ElementPtr p = _doc->CreateElement("p");
+            p->SetInnerRML(EscapeRml(text.empty() ? " " : text));
+            if (!cls.empty())
+                p->SetClass(cls, true);
+            _log->AppendChild(std::move(p));
+        }
         return true;
+    }
+
+    void Launcher::Relocalize()
+    {
+        Lang::Set(_uiLang);
+        _settings.language = _uiLang;
+        _settings.Save();
+        LoadDocument();
+        RefreshTray();
+        RefreshClient();
+        LoadSettingsModel();
+        BuildCommandCards();
+        RefreshPlugins();
+        RefreshRepos();
+        RefreshData();
+        RefreshBackups();
+        RefreshAbout();
+        RefreshNews();
+        _wizard->Relocalize();
+        if (!_plBusy)
+            _plStatus = IndexStatus();
+        if (_server->GetState() != ServerState::Ready)
+            _accNote = Tr("acc.start_server");
+        _cmdLast = Tr("cmd.last_hint");
+        _model.DirtyAllVariables();
     }
 
     void Launcher::SetupTray()
     {
         _tray.Create(_icon, {
             { "status", "LonelyIce", nullptr },
-            { "open", "Открыть LonelyIce", [this] { ShowWindow(); } },
-            { "play", "Играть", [this] { Play(); } },
+            { "open", Tr("tray.open"), [this] { ShowWindow(); } },
+            { "play", Tr("tray.play"), [this] { Play(); } },
             { "", "", nullptr },
-            { "toggle", "Запустить сервер", [this] { ToggleServer(); } },
-            { "restart", "Перезапустить сервер", [this] { RestartServer(); } },
+            { "toggle", Tr("tray.start"), [this] { ToggleServer(); } },
+            { "restart", Tr("tray.restart"), [this] { RestartServer(); } },
             { "", "", nullptr },
-            { "tab-console", "Консоль", [this] { ShowWindow(); OpenTab("console"); } },
-            { "tab-commands", "Команды", [this] { ShowWindow(); OpenTab("commands"); } },
-            { "tab-accounts", "Аккаунты", [this] { ShowWindow(); OpenTab("accounts"); } },
-            { "tab-settings", "Настройки", [this] { ShowWindow(); OpenTab("settings"); } },
-            { "backup", "Резервная копия сейчас", [this] { StartBackup(false); } },
+            { "tab-console", Tr("tab.console"), [this] { ShowWindow(); OpenTab("console"); } },
+            { "tab-commands", Tr("tab.commands"), [this] { ShowWindow(); OpenTab("commands"); } },
+            { "tab-accounts", Tr("tab.accounts"), [this] { ShowWindow(); OpenTab("accounts"); } },
+            { "tab-settings", Tr("page.settings"), [this] { ShowWindow(); OpenPage("settings"); } },
+            { "backup", Tr("tray.backup"), [this] { StartBackup(false); } },
             { "", "", nullptr },
-            { "quit", "Выход", [this] { BeginQuit(); } },
+            { "quit", Tr("tray.quit"), [this] { BeginQuit(); } },
         });
         _tray.SetEnabled("status", false);
     }
@@ -626,6 +754,7 @@ namespace
             s.RegisterMember("id", &GroupView::id);
             s.RegisterMember("name", &GroupView::name);
             s.RegisterMember("changed", &GroupView::changed);
+            s.RegisterMember("section", &GroupView::section);
         }
         c.RegisterArray<std::vector<GroupView>>();
 
@@ -652,10 +781,24 @@ namespace
             s.RegisterMember("desc", &PluginView::desc);
             s.RegisterMember("note", &PluginView::note);
             s.RegisterMember("update", &PluginView::update);
+            s.RegisterMember("icon", &PluginView::icon);
+            s.RegisterMember("letter", &PluginView::letter);
             s.RegisterMember("installed", &PluginView::installed);
             s.RegisterMember("enabled", &PluginView::enabled);
         }
         c.RegisterArray<std::vector<PluginView>>();
+
+        if (auto s = c.RegisterStruct<RepoView>())
+        {
+            s.RegisterMember("location", &RepoView::location);
+            s.RegisterMember("title", &RepoView::title);
+            s.RegisterMember("kind", &RepoView::kind);
+            s.RegisterMember("note", &RepoView::note);
+            s.RegisterMember("enabled", &RepoView::enabled);
+            s.RegisterMember("ok", &RepoView::ok);
+            s.RegisterMember("failed", &RepoView::failed);
+        }
+        c.RegisterArray<std::vector<RepoView>>();
 
         if (auto s = c.RegisterStruct<DataRow>())
         {
@@ -665,6 +808,29 @@ namespace
             s.RegisterMember("size", &DataRow::size);
         }
         c.RegisterArray<std::vector<DataRow>>();
+
+        if (auto s = c.RegisterStruct<NewsView>())
+        {
+            s.RegisterMember("kind", &NewsView::kind);
+            s.RegisterMember("title", &NewsView::title);
+            s.RegisterMember("text", &NewsView::text);
+            s.RegisterMember("action", &NewsView::action);
+            s.RegisterMember("button", &NewsView::button);
+        }
+        c.RegisterArray<std::vector<NewsView>>();
+
+        c.Bind("page", &_page);
+        c.Bind("ui_lang", &_uiLang);
+        c.Bind("langs", &_langs);
+        c.Bind("news", &_news);
+        c.Bind("foot_status", &_footStatus);
+        c.Bind("foot_busy", &_footBusy);
+        c.Bind("svc_section", &_svcSection);
+        c.Bind("backup_rows", &_backupRows);
+        c.Bind("backup_sum", &_backupSum);
+        c.Bind("log_rows", &_logRows);
+        c.Bind("about_rows", &_aboutRows);
+        c.Bind("pl_updates", &_plUpdates);
 
         c.Bind("state", &_state);
         c.Bind("state_title", &_stateTitle);
@@ -715,6 +881,10 @@ namespace
         c.Bind("pl_rows", &_plRows);
         c.Bind("pl_status", &_plStatus);
         c.Bind("pl_busy", &_plBusy);
+        c.Bind("pl_view", &_plView);
+        c.Bind("pl_repos", &_plRepos);
+        c.Bind("pl_repo_new", &_plRepoNew);
+        c.Bind("pl_has_official", &_plHasOfficial);
         c.Bind("set_fields", &_setFields);
         c.Bind("set_group", &_setGroup);
         c.Bind("set_hint", &_setHint);
@@ -748,6 +918,20 @@ namespace
         on("send_command", [this] { SendConsoleCommand(); });
         onArg("run_command", [this](Rml::Variant const& v) { RunCommand(v.Get<Rml::String>()); });
         onArg("open_tab", [this](Rml::Variant const& v) { OpenTab(v.Get<Rml::String>()); });
+        onArg("open_page", [this](Rml::Variant const& v) { OpenPage(v.Get<Rml::String>()); });
+        onArg("news_action", [this](Rml::Variant const& v)
+        {
+            std::string const a = v.Get<Rml::String>();
+            if (a == "wizard")
+                OpenWizard();
+            else if (a == "updates")
+                OpenPage("plugins", "updates");
+            else if (a == "data")
+                OpenPage("service", "data");
+            else if (a == "backups")
+                OpenPage("service", "backups");
+        });
+        onArg("svc_pick", [this](Rml::Variant const& v) { OpenPage("service", v.Get<Rml::String>()); });
         onArg("pick_locale", [this](Rml::Variant const& v)
         {
             _settings.locale = v.Get<Rml::String>();
@@ -757,7 +941,7 @@ namespace
                     sv.orig = sv.cur = _settings.locale;
             BuildSettingsFields();
             RefreshClient();
-            Message("Язык запуска: " + _settings.locale);
+            Message(Tr("msg.launch_locale", _settings.locale));
         });
         on("open_server_dir", [this] { ShellExecuteW(nullptr, L"open", Root().c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
         on("open_logs", [this] { ShellExecuteW(nullptr, L"open", ConfPath("LogsDir", "logs").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
@@ -777,11 +961,11 @@ namespace
             _cmdQuery.clear();
             BuildCommandCards();
             OpenTab("commands");
-            Message("Впишите текст в «Объявление в чат» и нажмите «Выполнить».");
+            Message(Tr("msg.announce_hint"));
         });
 
         on("acc_create", [this] { CreateAccount(); });
-        on("acc_refresh", [this] { if (_server->SendCommand("@@accounts")) _accNote = "Загружаем…"; });
+        on("acc_refresh", [this] { if (_server->SendCommand("@@accounts")) _accNote = Tr("acc.loading"); });
 
         onArg("cmd_group_pick", [this](Rml::Variant const& v)
         {
@@ -795,6 +979,8 @@ namespace
         {
             _setGroup = v.Get<Rml::String>();
             BuildSettingsFields();
+            if (_setGroup == "about")
+                RefreshAbout();
         });
         onArg("set_preset_pick", [this](Rml::Variant const& v)
         {
@@ -810,6 +996,32 @@ namespace
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
         onArg("pl_remove", [this](Rml::Variant const& v) { PluginAction("remove", v.Get<int>()); });
         onArg("pl_install", [this](Rml::Variant const& v) { PluginAction("install", v.Get<int>()); });
+        onArg("pl_view_pick", [this](Rml::Variant const& v)
+        {
+            _plView = v.Get<Rml::String>();
+            RefreshPlugins();
+            RefreshRepos();
+            _model.DirtyVariable("pl_view");
+        });
+        on("pl_repo_add", [this] { AddRepo(_plRepoNew); });
+        on("pl_repo_official", [this] { AddRepo(LauncherSettings::DefaultPackageIndex); });
+        on("pl_repo_browse", [this]
+        {
+            std::string start = UiPath(_exeDir);
+            SDL_ShowOpenFolderDialog([](void* self, char const* const* list, int)
+            {
+                if (!list || !list[0])
+                    return;
+                auto* me = static_cast<Launcher*>(self);
+                {
+                    std::lock_guard<std::mutex> guard(me->_asyncLock);
+                    me->_pickedRepo = Utf8ToWide(list[0]);
+                }
+                UiBackend::Wake();
+            }, this, UiBackend::GetWindow(), start.c_str(), false);
+        });
+        onArg("pl_repo_toggle", [this](Rml::Variant const& v) { RepoAction("toggle", v.Get<int>()); });
+        onArg("pl_repo_remove", [this](Rml::Variant const& v) { RepoAction("remove", v.Get<int>()); });
         on("open_wizard", [this] { OpenWizard(); });
     }
 
@@ -919,16 +1131,16 @@ namespace
                     botChars += a.characters;
                     continue;
                 }
-                _accRows.push_back({ a.name, a.gmLevel ? "GM " + std::to_string(a.gmLevel) : "игрок", std::to_string(a.characters), FormatLogin(a.lastLogin), a.gmLevel > 0 });
+                _accRows.push_back({ a.name, a.gmLevel ? Tr("acc.gm", a.gmLevel) : Tr("acc.player"), std::to_string(a.characters), FormatLogin(a.lastLogin), a.gmLevel > 0 });
             }
             if (botAccounts)
-                _accRows.push_back({ "RNDBOT… (" + std::to_string(botAccounts) + ")", "боты", std::to_string(botChars), "служебные", false });
+                _accRows.push_back({ Tr("acc.bots_row", botAccounts), Tr("acc.bots"), std::to_string(botChars), Tr("acc.service"), false });
             _accLoaded = true;
 
             std::stable_sort(characters.begin(), characters.end(), [](CharacterInfo const& a, CharacterInfo const& b) { return a.online > b.online; });
             _cmdChars.clear();
             for (CharacterInfo const& ch : characters)
-                _cmdChars.push_back({ ch.name, ch.name + " · " + std::to_string(ch.level) + (ch.online ? " · в игре" : "") });
+                _cmdChars.push_back({ ch.name, Tr(ch.online ? "cmd.char_online" : "cmd.char", ch.name, ch.level) });
             if (!_cmdChars.empty() && std::none_of(_cmdChars.begin(), _cmdChars.end(), [&](Opt const& o) { return o.id == _cmdTarget; }))
                 _cmdTarget = _cmdChars.front().id;
             _model.DirtyVariable("acc_rows");
@@ -954,10 +1166,10 @@ namespace
                 _uptime = ready ? FormatUptime(st.uptime) : "—";
                 _players = ready ? std::to_string(st.players) : "—";
                 _bots = ready ? std::to_string(st.chars >= st.players ? st.chars - st.players : 0) : "—";
-                _diff = ready ? std::to_string(st.diff) + " мс" : "—";
+                _diff = ready ? Tr("time.ms", st.diff) : "—";
                 _memory = FormatBytes(_server->GetMemoryBytes());
                 if (now == ServerState::Starting || now == ServerState::Loading)
-                    _stateSub = "идёт загрузка, " + std::to_string((tick - _server->GetStartTick()) / 1000) + " с";
+                    _stateSub = Tr("state.loading_for", (tick - _server->GetStartTick()) / 1000);
             }
             else
                 _uptime = _players = _bots = _diff = _memory = "—";
@@ -968,10 +1180,10 @@ namespace
             {
                 CloseHandle(_game);
                 _game = nullptr;
-                AddEvent("Игра закрыта");
+                AddEvent(Tr("event.game_closed"));
                 if (_settings.stopWithGame && _server->IsRunning())
                 {
-                    AddEvent("Сервер останавливается вместе с игрой");
+                    AddEvent(Tr("event.stop_with_game"));
                     _server->Stop();
                 }
             }
@@ -995,7 +1207,10 @@ namespace
                 AddEvent(line);
             if (!_plError.empty())
                 Message(_plError);
+            Rml::ReleaseTextures();     // icons of updated plugins keep their paths
             RefreshPlugins();
+            RefreshRepos();
+            RefreshNews();
             LoadSettingsModel();
         }
 
@@ -1005,13 +1220,13 @@ namespace
                 _syncThread.join();
             _syncBusy = false;
             for (std::string const& line : _syncResult.log)
-                AddEvent("Клиент: " + line);
+                AddEvent(Tr("event.client_line", line));
             if (_syncResult.ok)
                 LaunchGame();
             else
             {
-                AddEvent("Клиент не подготовлен: " + _syncResult.error);
-                Message("Клиент не подготовлен: " + _syncResult.error);
+                AddEvent(Tr("event.client_failed", _syncResult.error));
+                Message(Tr("event.client_failed", _syncResult.error));
             }
         }
 
@@ -1022,16 +1237,21 @@ namespace
             _backupBusy = false;
             _model.DirtyVariable("backup_busy");
             if (_backupResult.ok)
-                AddEvent("Резервная копия: " + FormatBytes(_backupResult.bytes) + ", backups\\" + WideToUtf8(_backupResult.dir.filename().wstring()));
+                AddEvent(Tr("event.backup_done", FormatBytes(_backupResult.bytes), WideToUtf8(_backupResult.dir.filename().wstring())));
             else
-                AddEvent("Резервная копия не удалась: " + _backupResult.message);
+                AddEvent(Tr("event.backup_failed", _backupResult.message));
+            RefreshBackups();
+            RefreshNews();
         }
 
-        std::wstring picked;
+        std::wstring picked, pickedRepo;
         {
             std::lock_guard<std::mutex> guard(_asyncLock);
             picked.swap(_pickedDir);
+            pickedRepo.swap(_pickedRepo);
         }
+        if (!pickedRepo.empty())
+            AddRepo(WideToUtf8(pickedRepo));
         if (!picked.empty())
         {
             if (GameClient::IsClientDir(picked))
@@ -1040,16 +1260,19 @@ namespace
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
-                Message("Папка игры сохранена.");
+                Message(Tr("msg.client_saved"));
             }
             else
-                Message("В этой папке нет Wow.exe и Data\\common.MPQ.");
+                Message(Tr("msg.not_client_dir"));
         }
 
-        if (_tab == "commands")
+        if (_page == "main" && _tab == "commands")
             SyncCommandCards();
-        else if (_tab == "settings")
+        else if (_page == "settings")
             SyncSettingsFields();
+        if (_uiLang != Lang::Code())
+            Relocalize();
+        RefreshFooter();
     }
 
     void Launcher::OnStateChanged(ServerState prev, ServerState now)
@@ -1057,16 +1280,16 @@ namespace
         switch (now)
         {
             case ServerState::Starting:
-                AddEvent("Запуск сервера");
+                AddEvent(Tr("event.server_starting"));
                 break;
             case ServerState::Ready:
             {
-                AddEvent("Мир готов за " + std::to_string((GetTickCount64() - _server->GetStartTick()) / 1000) + " с, вход открыт");
+                AddEvent(Tr("event.world_ready", (GetTickCount64() - _server->GetStartTick()) / 1000));
                 std::string realm = _server->GetRealmName();
                 if (!_settings.pendingRealmName.empty() && _settings.pendingRealmName != realm)
                 {
                     _server->SendCommand("@@realmname " + _settings.pendingRealmName);
-                    AddEvent("Имя мира изменено на «" + _settings.pendingRealmName + "», виден после перезапуска");
+                    AddEvent(Tr("event.realm_renamed", _settings.pendingRealmName));
                     realm = _settings.pendingRealmName;
                 }
                 _settings.pendingRealmName.clear();
@@ -1083,7 +1306,7 @@ namespace
             }
             case ServerState::Stopped:
                 if (prev != ServerState::Stopped)
-                    AddEvent("Сервер остановлен");
+                    AddEvent(Tr("event.server_stopped"));
                 if (_pendingRestart)
                 {
                     _pendingRestart = false;
@@ -1091,7 +1314,7 @@ namespace
                 }
                 break;
             case ServerState::Failed:
-                AddEvent("Сервер завершился с ошибкой: " + _server->GetFailReason() + ". Подробности во вкладке «Консоль».");
+                AddEvent(Tr("event.server_failed", _server->GetFailReason()));
                 _pendingPlay = _pendingRestart = false;
                 break;
             default:
@@ -1100,7 +1323,7 @@ namespace
         if (now != ServerState::Ready)
         {
             _accLoaded = false;
-            _accNote = "Запустите сервер, чтобы увидеть аккаунты.";
+            _accNote = Tr("acc.start_server");
         }
         RefreshServerView();
         RefreshTray();
@@ -1112,16 +1335,16 @@ namespace
         _running = _server->IsRunning();
         switch (s)
         {
-            case ServerState::Stopped: _state = "stopped"; _stateTitle = "Остановлен"; _stateSub = "нажмите «Запустить» или «Играть»"; break;
-            case ServerState::Starting: _state = "starting"; _stateTitle = "Запуск"; _stateSub = "конфиг и база данных"; break;
-            case ServerState::Loading: _state = "loading"; _stateTitle = "Загрузка"; _stateSub = "загружаем мир"; break;
-            case ServerState::Ready: _state = "ready"; _stateTitle = "Работает"; _stateSub = "вход открыт"; break;
-            case ServerState::Stopping: _state = "stopping"; _stateTitle = "Остановка"; _stateSub = "сохраняем персонажей"; break;
-            case ServerState::Failed: _state = "failed"; _stateTitle = "Ошибка"; _stateSub = _server->GetFailReason(); break;
+            case ServerState::Stopped: _state = "stopped"; _stateTitle = Tr("state.stopped"); _stateSub = Tr("state.stopped.sub"); break;
+            case ServerState::Starting: _state = "starting"; _stateTitle = Tr("state.starting"); _stateSub = Tr("state.starting.sub"); break;
+            case ServerState::Loading: _state = "loading"; _stateTitle = Tr("state.loading"); _stateSub = Tr("state.loading.sub"); break;
+            case ServerState::Ready: _state = "ready"; _stateTitle = Tr("state.ready"); _stateSub = Tr("state.ready.sub"); break;
+            case ServerState::Stopping: _state = "stopping"; _stateTitle = Tr("state.stopping"); _stateSub = Tr("state.stopping.sub"); break;
+            case ServerState::Failed: _state = "failed"; _stateTitle = Tr("state.failed"); _stateSub = _server->GetFailReason(); break;
         }
         _authOn = s == ServerState::Loading || s == ServerState::Ready;
         _worldOn = s == ServerState::Ready;
-        _toggleLabel = _running ? "Остановить" : "Запустить";
+        _toggleLabel = Tr(_running ? "server.stop" : "server.start");
 
         ConfFile conf;
         conf.Load(ServerConfig());
@@ -1132,36 +1355,36 @@ namespace
         _soapEnabled = soap == "1" || soap == "true";
         _logsDir = WideToUtf8(ConfPath("LogsDir", "logs").wstring());
 
-        _playLabel = "ИГРАТЬ";
+        _playLabel = Tr("play.play");
         if (NeedsSetup())
         {
-            _playLabel = "УСТАНОВИТЬ";
-            _playSub = "подготовить данные";
+            _playLabel = Tr("play.install");
+            _playSub = Tr("play.sub.install");
             _playEnabled = true;
         }
         else if (!_clientOk)
         {
-            _playSub = "укажите папку игры";
+            _playSub = Tr("play.sub.no_client");
             _playEnabled = false;
         }
         else if (s == ServerState::Ready)
         {
-            _playSub = "запустить Wow.exe";
+            _playSub = Tr("play.sub.ready");
             _playEnabled = true;
         }
         else if (s == ServerState::Stopping)
         {
-            _playSub = "сервер останавливается";
+            _playSub = Tr("play.sub.stopping");
             _playEnabled = false;
         }
         else if (_pendingPlay)
         {
-            _playSub = "игра откроется, когда мир загрузится";
+            _playSub = Tr("play.sub.pending");
             _playEnabled = false;
         }
         else
         {
-            _playSub = "запустить сервер и игру";
+            _playSub = Tr("play.sub.start");
             _playEnabled = true;
         }
         _model.DirtyAllVariables();
@@ -1169,8 +1392,8 @@ namespace
 
     void Launcher::RefreshTray()
     {
-        _tray.SetLabel("status", "Сервер: " + _stateTitle);
-        _tray.SetLabel("toggle", _running ? "Остановить сервер" : "Запустить сервер");
+        _tray.SetLabel("status", Tr("tray.status", _stateTitle));
+        _tray.SetLabel("toggle", Tr(_running ? "tray.stop" : "tray.start"));
         _tray.SetEnabled("restart", _running);
         _tray.SetEnabled("play", _clientOk && _server->GetState() != ServerState::Stopping);
         _tray.SetTooltip("LonelyIce — " + _stateTitle);
@@ -1192,8 +1415,8 @@ namespace
 
         if (!_client.valid)
         {
-            _clientPath = "Клиент 3.3.5a не найден";
-            _rlNote = "Укажите папку с Wow.exe кнопкой «Обзор…».";
+            _clientPath = Tr("client.not_found");
+            _rlNote = Tr("client.not_found.hint");
         }
         else
         {
@@ -1220,15 +1443,15 @@ namespace
             }
 
             if (_client.version != "3.3.5.12340")
-                _rlNote = "Wow.exe " + (_client.version.empty() ? std::string("неизвестной версии") : _client.version) + ", нужен 3.3.5a (12340).";
+                _rlNote = Tr("client.wrong_version", _client.version.empty() ? Tr("client.unknown_version") : _client.version);
             else if (_client.locales.empty())
-                _rlNote = "В Data\\ не найдено ни одной локали.";
+                _rlNote = Tr("client.no_locales");
             else if (!launchOk)
-                _rlNote = launch + ": чужой адрес" + (_settings.writeRealmlist ? ", лаунчер поправит его при запуске игры." : ".");
+                _rlNote = Tr(_settings.writeRealmlist ? "client.rl_foreign_fix" : "client.rl_foreign", launch);
             else if (foreign)
-                _rlNote = "Выделен язык запуска; ещё в " + std::to_string(foreign) + " чужой адрес.";
+                _rlNote = Tr("client.rl_some_foreign", foreign);
             else
-                _rlNote = "Выделен язык запуска; везде 127.0.0.1.";
+                _rlNote = Tr("client.rl_ok");
         }
         RefreshServerView();
         RefreshTray();
@@ -1245,6 +1468,9 @@ namespace
         if (cls)
             p->SetClass(cls, true);
         _log->AppendChild(std::move(p));
+        _logLines.emplace_back(utf8, cls ? cls : "");
+        if (_logLines.size() > std::size_t(MaxLogLines))
+            _logLines.pop_front();
 
         while (_log->GetNumChildren() > MaxLogLines)
             _log->RemoveChild(_log->GetFirstChild());
@@ -1267,25 +1493,165 @@ namespace
         _model.DirtyVariable("message");
     }
 
+    // A tab of the main page.
     void Launcher::OpenTab(std::string const& tab)
     {
+        _page = "main";
         _tab = tab;
         if (tab == "accounts" || tab == "commands")
         {
             if (_server->GetState() == ServerState::Ready && _server->SendCommand("@@accounts") && !_accLoaded)
-                _accNote = "Загружаем…";
+                _accNote = Tr("acc.loading");
         }
-        if (tab == "settings" && _settingsModel.ChangedCount() == 0)
-            LoadSettingsModel();
-        if (tab == "data")
-            RefreshData();
-        if (tab == "plugins")
+        if (tab == "overview")
+            RefreshNews();
+        _model.DirtyAllVariables();
+    }
+
+    // main, settings, plugins or service; section: the settings group, plugin list or service part to show.
+    void Launcher::OpenPage(std::string const& page, std::string const& section)
+    {
+        if (page == "main")
         {
+            OpenTab(_tab);
+            return;
+        }
+        _page = page;
+        if (page == "settings")
+        {
+            if (_settingsModel.ChangedCount() == 0)
+                LoadSettingsModel();
+            if (!section.empty())
+            {
+                _setGroup = section;
+                BuildSettingsFields();
+            }
+            RefreshAbout();
+        }
+        else if (page == "plugins")
+        {
+            if (!section.empty())
+                _plView = section;
             RefreshPlugins();
+            RefreshRepos();
             if (!_plIndexLoaded && !_plBusy)
                 CheckPackageIndex();
         }
+        else if (page == "service")
+        {
+            if (!section.empty())
+                _svcSection = section;
+            if (_svcSection == "data")
+                RefreshData();
+            else
+                RefreshBackups();
+        }
         _model.DirtyAllVariables();
+    }
+
+    void Launcher::RefreshNews()
+    {
+        _news.clear();
+        if (NeedsSetup())
+            _news.push_back({ "warn", Tr("news.setup"), Tr("news.setup.text"), "wizard", Tr("news.setup.button") });
+        if (_server->GetState() == ServerState::Failed)
+            _news.push_back({ "warn", Tr("news.failed"), _server->GetFailReason(), "", "" });
+        if (_plUpdates > 0)
+            _news.push_back({ "update", Tr("news.updates", _plUpdates), Tr("news.updates.text"), "updates", Tr("news.open") });
+
+        // the newest backup folder
+        std::error_code ec;
+        fs::path newest;
+        fs::file_time_type newestTime{};
+        for (fs::directory_iterator it(Root() / "backups", ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_directory(ec) && it->last_write_time(ec) > newestTime)
+            {
+                newestTime = it->last_write_time(ec);
+                newest = it->path();
+            }
+        if (!newest.empty())
+        {
+            DirStats const s = Scan(newest);
+            _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", WideToUtf8(newest.filename().wstring()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
+        }
+        else if (!NeedsSetup())
+            _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
+        _model.DirtyVariable("news");
+    }
+
+    void Launcher::RefreshFooter()
+    {
+        std::string status;
+        bool busy = true;
+        ServerState const s = _server->GetState();
+        if (_wizard->IsInstalling())
+            status = Tr("foot.installing");
+        else if (_syncBusy)
+            status = Tr("foot.preparing_client");
+        else if (_plBusy)
+            status = _plStatus;
+        else if (_backupBusy)
+            status = Tr("foot.backup");
+        else if (s == ServerState::Starting || s == ServerState::Loading || s == ServerState::Stopping)
+            status = _stateTitle + " · " + _stateSub;
+        else
+        {
+            busy = false;
+            status = s == ServerState::Ready ? Tr("foot.ready", _players, _bots) : _stateTitle + " · " + _stateSub;
+        }
+        if (status != _footStatus || busy != _footBusy)
+        {
+            _footStatus = status;
+            _footBusy = busy;
+            _model.DirtyVariable("foot_status");
+            _model.DirtyVariable("foot_busy");
+        }
+    }
+
+    void Launcher::RefreshBackups()
+    {
+        std::error_code ec;
+        _backupRows.clear();
+        std::vector<fs::path> dirs;
+        for (fs::directory_iterator it(Root() / "backups", ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_directory(ec))
+                dirs.push_back(it->path());
+        std::sort(dirs.rbegin(), dirs.rend());
+        uint64_t total = 0;
+        for (fs::path const& d : dirs)
+        {
+            DirStats const s = Scan(d);
+            total += s.bytes;
+            _backupRows.push_back({ WideToUtf8(d.filename().wstring()), Tr("backup.files", s.files), "ok", FormatBytes(s.bytes) });
+        }
+        _backupSum = _settings.backupTime.empty() ? Tr("backup.sum_manual", dirs.size(), FormatBytes(total))
+            : Tr("backup.sum", dirs.size(), FormatBytes(total), _settings.backupTime, _settings.backupKeep);
+
+        _logRows.clear();
+        std::vector<fs::directory_entry> logs;
+        for (fs::directory_iterator it(ConfPath("LogsDir", "logs"), ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_regular_file(ec))
+                logs.push_back(*it);
+        std::sort(logs.begin(), logs.end(), [](auto const& a, auto const& b) { return a.path().filename() < b.path().filename(); });
+        for (fs::directory_entry const& e : logs)
+            _logRows.push_back({ WideToUtf8(e.path().filename().wstring()), "", "ok", FormatBytes(e.file_size(ec)) });
+        for (char const* v : { "backup_rows", "backup_sum", "log_rows" })
+            _model.DirtyVariable(v);
+    }
+
+    void Launcher::RefreshAbout()
+    {
+        _aboutRows = {
+            { Tr("about.version"), std::string(GitRevision::GetHash()) + " · " + GitRevision::GetDate(), "", "" },
+            { Tr("about.core"), Tr("about.core.text"), "", "" },
+            { Tr("about.license"), Tr("about.license.text"), "", "" },
+            { Tr("about.fonts"), Tr("about.fonts.text"), "", "" },
+            { Tr("about.app_dir"), WideToUtf8(_exeDir.wstring()), "", "" },
+            { Tr("about.data_dir"), WideToUtf8(Root().wstring()), "", "" },
+            { Tr("about.config"), WideToUtf8(ServerConfig().wstring()), "", "" },
+            { Tr("about.plugins_dir"), WideToUtf8((_exeDir / "plugins").wstring()), "", "" },
+        };
+        _model.DirtyVariable("about_rows");
     }
 
     void Launcher::StartServer()
@@ -1294,7 +1660,7 @@ namespace
             return;
         if (_wizard->IsInstalling())
         {
-            Message("Идёт установка, сервер запустится после неё.");
+            Message(Tr("msg.installing"));
             return;
         }
         if (NeedsSetup())
@@ -1305,17 +1671,17 @@ namespace
         fs::path config = ServerConfig();
         if (!fs::exists(config))
         {
-            Message("Не найден конфиг сервера: " + WideToUtf8(config.wstring()));
+            Message(Tr("msg.no_config", WideToUtf8(config.wstring())));
             return;
         }
-        AppendLog("-- запуск: " + WideToUtf8(config.wstring()), "me");
+        AppendLog(Tr("log.starting", WideToUtf8(config.wstring())), "me");
         EnvList env = ModuleConfigOverrides(config, Root());
         env.emplace_back(L"AC_PLUGINS_DIR", (_exeDir / "plugins").wstring());
         // the server builds the plugins' client patches while it starts
         if (_client.valid)
             env.emplace_back(L"LONELYICE_CLIENT", _client.dir.wstring());
         if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(Root().wstring()), env))
-            Message("Не удалось запустить сервер: " + _server->GetFailReason());
+            Message(Tr("msg.start_failed", _server->GetFailReason()));
         RefreshServerView();
         RefreshTray();
     }
@@ -1352,7 +1718,7 @@ namespace
         if (!_client.valid)
         {
             ShowWindow();
-            Message("Сначала укажите папку с клиентом 3.3.5a.");
+            Message(Tr("msg.need_client"));
             return;
         }
 
@@ -1367,7 +1733,7 @@ namespace
 
         if (GameClient::IsRunning(_client.dir))
         {
-            Message("Игра уже запущена.");
+            Message(Tr("msg.game_running"));
             return;
         }
         if (_syncBusy)
@@ -1375,7 +1741,7 @@ namespace
 
         // Plugin addons first (the server built the client patches when it started), off the UI thread.
         _syncBusy = true;
-        Message("Готовлю клиент: аддоны плагинов…");
+        Message(Tr("msg.preparing_client"));
         _syncThread = std::thread([this, client = _client.dir, plugins = ReadPlugins(_exeDir / "plugins")]
         {
             _syncResult = ClientPatch::SyncAddons(client, plugins);
@@ -1400,7 +1766,7 @@ namespace
             if (_game)
                 CloseHandle(_game);
             _game = process;
-            AddEvent("Запущена игра" + (launch.empty() ? std::string() : " (" + launch + ")"));
+            AddEvent(launch.empty() ? Tr("event.game_started") : Tr("event.game_started_locale", launch));
             Message("");
         }
         else
@@ -1419,7 +1785,7 @@ namespace
         if (todo.empty())
         {
             if (!quiet)
-                Message("realmlist уже указывает на этот компьютер.");
+                Message(Tr("msg.realmlist_ok"));
             return;
         }
 
@@ -1468,13 +1834,13 @@ namespace
     {
         if (_server->GetState() != ServerState::Ready)
         {
-            Message("Команды принимаются, когда мир запущен.");
+            Message(Tr("msg.cmd_not_ready"));
             return;
         }
         if (echo)
             AppendLog("AC> " + cmd, "me");
         if (!_server->SendCommand(cmd))
-            Message("Команда не отправлена: сервер не отвечает.");
+            Message(Tr("msg.cmd_not_sent"));
     }
 
     // ---- accounts
@@ -1486,14 +1852,14 @@ namespace
         std::string login = _accLogin, pass = _accPass;
         if (login.empty() || pass.empty() || login.find(' ') != std::string::npos || pass.find(' ') != std::string::npos)
         {
-            Message("Логин и пароль не должны быть пустыми и не должны содержать пробелов.");
+            Message(Tr("msg.acc_invalid"));
             return;
         }
         RunCommand("account create " + login + " " + pass, false);
         AppendLog("AC> account create " + login + " ********", "me");
         if (_accLevel != "0")
             RunCommand("account set gmlevel " + login + " " + _accLevel + " -1");
-        AddEvent("Создан аккаунт " + login + (_accLevel != "0" ? ", GM " + _accLevel : ""));
+        AddEvent(_accLevel != "0" ? Tr("event.acc_created_gm", login, _accLevel) : Tr("event.acc_created", login));
         _accPass.clear();
         _accLogin.clear();
         _model.DirtyVariable("acc_pass");
@@ -1508,7 +1874,7 @@ namespace
         auto const& catalog = CommandCatalog();
         _cmdGroups.clear();
         for (CmdGroup const& g : catalog)
-            _cmdGroups.push_back({ g.id, g.name });
+            _cmdGroups.push_back({ g.id, Tr(g.name) });
 
         std::string q = _cmdQuery;
         std::transform(q.begin(), q.end(), q.begin(), ::tolower);
@@ -1525,23 +1891,23 @@ namespace
                 if (!q.empty())
                 {
                     // ASCII-only lowering: Cyrillic search matches the case typed
-                    std::string hay = d.title + " " + d.desc + " " + d.tmpl;
+                    std::string hay = Tr(d.title) + " " + Tr(d.desc) + " " + d.tmpl;
                     std::transform(hay.begin(), hay.end(), hay.begin(), ::tolower);
                     if (hay.find(q) == std::string::npos)
                         continue;
                 }
                 CmdCardView card;
-                card.title = d.title;
-                card.desc = d.desc;
-                card.group = q.empty() ? "" : g.name;
+                card.title = Tr(d.title);
+                card.desc = d.desc.empty() ? std::string() : Tr(d.desc);
+                card.group = q.empty() ? "" : Tr(g.name);
                 card.danger = d.danger;
                 card.groupIdx = gi;
                 card.cmdIdx = ci;
                 for (CmdArgDef const& a : d.args)
                 {
-                    CmdArgView av{ a.name, std::string(1, a.type), a.def, {} };
+                    CmdArgView av{ a.name, std::string(1, a.type), Tr(a.def), {} };
                     for (auto const& [id, label] : a.options)
-                        av.opts.push_back({ id, label });
+                        av.opts.push_back({ id, Tr(label) });
                     card.args.push_back(av);
                 }
                 _cmdCards.push_back(std::move(card));
@@ -1570,7 +1936,7 @@ namespace
             for (CmdArgView const& a : card.args)
                 values.push_back(a.value);
             std::string preview = BuildCommand(d, values, _cmdTarget);
-            std::string button = card.armed ? "Точно?" : d.danger ? "Выполнить…" : "Выполнить";
+            std::string button = Tr(card.armed ? "cmd.sure" : d.danger ? "cmd.run_danger" : "cmd.run");
             if (preview != card.preview || button != card.button)
             {
                 card.preview = preview;
@@ -1590,7 +1956,7 @@ namespace
         CmdDef const& d = CommandCatalog()[card.groupIdx].cmds[card.cmdIdx];
         if (d.tmpl.find("{p}") != std::string::npos && _cmdTarget.empty())
         {
-            Message("Выберите персонажа.");
+            Message(Tr("msg.pick_character"));
             return;
         }
         if (d.danger && !card.armed)
@@ -1605,7 +1971,7 @@ namespace
             values.push_back(a.value);
         std::string cmd = BuildCommand(d, values, _cmdTarget);
         RunCommand(cmd);
-        _cmdLast = "Отправлено: " + cmd + ". Ответ во вкладке «Консоль».";
+        _cmdLast = Tr("cmd.sent", cmd);
         _model.DirtyVariable("cmd_last");
         SyncCommandCards();
     }
@@ -1619,8 +1985,8 @@ namespace
             locales.push_back(l.name);
         _settingsModel.Load(ServerConfig(), ReadPlugins(_exeDir / "plugins"), _settings, locales);
         for (std::string const& e : _settingsModel.Errors())
-            AddEvent("Настройки плагина не прочитаны: " + e);
-        if (std::none_of(_settingsModel.Groups().begin(), _settingsModel.Groups().end(), [&](SetGroup const& g) { return g.id == _setGroup; }))
+            AddEvent(Tr("event.plugin_settings_bad", e));
+        if (_setGroup != "about" && std::none_of(_settingsModel.Groups().begin(), _settingsModel.Groups().end(), [&](SetGroup const& g) { return g.id == _setGroup; }))
             _setGroup = "rates";
         _setPreset = 0;
         BuildSettingsFields();
@@ -1628,18 +1994,30 @@ namespace
 
     void Launcher::BuildSettingsFields()
     {
-        static std::map<std::string, std::string> const applyText = { { "now", "сразу" }, { "rel", ".reload" }, { "rst", "перезапуск" } };
+        static std::map<std::string, std::string> const applyText = { { "now", "apply.now" }, { "rel", "apply.reload" }, { "rst", "apply.restart" } };
 
+        // Side list: world groups, plugin groups, then the launcher and "about"; a heading on the first of each.
         _setGroups.clear();
-        for (SetGroup const& g : _settingsModel.Groups())
+        for (int pass = 0; pass < 3; ++pass)
         {
-            auto const& vals = _settingsModel.Values();
-            if (std::none_of(vals.begin(), vals.end(), [&](SetValue const& v) { return v.def->group == g.id; }))
-                continue;
-            _setGroups.push_back({ g.id, g.name, _settingsModel.ChangedCount(g.id) });
-            if (g.id == _setGroup)
-                _setHint = g.hint;
+            static char const* const sections[] = { "set.section.world", "set.section.plugins", "set.section.launcher" };
+            bool first = true;
+            for (SetGroup const& g : _settingsModel.Groups())
+            {
+                int const kind = g.id.rfind("plugin:", 0) == 0 ? 1 : g.id == "launch" ? 2 : 0;
+                auto const& vals = _settingsModel.Values();
+                if (kind != pass || std::none_of(vals.begin(), vals.end(), [&](SetValue const& v) { return v.def->group == g.id; }))
+                    continue;
+                _setGroups.push_back({ g.id, Tr(g.name), _settingsModel.ChangedCount(g.id), first ? Tr(sections[pass]) : "" });
+                first = false;
+                if (g.id == _setGroup)
+                    _setHint = Tr(g.hint);
+            }
+            if (pass == 2)
+                _setGroups.push_back({ "about", Tr("about.title"), 0, first ? Tr(sections[pass]) : "" });
         }
+        if (_setGroup == "about")
+            _setHint = Tr("about.hint");
 
         _setFields.clear();
         auto& values = _settingsModel.Values();
@@ -1649,18 +2027,18 @@ namespace
             if (v.def->group != _setGroup)
                 continue;
             FieldView f;
-            f.label = v.def->label;
+            f.label = Tr(v.def->label);
             f.key = v.def->key;
             f.type = std::string(1, v.def->type);
             f.value = v.cur;
             f.on = v.cur == "1";
             f.apply = v.def->apply;
-            f.apply_text = applyText.at(v.def->apply);
-            f.hint = v.def->hint;
+            f.apply_text = Tr(applyText.at(v.def->apply));
+            f.hint = v.def->hint.empty() ? std::string() : Tr(v.def->hint);
             f.changed = _settingsModel.Changed(v);
             f.index = i;
             for (auto const& [id, label] : v.def->options)
-                f.opts.push_back({ id, label });
+                f.opts.push_back({ id, Tr(label) });
             _setFields.push_back(std::move(f));
         }
         RefreshSettingsStatus();
@@ -1699,8 +2077,8 @@ namespace
     {
         int n = _settingsModel.ChangedCount();
         bool restart = _settingsModel.NeedsRestart() && _server->IsRunning();
-        _setStatus = n ? "Изменено: " + std::to_string(n) + (restart ? ", нужен перезапуск" : "") : "Изменений нет";
-        _setSaveLabel = restart ? "Сохранить и перезапустить" : "Сохранить";
+        _setStatus = n ? Tr(restart ? "set.changed_restart" : "set.changed", n) : Tr("set.unchanged");
+        _setSaveLabel = Tr(restart ? "set.save_restart" : "set.save");
         _setCanSave = n > 0;
         for (char const* v : { "set_status", "set_save_label", "set_can_save" })
             _model.DirtyVariable(v);
@@ -1719,22 +2097,22 @@ namespace
             return;
         }
 
-        std::string what = "Настройки сохранены";
+        std::string what = Tr("set.saved");
         if (_server->GetState() == ServerState::Ready)
         {
             if (r.reload && !restartNeeded)
             {
                 RunCommand("reload config");
-                what += ", конфиг перечитан";
+                what = Tr("set.saved_reloaded");
             }
             if (restartNeeded)
             {
                 RestartServer();
-                what += ", сервер перезапускается";
+                what = Tr("set.saved_restarting");
             }
         }
         AddEvent(what);
-        Message(what + ".");
+        Message(what);
         UiBackend::SetUiScale(_ctx, _settings.uiScale / 100.f);
         RefreshClient();
         BuildSettingsFields();
@@ -1749,12 +2127,15 @@ namespace
         if (_plBusy)
             return;     // the plugins thread is changing the index or the folder
         _plRows.clear();
+        std::error_code ec;
         std::map<std::string, Packages::Package const*> newest;
         for (Packages::Package const& p : _packages->Available())
             if (!newest.count(p.id) || Packages::Manager::CompareVersions(p.version, newest[p.id]->version) > 0)
                 newest[p.id] = &p;
 
+        // The side list picks what is shown: installed plugins, those with an update, or the catalog.
         std::set<std::string> installed;
+        _plUpdates = 0;
         for (Packages::Local const& l : _packages->Installed())
         {
             PluginView v;
@@ -1765,27 +2146,46 @@ namespace
             v.installed = true;
             v.enabled = l.enabled;
             if (auto it = newest.find(l.manifest.id); it != newest.end() && Packages::Manager::CompareVersions(it->second->version, l.manifest.version) > 0)
+            {
                 v.update = it->second->version;
+                ++_plUpdates;
+            }
             std::string deps;
             for (auto const& [dep, range] : l.manifest.depends)
                 deps += (deps.empty() ? "" : ", ") + dep + " " + range;
-            v.note = l.manifest.id + (deps.empty() ? "" : " · нужен " + deps) + (l.enabled ? "" : " · выключен");
+            v.note = l.manifest.id;
+            if (!deps.empty())
+                v.note += " · " + Tr("pl.note.needs", deps);
+            if (!l.enabled)
+                v.note += " · " + Tr("pl.note.disabled");
+            if (fs::exists(l.manifest.dir / "icon.png", ec))
+                v.icon = UiPath(l.manifest.dir / "icon.png");
+            v.letter = Initial(v.name);
             installed.insert(l.manifest.id);
-            _plRows.push_back(std::move(v));
+            if (_plView == "installed" || (_plView == "updates" && !v.update.empty()))
+                _plRows.push_back(std::move(v));
         }
         for (auto const& [id, p] : newest)
         {
-            if (installed.count(id))
+            if (installed.count(id) || _plView != "catalog")
                 continue;
             PluginView v;
             v.id = id;
             v.name = p->name;
             v.version = p->version;
             v.desc = p->description;
-            v.note = id + " · можно установить";
+            v.note = id;
+            if (_packages->Sources().size() > 1)
+                for (Packages::Source const& s : _packages->Sources())
+                    if (s.location == p->source)
+                        v.note += " · " + RepoTitle(s.location, s.name);
+            if (fs::exists(_packages->IconFile(*p), ec))
+                v.icon = UiPath(_packages->IconFile(*p));
+            v.letter = Initial(v.name);
             _plRows.push_back(std::move(v));
         }
         _model.DirtyVariable("pl_rows");
+        _model.DirtyVariable("pl_updates");
     }
 
     bool Launcher::PluginsLocked()
@@ -1794,10 +2194,22 @@ namespace
             return true;
         if (_server->IsRunning())
         {
-            Message("Остановите сервер: плагины меняются, пока он выключен.");
+            Message(Tr("msg.plugins_locked"));
             return true;
         }
         return false;
+    }
+
+    // The package list's status line from the last LoadIndex.
+    std::string Launcher::IndexStatus() const
+    {
+        auto const& sources = _packages->Sources();
+        if (sources.empty())
+            return Tr(_settings.packageIndex.empty() ? "pl.status.no_repos" : "pl.status.not_loaded");
+        std::size_t const failed = std::count_if(sources.begin(), sources.end(), [](Packages::Source const& s) { return !s.ok; });
+        if (failed == sources.size())
+            return Tr("pl.status.repos_down");
+        return failed ? Tr("pl.status.loaded_some", _packages->Available().size(), failed) : Tr("pl.status.loaded", _packages->Available().size());
     }
 
     void Launcher::CheckPackageIndex()
@@ -1805,7 +2217,7 @@ namespace
         if (_plBusy)
             return;
         _plBusy = true;
-        _plStatus = "Загружаем список пакетов…";
+        _plStatus = Tr("pl.status.loading");
         _model.DirtyVariable("pl_busy");
         _model.DirtyVariable("pl_status");
         _plThread = std::thread([this, index = _settings.packageIndex]
@@ -1813,16 +2225,16 @@ namespace
             std::string error;
             _plLog.clear();
             _plError.clear();
-            if (_packages->LoadIndex(index, error))
+            bool const ok = _packages->LoadIndex(index, error);
+            for (Packages::Source const& s : _packages->Sources())
+                if (!s.ok)
+                    _plLog.push_back(Tr("event.repo_failed", s.location, s.error));
+            if (ok && !_packages->Sources().empty())
             {
                 _plIndexLoaded = true;
-                _plNewStatus = "Пакетов в каталоге: " + std::to_string(_packages->Available().size()) + ".";
+                _packages->FetchIcons();
             }
-            else
-            {
-                _plNewStatus = "Каталог пакетов недоступен, подробности на вкладке «Обзор».";
-                _plLog.push_back("Каталог пакетов: " + error);
-            }
+            _plNewStatus = IndexStatus();
             _plDone = true;
         });
     }
@@ -1837,11 +2249,11 @@ namespace
         }
         if (plan.steps.empty())
         {
-            Message("Всё уже установлено.");
+            Message(Tr("msg.all_installed"));
             return;
         }
         _plBusy = true;
-        _plStatus = "Устанавливаем…";
+        _plStatus = Tr("pl.status.installing");
         _model.DirtyVariable("pl_busy");
         _model.DirtyVariable("pl_status");
         _plThread = std::thread([this, plan]
@@ -1849,11 +2261,11 @@ namespace
             _plLog.clear();
             _plError.clear();
             std::string error;
-            bool const ok = _packages->Install(plan, error, [this](std::string const& line) { _plLog.push_back("Плагины: " + line); });
+            bool const ok = _packages->Install(plan, error, [this](std::string const& line) { _plLog.push_back(Tr("event.plugins_line", line)); });
             _plError = ok ? "" : error;
             if (!ok)
-                _plLog.push_back("Плагины: " + error);
-            _plNewStatus = ok ? "Готово. Базы и клиент обновятся при запуске сервера." : "Не удалось, подробности на вкладке «Обзор».";
+                _plLog.push_back(Tr("event.plugins_line", error));
+            _plNewStatus = Tr(ok ? "pl.status.done" : "pl.status.failed");
             _plDone = true;
         });
     }
@@ -1866,7 +2278,7 @@ namespace
         {
             if (!_plIndexLoaded)
             {
-                Message("Сначала загрузите список пакетов.");
+                Message(Tr("msg.load_index_first"));
                 return;
             }
             InstallPackages({}, true);
@@ -1893,7 +2305,7 @@ namespace
                 std::string list;
                 for (std::string const& d : deps)
                     list += (list.empty() ? "" : ", ") + d;
-                Message(v.name + " нужен плагинам: " + list + ".");
+                Message(Tr("msg.plugin_needed_by", v.name, list));
                 return;
             }
         }
@@ -1904,11 +2316,118 @@ namespace
             Message(error);
             return;
         }
-        std::string const what = action == "remove" ? "удалён" : v.enabled ? "выключен" : "включён";
-        AddEvent("Плагин " + v.name + " " + what);
-        Message("Плагин " + v.name + " " + what + ". Базы и клиент обновятся при запуске сервера.");
+        char const* const what = action == "remove" ? "event.plugin_removed" : v.enabled ? "event.plugin_disabled" : "event.plugin_enabled";
+        AddEvent(Tr(what, v.name));
+        Message(Tr(what, v.name) + " " + Tr("pl.applies_on_start"));
         RefreshPlugins();
         LoadSettingsModel();
+    }
+
+    void Launcher::RefreshRepos()
+    {
+        if (_plBusy)
+            return;
+        _plRepos.clear();
+        auto add = [&](std::string const& location, bool enabled)
+        {
+            RepoView r;
+            r.location = location;
+            r.enabled = enabled;
+            r.kind = Tr(IsRemote(location) ? "repo.remote" : "repo.local");
+            std::string name;
+            r.note = Tr(enabled ? "repo.not_loaded" : "repo.disabled");
+            if (enabled)
+                for (Packages::Source const& s : _packages->Sources())
+                    if (s.location == location)
+                    {
+                        name = s.name;
+                        r.ok = s.ok;
+                        r.failed = !s.ok;
+                        r.note = s.ok ? Tr("repo.packages", s.packages) : s.error;
+                    }
+            r.title = RepoTitle(location, name);
+            _plRepos.push_back(std::move(r));
+        };
+        std::vector<std::string> const on = Packages::Manager::SplitSources(_settings.packageIndex);
+        std::vector<std::string> const off = Packages::Manager::SplitSources(_settings.packageIndexOff);
+        for (std::string const& l : on)
+            add(l, true);
+        for (std::string const& l : off)
+            add(l, false);
+        _plHasOfficial = std::find(on.begin(), on.end(), LauncherSettings::DefaultPackageIndex) != on.end()
+            || std::find(off.begin(), off.end(), LauncherSettings::DefaultPackageIndex) != off.end();
+        _model.DirtyVariable("pl_repos");
+        _model.DirtyVariable("pl_has_official");
+    }
+
+    void Launcher::SaveRepos(std::vector<std::string> const& on, std::vector<std::string> const& off)
+    {
+        auto join = [](std::vector<std::string> const& list)
+        {
+            std::string s;
+            for (std::string const& l : list)
+                s += (s.empty() ? "" : ";") + l;
+            return s;
+        };
+        _settings.packageIndex = join(on);
+        _settings.packageIndexOff = join(off);
+        _settings.Save();
+        _plIndexLoaded = false;
+        RefreshRepos();
+        CheckPackageIndex();
+    }
+
+    void Launcher::AddRepo(std::string location)
+    {
+        location.erase(0, location.find_first_not_of(" \t\""));
+        location.erase(location.find_last_not_of(" \t\"") + 1);
+        if (location.empty() || _plBusy)
+            return;
+        if (location.find(';') != std::string::npos)
+        {
+            Message(Tr("msg.repo_semicolon"));
+            return;
+        }
+        std::error_code ec;
+        if (!IsRemote(location) && location.rfind("file://", 0) != 0 && !fs::exists(fs::u8path(location), ec))
+        {
+            Message(Tr("msg.repo_missing", location));
+            return;
+        }
+        if (!IsRemote(location) && fs::is_directory(fs::u8path(location), ec) && !fs::exists(fs::u8path(location) / "index.json", ec))
+        {
+            Message(Tr("msg.repo_no_index"));
+            return;
+        }
+        std::vector<std::string> on = Packages::Manager::SplitSources(_settings.packageIndex);
+        std::vector<std::string> off = Packages::Manager::SplitSources(_settings.packageIndexOff);
+        if (std::find(on.begin(), on.end(), location) != on.end())
+        {
+            Message(Tr("msg.repo_exists"));
+            return;
+        }
+        off.erase(std::remove(off.begin(), off.end(), location), off.end());
+        on.push_back(location);
+        _plRepoNew.clear();
+        _model.DirtyVariable("pl_repo_new");
+        AddEvent(Tr("event.repo_added", location));
+        SaveRepos(on, off);
+    }
+
+    void Launcher::RepoAction(std::string const& action, int index)
+    {
+        if (_plBusy || index < 0 || index >= int(_plRepos.size()))
+            return;
+        RepoView const r = _plRepos[index];
+        std::string const loc = r.location;
+        std::vector<std::string> on = Packages::Manager::SplitSources(_settings.packageIndex);
+        std::vector<std::string> off = Packages::Manager::SplitSources(_settings.packageIndexOff);
+        on.erase(std::remove(on.begin(), on.end(), loc), on.end());
+        off.erase(std::remove(off.begin(), off.end(), loc), off.end());
+        if (action == "toggle")
+            (r.enabled ? off : on).push_back(loc);
+        AddEvent(Tr(action == "remove" ? "event.repo_removed" : r.enabled ? "event.repo_disabled" : "event.repo_enabled", loc));
+        SaveRepos(on, off);
     }
 
     void Launcher::RefreshData()
@@ -1917,17 +2436,17 @@ namespace
         uint64_t total = 0;
         std::vector<std::string> missing;
 
-        static std::map<std::string, std::pair<std::string, std::string>> const dbTitle = {
-            { "auth", { "База входа", "аккаунты, права, список миров" } }, { "characters", { "База персонажей", "персонажи, вещи, почта, гильдии" } },
-            { "world", { "База мира", "существа, задания, добыча, предметы" } }, { "playerbots", { "База ботов", "поведение и маршруты ботов" } } };
+        // data.db.<name> / data.db.<name>.detail for the known databases
         for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
         {
             std::error_code ec;
-            std::string title = dbTitle.count(db.name) ? dbTitle.at(db.name).first : db.name;
-            std::string detail = dbTitle.count(db.name) ? dbTitle.at(db.name).second : std::string();
+            std::string const key = "data.db." + db.name;
+            bool const known = Lang::Has(key);
+            std::string title = known ? Tr(key) : db.name;
+            std::string detail = known ? Tr(key + ".detail") : std::string();
             if (db.path.empty())
             {
-                _dataRows.push_back({ title, "внешний сервер базы данных", "ok", "" });
+                _dataRows.push_back({ title, Tr("data.external_db"), "ok", "" });
                 continue;
             }
             bool ok = fs::exists(db.path, ec);
@@ -1935,31 +2454,33 @@ namespace
             total += size;
             if (!ok)
                 missing.push_back(title);
-            _dataRows.push_back({ title, detail, ok ? "ok" : "bad", ok ? FormatBytes(size) : "нет" });
+            _dataRows.push_back({ title, detail, ok ? "ok" : "bad", ok ? FormatBytes(size) : Tr("data.none") });
         }
 
         fs::path data = ConfPath("DataDir", ".");
-        struct Part { char const* dir; char const* title; char const* detail; bool required; };
-        for (Part const& p : { Part{ "dbc", "DBC", "таблицы клиента", true }, Part{ "maps", "Карты", "карты высот и зон", true },
-                 Part{ "Cameras", "Камеры", "ролики и полёты", false }, Part{ "vmaps", "Модели зданий (vmaps)", "линия видимости, пещеры", false },
-                 Part{ "mmaps", "Навигация (mmaps)", "пути для монстров и ботов", false } })
+        struct Part { char const* dir; char const* key; bool required; };
+        for (Part const& p : { Part{ "dbc", "data.dbc", true }, Part{ "maps", "data.maps", true }, Part{ "Cameras", "data.cameras", false },
+                 Part{ "vmaps", "data.vmaps", false }, Part{ "mmaps", "data.mmaps", false } })
         {
             DirStats s = Scan(data / p.dir);
             total += s.bytes;
             bool ok = s.files > 0;
+            std::string const title = Tr(p.key);
             if (!ok)
-                missing.push_back(p.title);
-            _dataRows.push_back({ p.title, std::string(p.detail) + (ok ? ", файлов: " + std::to_string(s.files) : ""),
-                ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : "нет" });
+                missing.push_back(title);
+            std::string const detail = Tr(std::string(p.key) + ".detail");
+            _dataRows.push_back({ title, ok ? Tr("data.detail_files", detail, s.files) : detail,
+                ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : Tr("data.none") });
         }
 
         if (missing.empty())
-            _dataSum = "всё на месте · " + FormatBytes(total);
+            _dataSum = Tr("data.all_present", FormatBytes(total));
         else
         {
-            _dataSum = "не хватает: ";
+            std::string list;
             for (std::size_t i = 0; i < missing.size(); ++i)
-                _dataSum += (i ? ", " : "") + missing[i];
+                list += (i ? ", " : "") + missing[i];
+            _dataSum = Tr("data.missing", list);
         }
         _model.DirtyVariable("data_rows");
         _model.DirtyVariable("data_sum");
@@ -1974,13 +2495,13 @@ namespace
         std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), Root());
         if (std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
         {
-            Message("Резервная копия работает только с базами в файлах.");
+            Message(Tr("msg.backup_files_only"));
             return;
         }
         _backupBusy = true;
         _model.DirtyVariable("backup_busy");
         if (!scheduled)
-            Message("Делаем резервную копию…");
+            Message(Tr("msg.backup_running"));
         if (_backupThread.joinable())
             _backupThread.join();
         _backupThread = std::thread([this, dbs, root = Root() / "backups", keep = _settings.backupKeep]

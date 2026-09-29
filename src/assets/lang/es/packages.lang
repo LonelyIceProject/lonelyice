@@ -1,0 +1,82 @@
+# Paquetes de complementos y parches de cliente: gestor de paquetes, descargas, línea de comandos --pkg, recetas DBC, instalación de parches
+
+# tools/PkgMain.cpp: LonelyIce.exe --pkg
+pkg.cli.error = error: {0}
+pkg.cli.usage = uso: LonelyIce.exe --pkg list | available | install <id>[@<rango>]... | update [<id>...] | remove <id> |\n                         enable <id> | disable <id> | apply -c <worldserver.conf> [--client <carpeta del juego>] |\n                         pack <carpeta del plugin> [<carpeta de salida>]\nopciones: --plugins <carpeta>, --index <direcciones separadas por ;>
+pkg.cli.list_disabled = {0} {1} (deshabilitado)  {2}
+pkg.cli.available_installed = {0} {1} (instalado: {2})  {3}
+pkg.cli.need_folder = indica la carpeta del plugin
+pkg.cli.need_config = indica -c <worldserver.conf>
+pkg.cli.need_id = indica el id del plugin
+pkg.cli.needed_by = {0} lo requieren: {1}
+pkg.cli.removed = {0}: eliminado. Las bases de datos y el cliente se actualizarán en el próximo inicio del servidor.
+pkg.cli.enabled = {0}: habilitado. Las bases de datos y el cliente se actualizarán en el próximo inicio del servidor.
+pkg.cli.disabled = {0}: deshabilitado. Las bases de datos y el cliente se actualizarán en el próximo inicio del servidor.
+pkg.cli.index_error = índice de paquetes: {0}
+pkg.cli.index_skipped = índice omitido {0}: {1}
+pkg.cli.unknown_command = comando desconocido {0}
+pkg.cli.nothing_to_install = Nada que instalar.
+pkg.cli.will_install = Se instalará:
+pkg.cli.done = Hecho. Las bases de datos y el cliente se actualizarán en el próximo inicio del servidor.
+
+# packages/Http.cpp
+pkg.http.no_file = archivo no encontrado: {0}
+pkg.http.bad_url = dirección no válida: {0}
+pkg.http.no_response = sin respuesta de {0} ({1})
+pkg.http.interrupted = descarga interrumpida: {0}
+pkg.http.status = {0}: HTTP {1}
+pkg.http.cancelled = cancelado
+
+# packages/PackageManager.cpp
+pkg.error.not_zip = no es un archivo zip
+pkg.error.no_manifest_in_package = el paquete no tiene plugin.json
+pkg.error.bad_path = ruta no válida en el paquete: {0}
+pkg.error.unpack_failed = no se pudo descomprimir {0}
+pkg.error.not_index = no es un índice de paquetes ({0})
+pkg.resolve.requested = solicitado
+pkg.error.no_version = no hay una versión adecuada de {0}: se necesita {1}
+pkg.error.conflict = {0} entra en conflicto con {1}
+pkg.log.downloading = Descargando {0} {1}
+pkg.error.corrupt = {0}: el paquete está dañado (el tamaño o el sha256 no coinciden)
+pkg.error.manifest_mismatch = {0}: el plugin.json del paquete no coincide con el índice
+pkg.error.remove_old_failed = {0}: no se pudo eliminar la versión anterior, ¿el servidor está en ejecución? ({1})
+pkg.error.install_failed = {0}: no se pudo instalar ({1})
+pkg.log.installed = Instalado {0} {1}
+pkg.log.updated = Actualizado {0} {1} › {2}
+pkg.error.remove_failed = {0}: no se pudo eliminar, ¿el servidor está en ejecución? ({1})
+pkg.error.not_installed = {0} no está instalado
+pkg.error.move_failed = {0}: no se pudo mover, ¿el servidor está en ejecución? ({1})
+pkg.error.no_manifest = no hay plugin.json
+pkg.error.manifest_no_id = plugin.json no tiene id ni version
+pkg.error.create_failed = no se pudo crear {0}
+pkg.error.add_failed = no se pudo añadir {0}
+
+# packages/ClientPatch.cpp
+patch.mpq.create_failed = no se pudo crear {0} ({1})
+patch.mpq.add_failed = no se pudo añadir {0} ({1})
+patch.mpq.replace_failed = no se pudo reemplazar {0}: probablemente el juego está en ejecución
+patch.client.foreign_backed_up = {0}: {1} de otro servidor guardado como .bak
+patch.client.removed = {0}: parche eliminado, ningún plugin lo necesita
+patch.client.table_missing = {0}: {1} no encontrado en los archivos del cliente
+patch.client.built = {0}: {1} generado
+patch.addon.copy_failed = complemento {0} no copiado: {1}
+patch.addon.removed = complemento {0} eliminado
+
+# packages/DbcRecipes.cpp ({0} es "plugin, tabla" o el id del plugin)
+patch.recipe.no_file = {0}: archivo {1} no encontrado
+patch.recipe.no_id = {0}: no hay id para {1}
+patch.recipe.no_id_placeholder = {0}: no hay id para {{{{id:{1}}}}}
+patch.recipe.row_no_id = {0}: una fila no tiene "id"
+patch.recipe.row_exists = {0}: la fila {1} ya existe
+patch.recipe.row_missing = {0}: no existe la fila {1}
+patch.recipe.copy_missing = {0}: no hay fila {1} que copiar
+patch.recipe.field_not_number = {0}: los campos se indican por número, no "{1}"
+patch.recipe.field_forbidden = {0}: el campo {1} no se puede establecer
+
+# packages/PluginPatches.cpp
+patch.plugin.removed = {0}: parches del plugin eliminados
+patch.plugin.no_id_table = {0}: no hay tabla {1} de la que asignar id
+patch.plugin.no_server_table = {0}: no hay tabla de servidor {1}
+patch.plugin.format_mismatch = {0}: el formato del núcleo no coincide con el archivo
+patch.plugin.installed = {0}: parches instalados
+patch.plugin.client_error = cliente: {0}

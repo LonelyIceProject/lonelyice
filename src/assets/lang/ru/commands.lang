@@ -1,0 +1,96 @@
+# Commands page: groups, command titles and descriptions, option labels, default texts
+
+cmd.group.srv = Сервер
+cmd.group.chr = Персонаж
+cmd.group.bots = Боты
+cmd.group.acc = Аккаунты
+cmd.group.world = Мир
+
+cmd.srv.info = Состояние сервера
+cmd.srv.info.desc = Игроки, боты, время работы, задержка
+cmd.srv.saveall = Сохранить всех
+cmd.srv.saveall.desc = Записать всех персонажей в базу
+cmd.srv.announce = Объявление в чат
+cmd.srv.announce.desc = Сообщение всем в чат сервера
+cmd.srv.announce.text = Рестарт через 5 минут
+cmd.srv.notify = Сообщение на экран
+cmd.srv.notify.desc = Крупный текст по центру экрана
+cmd.srv.notify.text = Привет из LonelyIce
+cmd.srv.motd = Сообщение дня
+cmd.srv.motd.desc = Показывается при входе
+cmd.srv.motd.text = Добро пожаловать
+cmd.srv.reload_config = Перечитать конфиг
+cmd.srv.reload_config.desc = Применить настройки с меткой .reload
+cmd.srv.restart = Перезапуск
+cmd.srv.restart.desc = Через заданное число секунд
+cmd.srv.shutdown = Выключение
+cmd.srv.shutdown.desc = Сервер сохранит всех и остановится
+cmd.srv.shutdown_cancel = Отменить выключение
+
+cmd.chr.teleport = Телепорт
+cmd.chr.teleport.desc = Перенести выбранного персонажа
+cmd.chr.level = Уровень
+cmd.chr.level.desc = Установить уровень
+cmd.chr.revive = Воскресить
+cmd.chr.revive.desc = Если застрял призраком
+cmd.chr.unstuck = Вытащить из текстур
+cmd.chr.unstuck.desc = В таверну, на кладбище или в стартовую зону
+cmd.chr.send_money = Деньги почтой
+cmd.chr.send_money.desc = Сумма в золоте
+cmd.chr.send_items = Предмет почтой
+cmd.chr.send_items.desc = ID предмета и количество
+cmd.chr.reset_talents = Сбросить таланты
+cmd.chr.next_login = При следующем входе
+cmd.chr.next_login.desc = Смена внешности, имени, фракции или расы
+cmd.chr.pinfo = Сведения
+cmd.chr.pinfo.desc = Аккаунт, время в игре, деньги
+cmd.chr.kick = Выгнать из игры
+
+cmd.loc.dalaran = Даларан
+cmd.loc.stormwind = Штормград
+cmd.loc.orgrimmar = Оргриммар
+cmd.loc.ironforge = Стальгорн
+cmd.loc.undercity = Подгород
+cmd.loc.shattrath = Шаттрат
+
+cmd.opt.unstuck.inn = таверна
+cmd.opt.unstuck.graveyard = кладбище
+cmd.opt.unstuck.startzone = стартовая зона
+
+cmd.opt.next_login.customize = внешность
+cmd.opt.next_login.rename = имя
+cmd.opt.next_login.changefaction = фракция
+cmd.opt.next_login.changerace = раса
+
+cmd.bots.stats = Статистика ботов
+cmd.bots.stats.desc = Сколько в мире, по уровням и занятиям
+cmd.bots.reload = Перечитать настройки ботов
+cmd.bots.reload.desc = playerbots.conf без перезапуска
+cmd.bots.update = Обновить ботов
+cmd.bots.update.desc = Внеочередной цикл обновления
+cmd.bots.reset = Сбросить всех ботов
+cmd.bots.reset.desc = Удаляет и пересоздаёт случайных ботов
+
+cmd.acc.create = Создать аккаунт
+cmd.acc.gmlevel = Уровень доступа
+cmd.acc.gmlevel.desc = 0 — игрок, 3 — администратор
+cmd.acc.password = Сменить пароль
+cmd.acc.ban = Заблокировать
+cmd.acc.ban.desc = Срок: 1d, 2h, -1 навсегда
+cmd.acc.ban.reason = —
+cmd.acc.unban = Разблокировать
+
+cmd.world.events = Активные события
+cmd.world.events.desc = Праздники и игровые события
+cmd.world.event_start = Запустить событие
+cmd.world.event_start.desc = ID из game_event
+cmd.world.event_stop = Остановить событие
+cmd.world.instances = Статистика подземелий
+cmd.world.instances.desc = Загруженные копии и привязки
+cmd.world.reload_all = Перечитать таблицы мира
+cmd.world.reload_all.desc = После ручных правок базы мира
+
+# Mail subject of the money and item commands
+cmd.mail.subject = Подарок
+# Shown in the command preview while no character is selected
+cmd.no_character = <персонаж>

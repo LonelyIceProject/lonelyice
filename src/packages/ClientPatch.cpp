@@ -1,5 +1,6 @@
 #include "ClientPatch.h"
 #include "CryptoHash.h"
+#include "Lang.h"
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -110,7 +111,7 @@ namespace
         if (!SFileCreateArchive(tmp.c_str(), MPQ_CREATE_LISTFILE | MPQ_CREATE_ATTRIBUTES | MPQ_CREATE_ARCHIVE_V1,
                 DWORD(std::max<std::size_t>(64, files.size() * 2)), &h))
         {
-            error = "не удалось создать " + tmp.string() + " (" + std::to_string(GetLastError()) + ")";
+            error = Tr("patch.mpq.create_failed", tmp.string(), GetLastError());
             return false;
         }
         bool ok = true;
@@ -120,7 +121,7 @@ namespace
             if (!SFileCreateFile(h, name.c_str(), 0, DWORD(data.size()), 0, MPQ_FILE_COMPRESS | MPQ_FILE_REPLACEEXISTING, &f)
                 || !SFileWriteFile(f, data.data(), DWORD(data.size()), MPQ_COMPRESSION_ZLIB) || !SFileFinishFile(f))
             {
-                error = "не удалось добавить " + name + " (" + std::to_string(GetLastError()) + ")";
+                error = Tr("patch.mpq.add_failed", name, GetLastError());
                 ok = false;
                 break;
             }
@@ -131,7 +132,7 @@ namespace
             fs::rename(tmp, path, ec);
             if (ec)
             {
-                error = "не удалось заменить " + path.filename().string() + ": вероятно, игра запущена";
+                error = Tr("patch.mpq.replace_failed", path.filename().string());
                 ok = false;
             }
         }
@@ -232,7 +233,7 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
             if (!fs::exists(bak, ec))
             {
                 fs::rename(target, bak, ec);
-                res.log.push_back(locale + ": чужой " + ArchiveName(locale) + " сохранён как .bak");
+                res.log.push_back(Tr("patch.client.foreign_backed_up", locale, ArchiveName(locale)));
             }
             else
                 fs::remove(target, ec);
@@ -245,7 +246,7 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
             {
                 fs::remove(target, ec);
                 res.changed = true;
-                res.log.push_back(locale + ": патч удалён, плагинам он не нужен");
+                res.log.push_back(Tr("patch.client.removed", locale));
             }
             continue;
         }
@@ -276,7 +277,7 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
             if (!raw || !t.Parse(*raw))
             {
                 res.ok = false;
-                res.error = locale + ": " + table + " не найден в архивах клиента";
+                res.error = Tr("patch.client.table_missing", locale, table);
                 return res;
             }
             for (Recipe const& r : recipes)
@@ -303,7 +304,7 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
             return res;
         }
         res.changed = true;
-        res.log.push_back(locale + ": собран " + ArchiveName(locale));
+        res.log.push_back(Tr("patch.client.built", locale, ArchiveName(locale)));
     }
     return res;
 }
@@ -327,7 +328,7 @@ ClientPatch::Result ClientPatch::SyncAddons(fs::path const& clientDir, std::vect
             if (ec)
             {
                 res.ok = false;
-                res.error = "аддон " + name + " не скопирован: " + ec.message();
+                res.error = Tr("patch.addon.copy_failed", name, ec.message());
                 return res;
             }
             installed.push_back(name);
@@ -341,7 +342,7 @@ ClientPatch::Result ClientPatch::SyncAddons(fs::path const& clientDir, std::vect
             {
                 fs::remove_all(addons / fs::u8path(line), ec);
                 res.changed = true;
-                res.log.push_back("аддон " + line + " удалён");
+                res.log.push_back(Tr("patch.addon.removed", line));
             }
     }
     if (installed.empty())

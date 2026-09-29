@@ -1,0 +1,367 @@
+# Окно лаунчера: страницы, вкладки, сообщения (Launcher.cpp, launcher.rml)
+
+lang.self = Русский
+
+# страницы и навигация
+page.settings = Настройки
+page.plugins = Плагины
+page.service = Обслуживание
+tab.overview = Обзор
+tab.console = Консоль
+tab.commands = Команды
+tab.accounts = Аккаунты
+
+# общие слова
+ui.back = ‹ Главная
+ui.back_step = Назад
+ui.subtitle = одиночный сервер · 3.3.5a
+ui.server = Сервер
+ui.game = Папка игры
+ui.svc.auth = Вход (auth)
+ui.svc.world = Мир (world)
+ui.kv.uptime = Время работы
+ui.kv.players = Игроки онлайн
+ui.kv.bots = Боты в мире
+ui.kv.memory = Память
+ui.kv.diff = Задержка мира
+ui.restart = Перезапуск
+ui.browse = Обзор…
+ui.fix_realmlist = Прописать realmlist
+ui.news = Новости
+ui.events = События
+ui.today = сегодня
+ui.no_events = Пока ничего не произошло.
+ui.run = Выполнить
+ui.search = Поиск
+ui.nothing_found = Ничего не найдено.
+ui.refresh = Обновить
+ui.add = Добавить
+ui.folder = Папка…
+ui.open_folder = Открыть папку
+ui.enable = Включить
+ui.disable = Выключить
+ui.remove = Удалить
+ui.credit = LonelyIce на базе AzerothCore · GPL-2.0
+ui.closing = Остановка сервера
+ui.closing.text = Сохраняем персонажей и выключаем мир. Закройте окно ещё раз, чтобы остановить сервер немедленно.
+
+# быстрые действия
+act.backup = Резервная копия
+act.backup.sub = аккаунты и персонажи в backups
+act.saveall = Сохранить всех
+act.announce = Объявление
+act.announce.sub = сообщение в чат сервера
+act.folder = Папка сервера
+act.folder.sub = конфиги, базы, журналы
+
+# состояние сервера
+state.stopped = Остановлен
+state.stopped.sub = нажмите «Запустить» или «Играть»
+state.starting = Запуск
+state.starting.sub = конфиг и база данных
+state.loading = Загрузка
+state.loading.sub = загружаем мир
+state.loading_for = идёт загрузка, {0} с
+state.ready = Работает
+state.ready.sub = вход открыт
+state.stopping = Остановка
+state.stopping.sub = сохраняем персонажей
+state.failed = Ошибка
+server.start = Запустить
+server.stop = Остановить
+
+# кнопка «Играть»
+play.play = ИГРАТЬ
+play.install = УСТАНОВИТЬ
+play.sub.install = подготовить данные
+play.sub.no_client = укажите папку игры
+play.sub.ready = запустить Wow.exe
+play.sub.stopping = сервер останавливается
+play.sub.pending = игра откроется, когда мир загрузится
+play.sub.start = запустить сервер и игру
+
+# подвал
+foot.installing = Идёт установка…
+foot.preparing_client = Готовлю клиент: аддоны плагинов…
+foot.backup = Делаем резервную копию…
+foot.ready = Мир открыт · игроков: {0} · ботов: {1}
+
+# время и единицы
+time.seconds = {0} с
+time.minutes = {0} мин
+time.hours_minutes = {0} ч {1} мин
+time.days_hours = {0} д {1} ч
+time.ms = {0} мс
+time.today_at = сегодня, {0}
+time.date = {0}.{1}.{2}
+unit.kb = {0} КБ
+
+# клиент игры
+client.not_found = Клиент 3.3.5a не найден
+client.not_found.hint = Укажите папку с Wow.exe кнопкой «Обзор…».
+client.wrong_version = Wow.exe {0}, нужен 3.3.5a (12340).
+client.unknown_version = неизвестной версии
+client.no_locales = В Data\ не найдено ни одной локали.
+client.rl_foreign = {0}: чужой адрес.
+client.rl_foreign_fix = {0}: чужой адрес, лаунчер поправит его при запуске игры.
+client.rl_some_foreign = Выделен язык запуска; чужой адрес в других локалях: {0}.
+client.rl_ok = Выделен язык запуска; везде 127.0.0.1.
+
+# новости на обзоре
+news.setup = Данные сервера ещё не подготовлены
+news.setup.text = Мастер соберёт базы и извлечёт карты из вашего клиента игры.
+news.setup.button = Открыть мастер
+news.failed = Сервер завершился с ошибкой
+news.updates = Доступны обновления плагинов: {0}
+news.updates.text = Они ставятся, пока сервер остановлен.
+news.backup = Последняя резервная копия
+news.backup.text = {0} · {1}
+news.no_backup = Резервных копий пока нет
+news.no_backup.text = Сделайте копию сейчас или задайте время в Настройки › Лаунчер.
+news.open = Открыть
+
+# события
+event.install_done = Установка завершена: {0}
+event.sql_updates = В setup\sql.pak новые обновления баз: Обслуживание › Мастер установки › Базы данных.
+event.game_closed = Игра закрыта
+event.stop_with_game = Сервер останавливается вместе с игрой
+event.client_line = Клиент: {0}
+event.client_failed = Клиент не подготовлен: {0}
+event.backup_done = Резервная копия: {0}, backups\{1}
+event.backup_failed = Резервная копия не удалась: {0}
+event.server_starting = Запуск сервера
+event.world_ready = Мир готов за {0} с, вход открыт
+event.realm_renamed = Имя мира изменено на «{0}», видно после перезапуска
+event.server_stopped = Сервер остановлен
+event.server_failed = Сервер завершился с ошибкой: {0}. Подробности во вкладке «Консоль».
+event.game_started = Запущена игра
+event.game_started_locale = Запущена игра ({0})
+event.acc_created = Создан аккаунт {0}
+event.acc_created_gm = Создан аккаунт {0}, GM {1}
+event.plugin_settings_bad = Настройки плагина не прочитаны: {0}
+event.plugins_line = Плагины: {0}
+event.plugin_removed = Плагин {0} удалён.
+event.plugin_disabled = Плагин {0} выключен.
+event.plugin_enabled = Плагин {0} включён.
+event.repo_added = Каталог пакетов подключён: {0}
+event.repo_removed = Каталог пакетов удалён: {0}
+event.repo_disabled = Каталог пакетов выключен: {0}
+event.repo_enabled = Каталог пакетов включён: {0}
+event.repo_failed = Каталог {0}: {1}
+
+# сообщения
+msg.ui_scale = Масштаб интерфейса: {0} %
+msg.launch_locale = Язык запуска: {0}
+msg.announce_hint = Впишите текст в «Объявление в чат» и нажмите «Выполнить».
+msg.client_saved = Папка игры сохранена.
+msg.not_client_dir = В этой папке нет Wow.exe и Data\common.MPQ.
+msg.installing = Идёт установка, сервер запустится после неё.
+msg.no_config = Не найден конфиг сервера: {0}
+msg.start_failed = Не удалось запустить сервер: {0}
+msg.need_client = Сначала укажите папку с клиентом 3.3.5a.
+msg.game_running = Игра уже запущена.
+msg.preparing_client = Готовлю клиент: аддоны плагинов…
+msg.realmlist_ok = realmlist уже указывает на этот компьютер.
+msg.cmd_not_ready = Команды принимаются, когда мир запущен.
+msg.cmd_not_sent = Команда не отправлена: сервер не отвечает.
+msg.acc_invalid = Логин и пароль не должны быть пустыми и не должны содержать пробелов.
+msg.pick_character = Выберите персонажа.
+msg.plugins_locked = Остановите сервер: плагины меняются, пока он выключен.
+msg.all_installed = Всё уже установлено.
+msg.load_index_first = Сначала загрузите список пакетов.
+msg.plugin_needed_by = {0} нужен плагинам: {1}.
+msg.repo_semicolon = Адрес каталога не может содержать «;».
+msg.repo_missing = Нет такого файла или папки: {0}
+msg.repo_no_index = В папке нет index.json. Соберите его командой LonelyIce.exe --pkg pack.
+msg.repo_exists = Этот каталог уже подключён.
+msg.backup_files_only = Резервная копия работает только с базами в файлах.
+msg.backup_running = Делаем резервную копию…
+log.starting = -- запуск: {0}
+
+# аккаунты
+acc.start_server = Запустите сервер, чтобы увидеть аккаунты.
+acc.loading = Загружаем…
+acc.player = игрок
+acc.gm = GM {0}
+acc.bots = боты
+acc.bots_row = RNDBOT… ({0})
+acc.service = служебные
+acc.login = Логин
+acc.password = Пароль
+acc.level = Уровень
+acc.chars = Персонажи
+acc.last_login = Последний вход
+acc.new = Новый аккаунт
+acc.create = Создать
+
+# вкладка команд
+cmd.character = Персонаж
+cmd.char = {0} · {1}
+cmd.char_online = {0} · {1} · в игре
+cmd.last_hint = Ответ сервера появится во вкладке «Консоль».
+cmd.run = Выполнить
+cmd.run_danger = Выполнить…
+cmd.sure = Точно?
+cmd.sent = Отправлено: {0}. Ответ во вкладке «Консоль».
+
+# страница настроек
+set.section.world = Сервер
+set.section.plugins = Плагины
+set.section.launcher = Лаунчер
+set.preset = Пресет
+set.preset.x1 = Классика ×1
+set.preset.x2 = Быстрее ×2
+set.preset.x5 = Казуал ×5
+set.show_keys = ключи конфига
+set.save = Сохранить
+set.save_restart = Сохранить и перезапустить
+set.changed = Изменено: {0}
+set.changed_restart = Изменено: {0}, нужен перезапуск
+set.unchanged = Изменений нет
+set.saved = Настройки сохранены.
+set.saved_reloaded = Настройки сохранены, конфиг перечитан.
+set.saved_restarting = Настройки сохранены, сервер перезапускается.
+apply.now = сразу
+apply.reload = .reload
+apply.restart = перезапуск
+
+# о программе (группа настроек)
+about.title = О программе
+about.hint = Одиночный сервер World of Warcraft 3.3.5a с лаунчером.
+about.version = Версия
+about.core = Ядро сервера
+about.core.text = AzerothCore с модулем playerbots
+about.license = Лицензия
+about.license.text = GNU GPL 2.0 или новее; у плагинов свои лицензии.
+about.fonts = Шрифты
+about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
+about.app_dir = Папка программы
+about.data_dir = Данные сервера
+about.config = Конфиг сервера
+about.plugins_dir = Папка плагинов
+
+# страница плагинов
+pl.show = Показать
+pl.view.installed = Установленные
+pl.view.updates = Обновления
+pl.view.catalog = Каталог
+pl.repos = Каталоги пакетов
+pl.manage_repos = Каталоги…
+pl.back_to_list = К списку
+pl.install = Установить
+pl.update = Обновить
+pl.check = Проверить обновления
+pl.update_all = Обновить все
+pl.empty.installed = Плагинов не установлено.
+pl.empty.updates = Всё обновлено.
+pl.empty.catalog = В каталогах нет ничего нового для этой версии.
+pl.note.needs = нужен {0}
+pl.note.disabled = выключен
+pl.applies_on_start = Базы и клиент обновятся при запуске сервера.
+pl.repos.empty = Каталогов нет: плагины можно ставить только вручную.
+pl.repos.add = Добавить каталог
+pl.repos.help = Удалённый каталог — адрес index.json (https://…). Локальный — папка с index.json или сам файл; его собирает LonelyIce.exe --pkg pack.
+pl.repos.official = Вернуть каталог LonelyIce
+pl.status.not_loaded = Список пакетов ещё не загружен.
+pl.status.loading = Загружаем список пакетов…
+pl.status.no_repos = Нет подключённых каталогов, добавьте их в «Каталоги…».
+pl.status.loaded = Пакетов в каталогах: {0}.
+pl.status.loaded_some = Пакетов в каталогах: {0}, недоступно каталогов: {1}.
+pl.status.repos_down = Каталоги недоступны, подробности в «Каталоги…».
+pl.status.installing = Устанавливаем…
+pl.status.done = Готово. Базы и клиент обновятся при запуске сервера.
+pl.status.failed = Не удалось, подробности на вкладке «Обзор».
+repo.official = Каталог LonelyIce
+repo.remote = удалённый
+repo.local = локальный
+repo.not_loaded = не загружен
+repo.disabled = выключен
+repo.packages = пакетов: {0}
+
+# страница обслуживания
+svc.data = Данные сервера
+svc.backups = Резервные копии
+svc.logs = Журналы
+svc.data.note = Мастер соберёт базы из SQL и карты из клиента игры.
+svc.wizard = Мастер установки…
+svc.check = Проверить файлы
+svc.backups.empty = Резервных копий пока нет.
+svc.backups.note = Аккаунты, персонажи и боты; копии сверх лимита удаляются.
+svc.backup_now = Сделать копию
+svc.logs.empty = Журналов пока нет.
+svc.logs.note = Журналы сервера; живой журнал во вкладке «Консоль».
+backup.files = файлов: {0}
+backup.sum = копий: {0} · {1} · ежедневно в {2}, хранить {3}
+backup.sum_manual = копий: {0} · {1} · без расписания
+data.db.auth = База входа
+data.db.auth.detail = аккаунты, права, список миров
+data.db.characters = База персонажей
+data.db.characters.detail = персонажи, вещи, почта, гильдии
+data.db.world = База мира
+data.db.world.detail = существа, задания, добыча, предметы
+data.db.playerbots = База ботов
+data.db.playerbots.detail = поведение и маршруты ботов
+data.external_db = внешний сервер базы данных
+data.none = нет
+data.dbc = DBC
+data.dbc.detail = таблицы клиента
+data.maps = Карты
+data.maps.detail = карты высот и зон
+data.cameras = Камеры
+data.cameras.detail = ролики и полёты
+data.vmaps = Модели зданий (vmaps)
+data.vmaps.detail = линия видимости, пещеры
+data.mmaps = Навигация (mmaps)
+data.mmaps.detail = пути для монстров и ботов
+data.detail_files = {0}, файлов: {1}
+data.all_present = всё на месте · {0}
+data.missing = не хватает: {0}
+
+# трей
+tray.open = Открыть LonelyIce
+tray.play = Играть
+tray.start = Запустить сервер
+tray.stop = Остановить сервер
+tray.restart = Перезапустить сервер
+tray.backup = Резервная копия сейчас
+tray.quit = Выход
+tray.status = Сервер: {0}
+tray.tooltip_hidden = LonelyIce — {0}. Меню: правый клик
+
+# ошибки до появления окна
+error.no_opengl = Не удалось создать окно с OpenGL 3.3.
+error.no_ui = Не удалось загрузить интерфейс (ui/launcher.rml).
+
+# мастер установки: текст разметки
+wz.title = Подготовка LonelyIce
+wz.client = Клиент игры
+wz.client.order = Порядок поиска: сохранённая папка, папка LonelyIce.exe и её родитель, папки рядом, путь из реестра.
+wz.client.browse = Выбрать другую папку…
+wz.place = Где хранить данные сервера
+wz.place.browse = Выбрать папку…
+wz.place.note = Внутри: configs — настройки, db — базы, data — dbc, maps, vmaps, mmaps, logs — журналы, backups — копии.
+wz.comps = Что подготовить
+wz.threads = Потоков для навигации
+wz.world = Мир и ваш аккаунт
+wz.realm_name = Имя мира
+wz.rates = Множители
+wz.bots = Случайных ботов
+wz.bots.0 = 0 — пустой мир
+wz.bots.100 = 100 — тихо
+wz.bots.500 = 500 — живой мир
+wz.bots.1000 = 1000 — мощный ПК
+wz.rights = Права
+wz.rights.admin = Администратор (GM 3)
+wz.world.note = Аккаунт создаётся в новой базе. Всё остальное можно поменять позже в «Настройках».
+wz.prep = Подготовка клиента
+wz.prep.rl = Прописать realmlist 127.0.0.1
+wz.prep.rl.desc = Старый realmlist.wtf сохранится как realmlist.wtf.bak
+wz.prep.wdb = Очистить кэш клиента
+wz.prep.wdb.desc = Кэш от другого сервера показывает неверные предметы и задания
+wz.prep.accname = Подставить логин в окно входа
+wz.prep.lnk = Ярлык на рабочем столе
+wz.prep.lnk.desc = Запускает LonelyIce, а он — сервер и игру
+wz.install = Установка
+wz.install.note = Можно свернуть окно: установка идёт в фоне с пониженным приоритетом.
+wz.done = Всё готово
+wz.done.note = Нажмите «Играть»: LonelyIce запустит сервер и откроет игру. Первый запуск мира занимает около минуты.
