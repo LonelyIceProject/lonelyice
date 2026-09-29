@@ -108,8 +108,7 @@ prefix:
 "storage": {
   "id": "mysql",
   "name": { "en": "MySQL server", "ru": "Сервер MySQL" },
-  "port": 3306,
-  "config": { "MySQLExecutable": "{bin}/mysql{exe}" }
+  "port": 3306
 }
 ```
 
@@ -118,7 +117,7 @@ prefix:
 | `id` | The backend's connection string scheme. Every database is passed as `<id>:host;port;user;password;<prefix><name>` (`auth`, `characters`, `world`, `playerbots`). |
 | `name` | Localized name of the storage. |
 | `port` | Default port. |
-| `config` | Config values the server needs with this storage, passed as `AC_*` overrides. `{bin}` is the plugin's `server/<platform>` folder, `{exe}` is `.exe` on Windows and empty elsewhere. |
+| `config` | Optional config values the server needs with this storage, passed as `AC_*` overrides. `{bin}` is the plugin's `server/<platform>` folder, `{exe}` is `.exe` on Windows and empty elsewhere (e.g. `"MySQLExecutable": "{bin}/mysql{exe}"` for a backend registered with `externalScripts`). |
 
 The launcher checks a storage by running the core against it (`LonelyIce --server --storage-check`), so the
 backend has to be registered while the scripts load (see 3).
