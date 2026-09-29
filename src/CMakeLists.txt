@@ -102,6 +102,8 @@ target_include_directories(lonelyice PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/server"
   "${CMAKE_CURRENT_SOURCE_DIR}/launcher"
   "${CMAKE_CURRENT_SOURCE_DIR}/packages"
+  "${CMAKE_CURRENT_SOURCE_DIR}/storage"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tools"
   "${AUTH_APP_DIR}/Server"
   "${AUTH_APP_DIR}/Authentication"
   "${WORLD_APP_DIR}/ACSoap"

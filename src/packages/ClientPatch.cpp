@@ -1,4 +1,5 @@
 #include "ClientPatch.h"
+#include "ClientArchives.h"
 #include "CryptoHash.h"
 #include "GameClient.h"
 #include "Lang.h"
@@ -8,10 +9,8 @@
 #include <fstream>
 #include <memory>
 #include <optional>
-#include <type_traits>
 
-// StormLib takes archive paths as TCHAR: wchar_t on Windows (built with STORM_UNICODE), char elsewhere, which is what
-// fs::path::c_str() gives on each. HANDLE, DWORD and, outside Windows, GetLastError come from StormLib's port header.
+// StormLib is used for writing archives here; reading goes through ClientArchives. TCHAR paths as there.
 #ifdef _WIN32
 #  ifndef UNICODE
 #    define UNICODE
@@ -22,92 +21,18 @@
 #endif
 #include <StormLib.h>
 
-static_assert(std::is_same_v<TCHAR, std::filesystem::path::value_type>, "StormLib's TCHAR must match the path character type");
-
 namespace fs = std::filesystem;
 using namespace LonelyIce;
 using DbcRecipes::Recipe;
+using ClientArchives::Archive;
 
 namespace
 {
     char const* const MarkerName = "lonelyice-patch.txt";
 
-    struct Archive
-    {
-        HANDLE h = nullptr;
-        explicit Archive(fs::path const& p)
-        {
-            if (!SFileOpenArchive(p.c_str(), 0, STREAM_FLAG_READ_ONLY, &h))
-                h = nullptr;
-        }
-        ~Archive() { if (h) SFileCloseArchive(h); }
-        Archive(Archive const&) = delete;
-        Archive& operator=(Archive const&) = delete;
-
-        std::optional<std::vector<uint8_t>> Read(std::string const& name) const
-        {
-            HANDLE f = nullptr;
-            if (!h || !SFileHasFile(h, name.c_str()) || !SFileOpenFileEx(h, name.c_str(), 0, &f))
-                return std::nullopt;
-            DWORD const size = SFileGetFileSize(f, nullptr);
-            std::optional<std::vector<uint8_t>> data;
-            if (size != SFILE_INVALID_SIZE)
-            {
-                data.emplace(size);
-                DWORD read = 0;
-                SFileReadFile(f, data->data(), size, &read, nullptr);
-                data->resize(read);
-            }
-            SFileCloseFile(f);
-            return data;
-        }
-    };
-
-    // Archives a locale's DBC files come from, highest priority first. Our own archive is not among them.
-    // Client files by their Windows names, whatever their case on disk (Linux, macOS).
-    fs::path DataDir(fs::path const& clientDir)
-    {
-        return GameClient::Child(clientDir, "Data");
-    }
-
     fs::path LocaleDir(fs::path const& data, std::string const& locale)
     {
         return GameClient::Child(data, locale);
-    }
-
-    std::vector<fs::path> SourceArchives(fs::path const& data, std::string const& l)
-    {
-        std::vector<fs::path> out;
-        fs::path const localeDir = LocaleDir(data, l);
-        for (std::string n : { "patch-" + l + "-3", "patch-" + l + "-2", "patch-" + l, "lichking-locale-" + l,
-                 "expansion-locale-" + l, "locale-" + l })
-            out.push_back(GameClient::Child(localeDir, n + ".MPQ"));
-        for (char const* n : { "patch-3", "patch-2", "patch", "lichking", "expansion", "common-2", "common" })
-            out.push_back(GameClient::Child(data, std::string(n) + ".MPQ"));
-        std::erase_if(out, [](fs::path const& p) { std::error_code ec; return !fs::exists(p, ec); });
-        return out;
-    }
-
-    // Locale names as the client spells them (enGB, ruRU), even when the folder on disk is lowercase.
-    std::vector<std::string> Locales(fs::path const& data)
-    {
-        std::vector<std::string> out;
-        std::error_code ec;
-        for (fs::directory_iterator it(data, ec), end; !ec && it != end; it.increment(ec))
-        {
-            std::string l = it->path().filename().string();
-            if (l.size() != 4)
-                continue;
-            if (!fs::exists(GameClient::Child(it->path(), "locale-" + l + ".MPQ"), ec))
-                continue;
-            if (std::islower(static_cast<unsigned char>(l[2])) && std::islower(static_cast<unsigned char>(l[3])))
-            {
-                l[2] = char(std::toupper(static_cast<unsigned char>(l[2])));
-                l[3] = char(std::toupper(static_cast<unsigned char>(l[3])));
-            }
-            out.push_back(l);
-        }
-        return out;
     }
 
     std::string ReadFile(fs::path const& p)
@@ -179,8 +104,8 @@ std::string ClientPatch::ArchiveName(std::string const& locale)
 
 ClientPatch::HiddenArchives::HiddenArchives(fs::path const& clientDir)
 {
-    fs::path const data = DataDir(clientDir);
-    for (std::string const& locale : Locales(data))
+    fs::path const data = ClientArchives::DataDir(clientDir);
+    for (std::string const& locale : ClientArchives::Locales(clientDir))
     {
         fs::path const archive = GameClient::Child(LocaleDir(data, locale), ArchiveName(locale));
         std::error_code ec;
@@ -207,9 +132,8 @@ ClientPatch::HiddenArchives::~HiddenArchives()
 
 std::vector<uint8_t> ClientPatch::ReadStockTable(fs::path const& clientDir, std::string const& table)
 {
-    fs::path data = DataDir(clientDir);
-    for (std::string const& locale : Locales(data))
-        for (fs::path const& a : SourceArchives(data, locale))
+    for (std::string const& locale : ClientArchives::Locales(clientDir))
+        for (fs::path const& a : ClientArchives::Chain(clientDir, locale))
             if (auto raw = Archive(a).Read("DBFilesClient\\" + table))
                 return std::move(*raw);
     return {};
@@ -218,7 +142,7 @@ std::vector<uint8_t> ClientPatch::ReadStockTable(fs::path const& clientDir, std:
 ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Recipe> const& recipes, DbcRecipes::IdMap const& ids)
 {
     Result res;
-    fs::path data = DataDir(clientDir);
+    fs::path data = ClientArchives::DataDir(clientDir);
     std::error_code ec;
 
     // Everything that goes into the archives, for the stamp.
@@ -237,10 +161,10 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
         stampSource += name + "=" + std::to_string(id) + "\n";
     bool const empty = tables.empty() && std::none_of(recipes.begin(), recipes.end(), [](Recipe const& r) { return !r.Files().empty(); });
 
-    for (std::string const& locale : Locales(data))
+    for (std::string const& locale : ClientArchives::Locales(clientDir))
     {
         fs::path const target = GameClient::Child(LocaleDir(data, locale), ArchiveName(locale));
-        std::vector<fs::path> const sources = SourceArchives(data, locale);
+        std::vector<fs::path> const sources = ClientArchives::Chain(clientDir, locale);
 
         std::string stamp;
         if (!empty)

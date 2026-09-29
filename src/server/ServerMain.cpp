@@ -12,6 +12,7 @@
 #include "DatabaseEnv.h"
 #include "DatabaseLibrary.h"
 #include "DatabaseLoader.h"
+#include "ClientData.h"
 #include "GameTime.h"
 #include "GitRevision.h"
 #include "IoContext.h"
@@ -220,6 +221,26 @@ namespace
             LOG_ERROR("server.loading", "Plugin patches failed: {}", r.error);
         return r.ok;
     }
+    // LONELYICE_DATA=client: the DBC data comes from the game client's archives (LONELYICE_CLIENT, locale
+    // LONELYICE_LOCALE or the client's first one) through the dbc_* tables instead of extracted files.
+    bool UseClientData()
+    {
+        if (Env("LONELYICE_DATA") != "client")
+            return true;
+
+        std::string error;
+        fs::path const cache = fs::u8path(sConfigMgr->GetOption<std::string>("DataDir", "./")) / "cache";
+        if (!LonelyIce::ClientData::Enable(fs::u8path(Env("LONELYICE_CLIENT")), Env("LONELYICE_LOCALE"), cache, error))
+        {
+            LOG_ERROR("server.loading", "Client data: {}", error);
+            return false;
+        }
+
+        LonelyIce::Platform::SetEnv("AC_DBC_FROM_DATABASE", "1");
+        LOG_INFO("server.loading", "Client data: DBC tables, terrain and cameras read from the game client ({})", LonelyIce::ClientData::Locale());
+        return true;
+    }
+
     // Windows: raw ReadFile instead of std::cin, so the thread can be cancelled with CancelSynchronousIo without holding
     // CRT locks. POSIX: read() after poll() with a short timeout, so Stop() ends the thread by setting the flag.
     class CommandReader
@@ -663,6 +684,12 @@ int ServerMain(int argc, char** argv)
 
     LOG_INFO("server.loading", "Initializing Scripts...");
     sScriptMgr->Initialize();
+
+    if (!UseClientData())
+    {
+        Control("state failed client");
+        return 1;
+    }
 
     if (!StartDB())
     {
