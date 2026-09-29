@@ -13,7 +13,7 @@ namespace LonelyIce
     // Asset paths under a folder ("lang/en/"), sorted.
     std::vector<std::string> ListAssets(std::string_view folder);
 
-    // Serves ui/ and fonts/ from resources linked into the exe.
+    // Serves ui/ and fonts/ from arrays linked into the executable.
     // If LONELYICE_ASSETS points to the assets folder, files are read from disk instead (for editing the UI live).
     class AssetFileInterface : public Rml::FileInterface
     {

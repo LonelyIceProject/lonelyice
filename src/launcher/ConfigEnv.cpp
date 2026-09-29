@@ -1,5 +1,4 @@
 #include "ConfigEnv.h"
-#include "TextUtil.h"
 #include <cctype>
 #include <fstream>
 
@@ -76,7 +75,7 @@ LonelyIce::EnvList LonelyIce::ModuleConfigOverrides(fs::path const& configFile, 
                 if (c != '"')
                     clean += c;
 
-            env.emplace_back(Utf8ToWide(EnvName(key)), Utf8ToWide(clean));
+            env.emplace_back(EnvName(key), clean);
         }
     }
     return env;

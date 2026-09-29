@@ -1,86 +1,78 @@
 #include "LauncherSettings.h"
-#include "TextUtil.h"
+#include "IniFile.h"
+#include "Platform.h"
 #include <algorithm>
-#include <Windows.h>
+#include <cstdlib>
 
 namespace
 {
-    std::wstring ReadW(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, wchar_t const* def)
+    bool ReadBool(LonelyIce::IniFile const& ini, char const* section, char const* key, bool def)
     {
-        wchar_t buf[2048];
-        GetPrivateProfileStringW(section, key, def, buf, 2048, file.c_str());
-        return buf;
+        return ini.Get(section, key, def ? "1" : "0") == "1";
     }
 
-    std::string Read(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, std::string const& def)
+    int ReadInt(LonelyIce::IniFile const& ini, char const* section, char const* key, int def)
     {
-        return LonelyIce::WideToUtf8(ReadW(file, section, key, LonelyIce::Utf8ToWide(def).c_str()));
+        return std::atoi(ini.Get(section, key, std::to_string(def)).c_str());
     }
 
-    bool ReadBool(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, bool def)
+    std::filesystem::path ReadPath(LonelyIce::IniFile const& ini, char const* section, char const* key)
     {
-        return ReadW(file, section, key, def ? L"1" : L"0") == L"1";
-    }
-
-    void Write(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, std::wstring const& value)
-    {
-        WritePrivateProfileStringW(section, key, value.c_str(), file.c_str());
-    }
-
-    void Write(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, std::string const& value)
-    {
-        Write(file, section, key, LonelyIce::Utf8ToWide(value));
-    }
-
-    void Write(std::filesystem::path const& file, wchar_t const* section, wchar_t const* key, bool value)
-    {
-        Write(file, section, key, std::wstring(value ? L"1" : L"0"));
+        return LonelyIce::Platform::Utf8ToPath(ini.Get(section, key, ""));
     }
 }
 
 void LonelyIce::LauncherSettings::Load()
 {
-    clientPath = ReadW(file, L"client", L"path", L"");
-    locale = Read(file, L"client", L"locale", "");
-    writeRealmlist = ReadBool(file, L"client", L"writeRealmlist", true);
-    clearWdb = ReadBool(file, L"client", L"clearWdb", true);
-    serverConfig = ReadW(file, L"server", L"config", L"");
-    dataRoot = ReadW(file, L"server", L"root", L"");
-    autoStart = ReadBool(file, L"launcher", L"autoStart", false);
-    stopWithGame = ReadBool(file, L"launcher", L"stopWithGame", false);
-    trayOnClose = ReadBool(file, L"launcher", L"trayOnClose", true);
-    language = Read(file, L"launcher", L"language", "");
-    uiScale = _wtoi(ReadW(file, L"launcher", L"uiScale", L"0").c_str());
+    IniFile ini;
+    ini.Load(file);
+    clientPath = ReadPath(ini, "client", "path");
+    locale = ini.Get("client", "locale", "");
+    runner = ini.Get("client", "runner", DefaultRunner);
+    writeRealmlist = ReadBool(ini, "client", "writeRealmlist", true);
+    clearWdb = ReadBool(ini, "client", "clearWdb", true);
+    serverConfig = ReadPath(ini, "server", "config");
+    dataRoot = ReadPath(ini, "server", "root");
+    autoStart = ReadBool(ini, "launcher", "autoStart", false);
+    stopWithGame = ReadBool(ini, "launcher", "stopWithGame", false);
+    trayOnClose = ReadBool(ini, "launcher", "trayOnClose", true);
+    language = ini.Get("launcher", "language", "");
+    uiScale = ReadInt(ini, "launcher", "uiScale", 0);
     uiScale = uiScale ? std::clamp(uiScale, 50, 300) : 0;
-    backupTime = Read(file, L"backup", L"time", "04:00");
-    backupKeep = std::max(1, _wtoi(ReadW(file, L"backup", L"keep", L"7").c_str()));
-    lastBackupDay = Read(file, L"backup", L"lastDay", "");
-    realmName = Read(file, L"server", L"realmName", "");
-    sqlStamp = Read(file, L"server", L"sqlStamp", "");
-    pendingRealmName = Read(file, L"server", L"pendingRealmName", "");
-    packageIndex = Read(file, L"packages", L"index", DefaultPackageIndex);
-    packageIndexOff = Read(file, L"packages", L"disabled", "");
+    backupTime = ini.Get("backup", "time", "04:00");
+    backupKeep = std::max(1, ReadInt(ini, "backup", "keep", 7));
+    lastBackupDay = ini.Get("backup", "lastDay", "");
+    realmName = ini.Get("server", "realmName", "");
+    sqlStamp = ini.Get("server", "sqlStamp", "");
+    pendingRealmName = ini.Get("server", "pendingRealmName", "");
+    packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
+    packageIndexOff = ini.Get("packages", "disabled", "");
 }
 
 void LonelyIce::LauncherSettings::Save() const
 {
-    Write(file, L"client", L"path", clientPath);
-    Write(file, L"client", L"locale", locale);
-    Write(file, L"client", L"writeRealmlist", writeRealmlist);
-    Write(file, L"client", L"clearWdb", clearWdb);
-    Write(file, L"server", L"config", serverConfig);
-    Write(file, L"server", L"root", dataRoot);
-    Write(file, L"server", L"realmName", realmName);
-    Write(file, L"server", L"sqlStamp", sqlStamp);
-    Write(file, L"server", L"pendingRealmName", pendingRealmName);
-    Write(file, L"launcher", L"autoStart", autoStart);
-    Write(file, L"launcher", L"stopWithGame", stopWithGame);
-    Write(file, L"launcher", L"trayOnClose", trayOnClose);
-    Write(file, L"launcher", L"language", language);
-    Write(file, L"launcher", L"uiScale", std::to_wstring(uiScale));
-    Write(file, L"backup", L"time", backupTime);
-    Write(file, L"backup", L"keep", std::to_wstring(backupKeep));
-    Write(file, L"backup", L"lastDay", lastBackupDay);
-    Write(file, L"packages", L"index", packageIndex);
-    Write(file, L"packages", L"disabled", packageIndexOff);
+    IniFile ini;
+    ini.Load(file);     // keeps what this version does not know
+    auto flag = [](bool b) { return std::string(b ? "1" : "0"); };
+    ini.Set("client", "path", Platform::PathToUtf8(clientPath));
+    ini.Set("client", "locale", locale);
+    ini.Set("client", "runner", runner);
+    ini.Set("client", "writeRealmlist", flag(writeRealmlist));
+    ini.Set("client", "clearWdb", flag(clearWdb));
+    ini.Set("server", "config", Platform::PathToUtf8(serverConfig));
+    ini.Set("server", "root", Platform::PathToUtf8(dataRoot));
+    ini.Set("server", "realmName", realmName);
+    ini.Set("server", "sqlStamp", sqlStamp);
+    ini.Set("server", "pendingRealmName", pendingRealmName);
+    ini.Set("launcher", "autoStart", flag(autoStart));
+    ini.Set("launcher", "stopWithGame", flag(stopWithGame));
+    ini.Set("launcher", "trayOnClose", flag(trayOnClose));
+    ini.Set("launcher", "language", language);
+    ini.Set("launcher", "uiScale", std::to_string(uiScale));
+    ini.Set("backup", "time", backupTime);
+    ini.Set("backup", "keep", std::to_string(backupKeep));
+    ini.Set("backup", "lastDay", lastBackupDay);
+    ini.Set("packages", "index", packageIndex);
+    ini.Set("packages", "disabled", packageIndexOff);
+    ini.Save(file);
 }

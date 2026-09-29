@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -76,12 +77,9 @@ namespace LonelyIce
     private:
         void ReaderLoop();
         void HandleLine(std::string line);
-        void ClosePipes();
 
         std::function<void()> _wake;
-        void* _process = nullptr;
-        void* _stdinWrite = nullptr;
-        void* _stdoutRead = nullptr;
+        std::unique_ptr<Platform::Child> _child;
         std::thread _reader;
 
         mutable std::mutex _lock;

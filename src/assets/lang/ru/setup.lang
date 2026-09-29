@@ -49,6 +49,10 @@ wizard.place.client.title = Внутри папки клиента
 wizard.place.client.detail = Всё в одном месте, удобно переносить.
 wizard.place.exe.title = Рядом с LonelyIce.exe
 wizard.place.exe.detail = Если exe лежит отдельно от клиента.
+wizard.place.user.title = В папке данных пользователя
+wizard.place.user.detail = Обычное место для данных программ в этой системе.
+wizard.place.exe_posix.title = Рядом с программой LonelyIce
+wizard.place.exe_posix.detail = Если программа лежит отдельно от клиента.
 wizard.place.custom.title = Другая папка…
 wizard.place.custom.detail = Например, на быстром SSD.
 wizard.comp.db.desc = Вход, мир, персонажи и боты из SQL в папке setup
@@ -123,7 +127,7 @@ install.error.no_client = клиент не найден
 
 # GameClient.cpp
 client.error.write = Не удалось записать {0}
-client.error.start = Не удалось запустить Wow.exe (код {0})
+client.error.start = Не удалось запустить Wow.exe ({0})
 
 # Backup.cpp
 backup.error.mkdir = Не удалось создать папку {0}

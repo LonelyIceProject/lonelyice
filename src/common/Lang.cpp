@@ -1,8 +1,9 @@
 #include "Lang.h"
 #include "Assets.h"
 #include <shared_mutex>
+#include "IniFile.h"
+#include "Platform.h"
 #include <unordered_map>
-#include <Windows.h>
 
 using namespace LonelyIce;
 
@@ -88,19 +89,12 @@ std::vector<Lang::Info> const& Lang::Available()
 
 void Lang::Init()
 {
-    char buf[16];
-    DWORD n = GetEnvironmentVariableA("LONELYICE_LANG", buf, sizeof(buf));
-    std::string code = n > 0 && n < sizeof(buf) ? buf : "";
+    std::string code = Platform::GetEnv("LONELYICE_LANG").value_or("");
     if (code.empty())
     {
-        wchar_t exe[MAX_PATH];
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        std::wstring ini = exe;
-        ini = ini.substr(0, ini.find_last_of(L"\\/") + 1) + L"lonelyice.ini";
-        wchar_t value[16] = {};
-        GetPrivateProfileStringW(L"launcher", L"language", L"", value, 16, ini.c_str());
-        for (wchar_t const* c = value; *c; ++c)
-            code += char(*c);
+        IniFile ini;
+        ini.Load(Platform::ExePath().parent_path() / "lonelyice.ini");
+        code = ini.Get("launcher", "language", "");
     }
     Set(code);
 }
@@ -116,7 +110,7 @@ void Lang::Set(std::string const& code)
         _english = std::move(english);
         _current = std::move(current);
     }
-    SetEnvironmentVariableA("LONELYICE_LANG", c.c_str());
+    Platform::SetEnv("LONELYICE_LANG", c);
 }
 
 std::string Lang::Code()

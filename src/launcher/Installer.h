@@ -1,6 +1,7 @@
 #ifndef LONELYICE_INSTALLER_H
 #define LONELYICE_INSTALLER_H
 
+#include "Platform.h"
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -14,7 +15,7 @@ namespace LonelyIce
 {
     struct InstallOptions
     {
-        std::filesystem::path exe;          // LonelyIce.exe, started again for every step
+        std::filesystem::path exe;          // this executable, started again for every step
         std::filesystem::path setupDir;     // folder with sql.pak and configs.pak
         std::filesystem::path root;         // server data: configs, db, data, logs, backups
         std::filesystem::path client;       // WoW 3.3.5a folder
@@ -59,9 +60,9 @@ namespace LonelyIce
         std::vector<std::string> TakeLog();     // new lines since the last call
         std::string Error() const;
 
-        // Writes worldserver.conf and modules\*.conf from configs.pak where they don't exist yet, with LonelyIce defaults.
+        // Writes worldserver.conf and modules/*.conf from configs.pak where they don't exist yet, with LonelyIce defaults.
         static bool PrepareConfigs(InstallOptions const& o, std::string& error);
-        // Size and time of setup\sql.pak: tells whether a newer release brought database updates.
+        // Size and time of setup/sql.pak: tells whether a newer release brought database updates.
         static std::string SqlStamp(std::filesystem::path const& setupDir);
 
     private:
@@ -73,7 +74,7 @@ namespace LonelyIce
         bool RunClient();
 
         // Starts exe with args in dir; every output line goes to onLine. Returns the exit code, -1 if it could not start.
-        int RunChild(std::wstring const& args, std::filesystem::path const& dir, std::vector<std::pair<std::wstring, std::wstring>> const& env,
+        int RunChild(std::vector<std::string> const& args, std::filesystem::path const& dir, Platform::Env const& env,
             std::function<void(std::string const&)> const& onLine);
 
         void SetStep(std::string const& id, StepState state, float progress, std::string const& note = {});
@@ -89,7 +90,7 @@ namespace LonelyIce
         std::vector<InstallStep> _steps;
         std::vector<std::string> _log;
         std::string _error;
-        void* _child = nullptr;
+        Platform::Child* _child = nullptr;      // the running step, under _lock
         int _mapCount = 0;
     };
 }

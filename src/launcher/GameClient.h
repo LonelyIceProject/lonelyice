@@ -1,7 +1,9 @@
 #ifndef LONELYICE_GAMECLIENT_H
 #define LONELYICE_GAMECLIENT_H
 
+#include "Platform.h"
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,7 +26,10 @@ namespace LonelyIce
     namespace GameClient
     {
         bool IsClientDir(std::filesystem::path const& dir);
-        // saved path → exe folder → its parent → two levels below the parent → Blizzard registry key.
+        // A file or folder of the client by its Windows name, whatever its case on disk.
+        std::filesystem::path Child(std::filesystem::path const& dir, std::string const& name);
+        // saved path, exe folder, its parent, two levels below the parent, then the Blizzard registry key (Windows)
+        // or the default Wine prefix.
         std::filesystem::path Detect(std::filesystem::path const& saved, std::filesystem::path const& exeDir);
         ClientInfo Inspect(std::filesystem::path const& dir);
         // Writes "set realmlist <host>" for the given locales (all when empty); the first overwrite keeps a realmlist.wtf.bak.
@@ -33,8 +38,8 @@ namespace LonelyIce
         bool SetConfigLocale(std::filesystem::path const& dir, std::string const& locale);
         bool SetConfigValue(std::filesystem::path const& dir, std::string const& key, std::string const& value);  // SET key "value", added if missing
         void ClearWdb(std::filesystem::path const& dir);
-        // On success *process receives the game process handle (caller closes it).
-        bool Launch(std::filesystem::path const& dir, std::string& error, void** process);
+        // Starts Wow.exe (through runner, e.g. wine, on Linux and macOS); process receives the started child.
+        bool Launch(std::filesystem::path const& dir, std::string const& runner, std::string& error, std::unique_ptr<Platform::Child>& process);
         bool IsRunning(std::filesystem::path const& dir);
     }
 }

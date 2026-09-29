@@ -1,11 +1,14 @@
 #include "GameClient.h"
 #include "Lang.h"
-#include "TextUtil.h"
+#include "Platform.h"
 #include <algorithm>
+#include <cctype>
 #include <fstream>
+#include <iterator>
 #include <sstream>
+#ifdef _WIN32
 #include <Windows.h>
-#include <TlHelp32.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -33,41 +36,60 @@ namespace
         return {};
     }
 
+    // File version from the PE resource (VS_FIXEDFILEINFO, found by its signature); the same on every platform.
     std::string FileVersion(fs::path const& exe)
     {
-        DWORD dummy = 0;
-        DWORD size = GetFileVersionInfoSizeW(exe.c_str(), &dummy);
-        if (!size)
+        std::ifstream in(exe, std::ios::binary);
+        std::vector<unsigned char> data((std::istreambuf_iterator<char>(in)), {});
+        static unsigned char const signature[] = { 0xBD, 0x04, 0xEF, 0xFE };
+        auto it = std::search(data.begin(), data.end(), std::begin(signature), std::end(signature));
+        if (it == data.end() || data.end() - it < 16)
             return {};
-        std::vector<char> data(size);
-        if (!GetFileVersionInfoW(exe.c_str(), 0, size, data.data()))
-            return {};
-        VS_FIXEDFILEINFO* info = nullptr;
-        UINT len = 0;
-        if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &len) || !info)
-            return {};
-        return std::to_string(HIWORD(info->dwFileVersionMS)) + "." + std::to_string(LOWORD(info->dwFileVersionMS)) + "." +
-            std::to_string(HIWORD(info->dwFileVersionLS)) + "." + std::to_string(LOWORD(info->dwFileVersionLS));
+        auto word = [&](std::size_t offset) { return unsigned(it[offset]) | unsigned(it[offset + 1]) << 8; };
+        // dwFileVersionMS at +8, dwFileVersionLS at +12 (little-endian: low word first)
+        return std::to_string(word(10)) + "." + std::to_string(word(8)) + "." + std::to_string(word(14)) + "." + std::to_string(word(12));
     }
 
-    fs::path RegistryInstallPath()
+    // Where a Windows installer would have put the game.
+    std::vector<fs::path> InstallPaths()
     {
+        std::vector<fs::path> out;
+#ifdef _WIN32
         wchar_t buf[MAX_PATH];
-        DWORD size = sizeof(buf);
         for (wchar_t const* key : { L"SOFTWARE\\WOW6432Node\\Blizzard Entertainment\\World of Warcraft", L"SOFTWARE\\Blizzard Entertainment\\World of Warcraft" })
         {
-            size = sizeof(buf);
+            DWORD size = sizeof(buf);
             if (RegGetValueW(HKEY_LOCAL_MACHINE, key, L"InstallPath", RRF_RT_REG_SZ, nullptr, buf, &size) == ERROR_SUCCESS)
-                return fs::path(buf);
+                out.emplace_back(buf);
         }
-        return {};
+#else
+        // the default Wine prefix
+        if (auto home = Platform::GetEnv("HOME"))
+            for (char const* dir : { "Program Files (x86)", "Program Files" })
+                out.push_back(fs::path(*home) / ".wine" / "drive_c" / dir / "World of Warcraft");
+#endif
+        return out;
     }
 }
 
+// Linux and macOS file systems may be case-sensitive while the client's names come from Windows ("Data", "data").
+fs::path LonelyIce::GameClient::Child(fs::path const& dir, std::string const& name)
+{
+    std::error_code ec;
+    fs::path const exact = dir / name;
+    if (fs::exists(exact, ec))
+        return exact;
+    auto lower = [](std::string s) { std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(std::tolower(c)); }); return s; };
+    std::string const want = lower(name);
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        if (lower(Platform::PathToUtf8(it->path().filename())) == want)
+            return it->path();
+    return exact;
+}
 bool LonelyIce::GameClient::IsClientDir(fs::path const& dir)
 {
     std::error_code ec;
-    return !dir.empty() && fs::exists(dir / "Wow.exe", ec) && fs::exists(dir / "Data" / "common.MPQ", ec);
+    return !dir.empty() && fs::exists(Child(dir, "Wow.exe"), ec) && fs::exists(Child(Child(dir, "Data"), "common.MPQ"), ec);
 }
 
 fs::path LonelyIce::GameClient::Detect(fs::path const& saved, fs::path const& exeDir)
@@ -94,9 +116,9 @@ fs::path LonelyIce::GameClient::Detect(fs::path const& saved, fs::path const& ex
                 return b->path();
     }
 
-    fs::path reg = RegistryInstallPath();
-    if (IsClientDir(reg))
-        return reg;
+    for (fs::path const& p : InstallPaths())
+        if (IsClientDir(p))
+            return p;
 
     return {};
 }
@@ -109,17 +131,17 @@ LonelyIce::ClientInfo LonelyIce::GameClient::Inspect(fs::path const& dir)
         return info;
 
     info.valid = true;
-    info.version = FileVersion(dir / "Wow.exe");
+    info.version = FileVersion(Child(dir, "Wow.exe"));
 
     std::error_code ec;
-    for (fs::directory_iterator it(dir / "Data", ec), end; !ec && it != end; it.increment(ec))
+    for (fs::directory_iterator it(Child(dir, "Data"), ec), end; !ec && it != end; it.increment(ec))
     {
         if (!it->is_directory(ec))
             continue;
         std::string name = it->path().filename().string();
         if (name.size() != 4 || !fs::exists(it->path() / ("locale-" + name + ".MPQ"), ec))
             continue;
-        info.locales.push_back({ name, ReadRealmlist(it->path() / "realmlist.wtf") });
+        info.locales.push_back({ name, ReadRealmlist(Child(it->path(), "realmlist.wtf")) });
     }
     return info;
 }
@@ -129,7 +151,7 @@ namespace
     // Rewrites "SET <key> ..." lines of WTF\Config.wtf (case-insensitive key); appends the line if missing.
     bool SetConfigWtf(fs::path const& dir, std::string const& key, std::string const& value, bool appendIfMissing)
     {
-        fs::path config = dir / "WTF" / "Config.wtf";
+        fs::path config = LonelyIce::GameClient::Child(LonelyIce::GameClient::Child(dir, "WTF"), "Config.wtf");
         std::string text;
         {
             std::ifstream in(config, std::ios::binary);
@@ -172,7 +194,7 @@ namespace
 
 std::string LonelyIce::GameClient::ReadConfigLocale(fs::path const& dir)
 {
-    std::ifstream in(dir / "WTF" / "Config.wtf");
+    std::ifstream in(Child(Child(dir, "WTF"), "Config.wtf"));
     std::string line;
     while (std::getline(in, line))
     {
@@ -203,7 +225,7 @@ bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string c
     {
         if (!locales.empty() && std::find(locales.begin(), locales.end(), loc.name) == locales.end())
             continue;
-        fs::path file = info.dir / "Data" / loc.name / "realmlist.wtf";
+        fs::path file = Child(Child(Child(info.dir, "Data"), loc.name), "realmlist.wtf");
         fs::path bak = file;
         bak += ".bak";
 
@@ -214,7 +236,7 @@ bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string c
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         if (!out)
         {
-            error = Tr("client.error.write", WideToUtf8(file.wstring()));
+            error = Tr("client.error.write", Platform::PathToUtf8(file));
             return false;
         }
         out << "set realmlist " << host << "\r\n";
@@ -228,50 +250,41 @@ bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string c
 void LonelyIce::GameClient::ClearWdb(fs::path const& dir)
 {
     std::error_code ec;
-    fs::remove_all(dir / "Cache" / "WDB", ec);
+    fs::remove_all(Child(Child(dir, "Cache"), "WDB"), ec);
 }
 
-bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string& error, void** process)
+bool LonelyIce::GameClient::Launch(fs::path const& dir, std::string const& runner, std::string& error, std::unique_ptr<Platform::Child>& process)
 {
-    std::wstring exe = (dir / "Wow.exe").wstring();
-    std::wstring cmd = L"\"" + exe + L"\"";
-    STARTUPINFOW si{ sizeof(si) };
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi))
+    Platform::ChildOptions o;
+    o.workDir = dir;
+    o.pipes = false;
+#ifdef _WIN32
+    (void)runner;
+    o.exe = Child(dir, "Wow.exe");
+#else
+    // Wow.exe runs through Wine (or what [client] runner names, arguments separated by spaces).
+    std::istringstream words(runner.empty() ? std::string("wine") : runner);
+    for (std::string w; words >> w;)
     {
-        error = Tr("client.error.start", GetLastError());
+        if (o.exe.empty())
+            o.exe = w;
+        else
+            o.args.push_back(w);
+    }
+    o.args.push_back(Platform::PathToUtf8(Child(dir, "Wow.exe")));
+#endif
+    auto child = std::make_unique<Platform::Child>();
+    std::string why;
+    if (!child->Start(o, why))
+    {
+        error = Tr("client.error.start", why);
         return false;
     }
-    CloseHandle(pi.hThread);
-    if (process)
-        *process = pi.hProcess;
-    else
-        CloseHandle(pi.hProcess);
+    process = std::move(child);
     return true;
 }
 
 bool LonelyIce::GameClient::IsRunning(fs::path const& dir)
 {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-        return false;
-
-    std::wstring want = (dir / "Wow.exe").wstring();
-    bool found = false;
-    PROCESSENTRY32W pe{ sizeof(pe) };
-    for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe))
-    {
-        if (_wcsicmp(pe.szExeFile, L"Wow.exe") != 0)
-            continue;
-        HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
-        if (!p)
-            continue;
-        wchar_t path[MAX_PATH];
-        DWORD len = MAX_PATH;
-        if (QueryFullProcessImageNameW(p, 0, path, &len) && _wcsicmp(path, want.c_str()) == 0)
-            found = true;
-        CloseHandle(p);
-    }
-    CloseHandle(snap);
-    return found;
+    return Platform::IsProcessRunning(Child(dir, "Wow.exe"));
 }

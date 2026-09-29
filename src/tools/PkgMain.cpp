@@ -1,25 +1,26 @@
 // Plugin package manager on the command line:
-//   LonelyIce.exe --pkg list                           installed plugins
-//   LonelyIce.exe --pkg available                      packages of the index
-//   LonelyIce.exe --pkg install <id>[@<range>]...      with their dependencies
-//   LonelyIce.exe --pkg update [<id>...]               everything when no id is given
-//   LonelyIce.exe --pkg remove <id>
-//   LonelyIce.exe --pkg enable <id> | disable <id>
-//   LonelyIce.exe --pkg apply -c <worldserver.conf> [--client <game folder>]
+//   LonelyIce --pkg list                           installed plugins
+//   LonelyIce --pkg available                      packages of the index
+//   LonelyIce --pkg install <id>[@<range>]...      with their dependencies
+//   LonelyIce --pkg update [<id>...]               everything when no id is given
+//   LonelyIce --pkg remove <id>
+//   LonelyIce --pkg enable <id> | disable <id>
+//   LonelyIce --pkg apply -c <worldserver.conf> [--client <game folder>]
 //                                                      install / remove the plugins' patches in the databases
 //                                                      (and the client) now instead of on the next server start
-//   LonelyIce.exe --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
+//   LonelyIce --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
 // Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: lonelyice.ini).
 
 #include "Lang.h"
 #include "LauncherSettings.h"
 #include "PackageManager.h"
+#include "Platform.h"
 #include "TextUtil.h"
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <string>
 #include <vector>
-#include <Windows.h>
 
 namespace fs = std::filesystem;
 using namespace LonelyIce;
@@ -41,9 +42,17 @@ namespace
 
     fs::path ExeDir()
     {
-        wchar_t buf[MAX_PATH];
-        GetModuleFileNameW(nullptr, buf, MAX_PATH);
-        return fs::path(buf).parent_path();
+        return Platform::ExePath().parent_path();
+    }
+
+    // Also seen by getenv (the server reads some settings that way).
+    void SetEnvironment(char const* name, std::string const& value)
+    {
+#ifdef _WIN32
+        _putenv_s(name, value.c_str());
+#else
+        setenv(name, value.c_str(), 1);
+#endif
     }
 
     void PrintPlan(Packages::Plan const& plan)
@@ -55,13 +64,7 @@ namespace
 
 int PkgMain(int argc, char** argv)
 {
-    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-    if ((!out || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS))
-    {
-        FILE* f = nullptr;
-        freopen_s(&f, "CONOUT$", "w", stdout);
-    }
-    SetConsoleOutputCP(CP_UTF8);
+    Platform::UseParentConsole(false, true);
 
     fs::path const exeDir = ExeDir();
     LauncherSettings settings;
@@ -122,8 +125,8 @@ int PkgMain(int argc, char** argv)
         if (config.empty())
             return Fail(Tr("pkg.cli.need_config"));
         if (!client.empty())
-            _putenv_s("LONELYICE_CLIENT", client.c_str());
-        _putenv_s("AC_PLUGINS_DIR", pluginsDir.string().c_str());
+            SetEnvironment("LONELYICE_CLIENT", client);
+        SetEnvironment("AC_PLUGINS_DIR", pluginsDir.string());
         std::vector<std::string> sargs = { argv[0], "--apply", "-c", config };
         std::vector<char*> ptrs;
         for (std::string& s : sargs)

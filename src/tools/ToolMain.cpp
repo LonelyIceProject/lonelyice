@@ -1,20 +1,22 @@
 // Client data extraction, run by the launcher as child processes of the same exe:
-//   LonelyIce.exe --tool maps <client dir> <data dir>        dbc, Cameras, maps
-//   LonelyIce.exe --tool vmaps <client dir> <data dir>       <data>/Buildings (raw models)
-//   LonelyIce.exe --tool assemble <data dir>                 Buildings -> vmaps
-//   LonelyIce.exe --tool mmaps <data dir> <threads>          mmaps
+//   LonelyIce --tool maps <client dir> <data dir>        dbc, Cameras, maps
+//   LonelyIce --tool vmaps <client dir> <data dir>       <data>/Buildings (raw models)
+//   LonelyIce --tool assemble <data dir>                 Buildings -> vmaps
+//   LonelyIce --tool mmaps <data dir> <threads>          mmaps
 // Output goes to stdout (the launcher reads it for progress). Each tool keeps process-wide state (globals, chdir,
 // exit()), which is why they run in their own process.
 
 #include "Assets.h"
+#include "GameClient.h"
+#include "Platform.h"
 #include "TileAssembler.h"
 #include "../../../tools/mmaps_generator/MapBuilder.h"
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
-#include <Windows.h>
 
 int MapExtractorMain(int argc, char** argv);
 int VmapExtractorMain(int argc, char** argv);
@@ -25,13 +27,7 @@ namespace
 {
     void SetupStdio()
     {
-        HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-        if ((!out || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS))
-        {
-            FILE* f = nullptr;
-            freopen_s(&f, "CONOUT$", "w", stdout);
-            freopen_s(&f, "CONOUT$", "w", stderr);
-        }
+        LonelyIce::Platform::UseParentConsole();
         setvbuf(stdout, nullptr, _IONBF, 0);
         setvbuf(stderr, nullptr, _IONBF, 0);
     }
@@ -45,11 +41,12 @@ namespace
         return fn(int(args.size()), argv.data());
     }
 
-    // The tools print paths with fopen/printf, so the process works in the ANSI code page: arguments arrive as such.
+    // The tools print paths with fopen/printf, so the process works in the ANSI code page on Windows (UTF-8 elsewhere):
+    // arguments arrive as such, and fs::path(std::string) reads them the same way.
     std::string Slash(std::string p)
     {
         if (!p.empty() && p.back() != '\\' && p.back() != '/')
-            p += '\\';
+            p += char(fs::path::preferred_separator);
         return p;
     }
 
@@ -71,12 +68,15 @@ namespace
         std::error_code ec;
         fs::remove_all(fs::path(data) / "Buildings", ec);
         fs::create_directories(data, ec);
-        if (!SetCurrentDirectoryA(data.c_str()))
+        fs::current_path(fs::path(data), ec);
+        if (ec)
         {
             printf("@@LI fail cannot enter %s\n", data.c_str());
             return 2;
         }
-        return Run(VmapExtractorMain, { "vmap4_extractor", "-d", Slash(client) + "Data\\" });
+        // The client's Data folder, whatever its case on disk (Linux, macOS).
+        std::string const clientData = LonelyIce::GameClient::Child(fs::path(client), "Data").string();
+        return Run(VmapExtractorMain, { "vmap4_extractor", "-d", Slash(clientData) });
     }
 
     int Assemble(std::string const& data)

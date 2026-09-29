@@ -564,15 +564,20 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
         return false;
     }
 
-    // Files under <id>/, without debug files.
+    // Files under <id>/, without debug files and link-time leftovers (MSVC; .dSYM bundles and static archives elsewhere).
     std::vector<std::pair<std::string, fs::path>> files;
     std::error_code ec;
     for (fs::recursive_directory_iterator it(pluginDir, ec), end; !ec && it != end; it.increment(ec))
     {
+        std::string const ext = it->path().extension().string();
+        if (ext == ".dSYM" && it->is_directory(ec))
+        {
+            it.disable_recursion_pending();
+            continue;
+        }
         if (!it->is_regular_file(ec))
             continue;
-        std::string const ext = it->path().extension().string();
-        if (ext == ".pdb" || ext == ".ilk" || ext == ".exp" || ext == ".lib")
+        if (ext == ".pdb" || ext == ".ilk" || ext == ".exp" || ext == ".lib" || ext == ".a")
             continue;
         {
             std::u8string const rel = fs::relative(it->path(), pluginDir, ec).generic_u8string();

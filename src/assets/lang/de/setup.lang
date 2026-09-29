@@ -49,6 +49,10 @@ wizard.place.client.title = Im Spielordner
 wizard.place.client.detail = Alles an einem Ort, leicht zu verschieben.
 wizard.place.exe.title = Neben LonelyIce.exe
 wizard.place.exe.detail = Wenn die exe getrennt vom Client liegt.
+wizard.place.user.title = Im Benutzerdatenordner
+wizard.place.user.detail = Der übliche Ort für Programmdaten auf diesem System.
+wizard.place.exe_posix.title = Neben dem Programm LonelyIce
+wizard.place.exe_posix.detail = Wenn das Programm getrennt vom Client liegt.
 wizard.place.custom.title = Anderer Ordner…
 wizard.place.custom.detail = Zum Beispiel auf einer schnellen SSD.
 wizard.comp.db.desc = Login, Welt, Charaktere und Bots aus dem SQL im Setup-Ordner
@@ -123,7 +127,7 @@ install.error.no_client = Client nicht gefunden
 
 # GameClient.cpp
 client.error.write = {0} konnte nicht geschrieben werden
-client.error.start = Wow.exe konnte nicht gestartet werden (Code {0})
+client.error.start = Wow.exe konnte nicht gestartet werden ({0})
 
 # Backup.cpp
 backup.error.mkdir = Ordner {0} konnte nicht erstellt werden

@@ -1,7 +1,5 @@
 #include "ServerProcess.h"
 #include "TextUtil.h"
-#include <Windows.h>
-#include <psapi.h>
 #include <sstream>
 
 namespace
@@ -14,68 +12,16 @@ LonelyIce::ServerProcess::ServerProcess(std::function<void()> wake) : _wake(std:
 
 LonelyIce::ServerProcess::~ServerProcess()
 {
-    if (_process)
+    if (_child)
     {
         // Closing stdin makes the server save and exit on its own.
-        if (_stdinWrite)
-        {
-            CloseHandle(_stdinWrite);
-            _stdinWrite = nullptr;
-        }
-        if (WaitForSingleObject(_process, 60000) != WAIT_OBJECT_0)
-            TerminateProcess(_process, 1);
+        _child->CloseInput();
+        if (!_child->Wait(60000))
+            _child->Kill();
     }
 
     if (_reader.joinable())
         _reader.join();
-    ClosePipes();
-}
-
-namespace
-{
-    // Current environment plus overrides, as a CREATE_UNICODE_ENVIRONMENT block. First value of a name wins.
-    std::wstring BuildEnvironment(LonelyIce::EnvList const& overrides)
-    {
-        std::vector<std::wstring> vars;
-        std::vector<std::wstring> names;
-        auto has = [&](std::wstring const& name)
-        {
-            for (std::wstring const& n : names)
-                if (_wcsicmp(n.c_str(), name.c_str()) == 0)
-                    return true;
-            return false;
-        };
-
-        for (auto const& [name, value] : overrides)
-        {
-            if (has(name))
-                continue;
-            names.push_back(name);
-            vars.push_back(name + L"=" + value);
-        }
-
-        if (wchar_t* block = GetEnvironmentStringsW())
-        {
-            for (wchar_t const* p = block; *p; p += wcslen(p) + 1)
-            {
-                std::wstring entry = p;
-                std::size_t eq = entry.find(L'=', 1);
-                if (eq == std::wstring::npos || has(entry.substr(0, eq)))
-                    continue;
-                vars.push_back(entry);
-            }
-            FreeEnvironmentStringsW(block);
-        }
-
-        std::wstring out;
-        for (std::wstring const& v : vars)
-        {
-            out += v;
-            out += L'\0';
-        }
-        out += L'\0';
-        return out;
-    }
 }
 
 bool LonelyIce::ServerProcess::Start(std::string const& exePath, std::string const& configPath, std::string const& workDir, EnvList const& env)
@@ -85,56 +31,25 @@ bool LonelyIce::ServerProcess::Start(std::string const& exePath, std::string con
 
     if (_reader.joinable())
         _reader.join();
-    ClosePipes();
 
-    SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
-    HANDLE outRead = nullptr, outWrite = nullptr, inRead = nullptr, inWrite = nullptr;
-    if (!CreatePipe(&outRead, &outWrite, &sa, 1 << 16))
-        return false;
-    if (!CreatePipe(&inRead, &inWrite, &sa, 1 << 12))
+    Platform::ChildOptions o;
+    o.exe = Platform::Utf8ToPath(exePath);
+    o.args = { "--server", "-c", configPath };
+    o.workDir = Platform::Utf8ToPath(workDir);
+    o.env = env;
+    auto child = std::make_unique<Platform::Child>();
+    std::string error;
+    if (!child->Start(o, error))
     {
-        CloseHandle(outRead);
-        CloseHandle(outWrite);
-        return false;
-    }
-    SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
-
-    std::wstring cmd = L"\"" + Utf8ToWide(exePath) + L"\" --server -c \"" + Utf8ToWide(configPath) + L"\"";
-    std::wstring dir = Utf8ToWide(workDir);
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = inRead;
-    si.hStdOutput = outWrite;
-    si.hStdError = outWrite;
-
-    std::wstring envBlock = BuildEnvironment(env);
-
-    PROCESS_INFORMATION pi{};
-    BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-        envBlock.data(), dir.empty() ? nullptr : dir.c_str(), &si, &pi);
-
-    CloseHandle(outWrite);
-    CloseHandle(inRead);
-
-    if (!ok)
-    {
-        CloseHandle(outRead);
-        CloseHandle(inWrite);
         std::lock_guard<std::mutex> guard(_lock);
-        _failReason = "CreateProcess failed: " + std::to_string(GetLastError());
+        _failReason = error;
         _state = ServerState::Failed;
         return false;
     }
 
-    CloseHandle(pi.hThread);
-    _process = pi.hProcess;
-    _stdoutRead = outRead;
-    _stdinWrite = inWrite;
+    _child = std::move(child);
     _exitCode = 0;
-    _startTick = GetTickCount64();
+    _startTick = Platform::TickMs();
     {
         std::lock_guard<std::mutex> guard(_lock);
         _stats = {};
@@ -156,20 +71,16 @@ void LonelyIce::ServerProcess::Stop()
 
 void LonelyIce::ServerProcess::Kill()
 {
-    if (_process && IsRunning())
-        TerminateProcess(_process, 1);
+    if (_child)
+        _child->Kill();
 }
 
 bool LonelyIce::ServerProcess::SendCommand(std::string const& utf8Line)
 {
-    if (!_stdinWrite || !IsRunning())
+    if (!IsRunning())
         return false;
-
-    std::string line = utf8Line + "\n";
-    DWORD written = 0;
-    return WriteFile(_stdinWrite, line.data(), DWORD(line.size()), &written, nullptr) && written == line.size();
+    return _child->Write(utf8Line + "\n");
 }
-
 std::vector<std::string> LonelyIce::ServerProcess::TakeLines()
 {
     std::lock_guard<std::mutex> guard(_lock);
@@ -209,17 +120,12 @@ std::string LonelyIce::ServerProcess::GetFailReason() const
 
 uint64_t LonelyIce::ServerProcess::GetMemoryBytes() const
 {
-    if (!_process || !IsRunning())
-        return 0;
-    PROCESS_MEMORY_COUNTERS_EX pmc{};
-    if (!GetProcessMemoryInfo(_process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc)))
-        return 0;
-    return pmc.PrivateUsage;
+    return _child ? _child->MemoryBytes() : 0;
 }
 
 bool LonelyIce::ServerProcess::IsRunning() const
 {
-    return _process && WaitForSingleObject(_process, 0) == WAIT_TIMEOUT;
+    return _child && _child->Running();
 }
 
 void LonelyIce::ServerProcess::ReaderLoop()
@@ -228,8 +134,8 @@ void LonelyIce::ServerProcess::ReaderLoop()
     char buf[8192];
     for (;;)
     {
-        DWORD read = 0;
-        if (!ReadFile(_stdoutRead, buf, sizeof(buf), &read, nullptr) || read == 0)
+        std::size_t const read = _child->Read(buf, sizeof(buf));
+        if (read == 0)
             break;
 
         pending.append(buf, read);
@@ -251,10 +157,9 @@ void LonelyIce::ServerProcess::ReaderLoop()
     if (!pending.empty())
         HandleLine(std::move(pending));
 
-    WaitForSingleObject(_process, INFINITE);
-    DWORD code = 0;
-    GetExitCodeProcess(_process, &code);
-    _exitCode = int(code);
+    _child->Wait(-1);
+    int const code = _child->ExitCode();
+    _exitCode = code;
 
     ServerState prev = _state;
     if (prev == ServerState::Failed)
@@ -373,14 +278,3 @@ void LonelyIce::ServerProcess::HandleLine(std::string line)
         _lines.pop_front();
 }
 
-void LonelyIce::ServerProcess::ClosePipes()
-{
-    for (void** h : { &_process, &_stdinWrite, &_stdoutRead })
-    {
-        if (*h)
-        {
-            CloseHandle(*h);
-            *h = nullptr;
-        }
-    }
-}

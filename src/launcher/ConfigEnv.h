@@ -1,6 +1,7 @@
 #ifndef LONELYICE_CONFIGENV_H
 #define LONELYICE_CONFIGENV_H
 
+#include "Platform.h"
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -8,7 +9,7 @@
 
 namespace LonelyIce
 {
-    using EnvList = std::vector<std::pair<std::wstring, std::wstring>>;
+    using EnvList = Platform::Env;     // UTF-8 name, value
 
     // The server reads module configs only from <working dir>\configs\modules. When the chosen
     // worldserver.conf lives elsewhere (e.g. configs-sqlite), its modules\*.conf are passed as AC_* overrides.

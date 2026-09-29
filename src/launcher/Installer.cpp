@@ -5,14 +5,12 @@
 #include "GameClient.h"
 #include "Lang.h"
 #include "Pak.h"
+#include "Platform.h"
 #include "Plugins.h"
-#include "TextUtil.h"
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <map>
-#include <Windows.h>
-#include <shlobj.h>
-#include <shobjidl.h>
 
 namespace fs = std::filesystem;
 using namespace LonelyIce;
@@ -28,11 +26,6 @@ namespace
         "Rate.Drop.Money", "Rate.Drop.Item.Poor", "Rate.Drop.Item.Normal", "Rate.Drop.Item.Uncommon", "Rate.Drop.Item.Rare",
         "Rate.Drop.Item.Epic", "Rate.Drop.Item.Legendary", "Rate.Drop.Item.Artifact", "Rate.Drop.Item.Referenced" };
 
-    std::string Quoted(fs::path const& p)
-    {
-        return "\"" + WideToUtf8(p.wstring()) + "\"";
-    }
-
     // Text between the first pair of ' or " quotes.
     std::string QuotedName(std::string const& line)
     {
@@ -41,31 +34,6 @@ namespace
             return {};
         std::size_t b = line.find(line[a], a + 1);
         return b == std::string::npos ? std::string() : line.substr(a + 1, b - a - 1);
-    }
-
-    bool CreateShortcut(fs::path const& target, fs::path const& link, std::string& error)
-    {
-        HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        IShellLinkW* sl = nullptr;
-        bool ok = false;
-        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&sl))))
-        {
-            sl->SetPath(target.c_str());
-            sl->SetWorkingDirectory(target.parent_path().c_str());
-            sl->SetDescription(L"LonelyIce");
-            IPersistFile* pf = nullptr;
-            if (SUCCEEDED(sl->QueryInterface(IID_PPV_ARGS(&pf))))
-            {
-                ok = SUCCEEDED(pf->Save(link.c_str(), TRUE));
-                pf->Release();
-            }
-            sl->Release();
-        }
-        if (SUCCEEDED(init))
-            CoUninitialize();
-        if (!ok)
-            error = Tr("install.error.shortcut");
-        return ok;
     }
 }
 
@@ -113,7 +81,7 @@ void Installer::Cancel()
     _cancel = true;
     std::lock_guard<std::mutex> guard(_lock);
     if (_child)
-        TerminateProcess(_child, 1);
+        _child->Kill();
 }
 
 std::vector<InstallStep> Installer::Steps() const
@@ -211,79 +179,35 @@ void Installer::Run()
         _wake();
 }
 
-int Installer::RunChild(std::wstring const& args, fs::path const& dir, std::vector<std::pair<std::wstring, std::wstring>> const& env,
+int Installer::RunChild(std::vector<std::string> const& args, fs::path const& dir, Platform::Env const& env,
     std::function<void(std::string const&)> const& onLine)
 {
-    SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
-    HANDLE outRead = nullptr, outWrite = nullptr, inRead = nullptr, inWrite = nullptr;
-    if (!CreatePipe(&outRead, &outWrite, &sa, 1 << 16))
+    Platform::ChildOptions o;
+    o.exe = _o.exe;
+    o.args = args;
+    o.workDir = dir;
+    o.env = env;
+    o.lowPriority = true;
+    o.pipes = true;
+    Platform::Child child;
+    std::string error;
+    if (!child.Start(o, error))
         return -1;
-    // stdin stays an empty pipe: tools that wait for a key read EOF instead of hanging.
-    if (!CreatePipe(&inRead, &inWrite, &sa, 0))
-    {
-        CloseHandle(outRead);
-        CloseHandle(outWrite);
-        return -1;
-    }
-    SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
-
-    std::wstring block;
-    if (!env.empty())
-    {
-        std::vector<std::wstring> vars;
-        for (auto const& [k, v] : env)
-            vars.push_back(k + L"=" + v);
-        if (wchar_t* cur = GetEnvironmentStringsW())
-        {
-            for (wchar_t const* p = cur; *p; p += wcslen(p) + 1)
-            {
-                std::wstring e = p;
-                std::size_t eq = e.find(L'=', 1);
-                bool overridden = std::any_of(env.begin(), env.end(), [&](auto const& kv) { return eq != std::wstring::npos && _wcsicmp(e.substr(0, eq).c_str(), kv.first.c_str()) == 0; });
-                if (!overridden)
-                    vars.push_back(e);
-            }
-            FreeEnvironmentStringsW(cur);
-        }
-        for (std::wstring const& v : vars)
-            block += v + L'\0';
-        block += L'\0';
-    }
-
-    std::wstring cmd = L"\"" + _o.exe.wstring() + L"\" " + args;
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = inRead;
-    si.hStdOutput = outWrite;
-    si.hStdError = outWrite;
-    PROCESS_INFORMATION pi{};
-    BOOL started = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT, block.empty() ? nullptr : block.data(),
-        dir.c_str(), &si, &pi);
-    CloseHandle(outWrite);
-    CloseHandle(inRead);
-    CloseHandle(inWrite);
-    if (!started)
-    {
-        CloseHandle(outRead);
-        return -1;
-    }
-    CloseHandle(pi.hThread);
+    // stdin is closed at once: tools that wait for a key read EOF instead of hanging.
+    child.CloseInput();
     {
         std::lock_guard<std::mutex> guard(_lock);
-        _child = pi.hProcess;
+        _child = &child;
     }
     if (_cancel)
-        TerminateProcess(pi.hProcess, 1);
+        child.Kill();
 
     std::string pending;
     char buf[8192];
     for (;;)
     {
-        DWORD read = 0;
-        if (!ReadFile(outRead, buf, sizeof(buf), &read, nullptr) || read == 0)
+        std::size_t read = child.Read(buf, sizeof(buf));
+        if (read == 0)
             break;
         pending.append(buf, read);
         std::size_t eol;
@@ -294,22 +218,19 @@ int Installer::RunChild(std::wstring const& args, fs::path const& dir, std::vect
             while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
                 line.pop_back();
             if (!line.empty())
-                onLine(OemToUtf8(line));
+                onLine(Platform::ConsoleToUtf8(line));
         }
     }
     if (!pending.empty())
-        onLine(OemToUtf8(pending));
-    CloseHandle(outRead);
+        onLine(Platform::ConsoleToUtf8(pending));
 
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 1;
-    GetExitCodeProcess(pi.hProcess, &code);
+    child.Wait(-1);
+    int code = child.ExitCode();
     {
         std::lock_guard<std::mutex> guard(_lock);
         _child = nullptr;
     }
-    CloseHandle(pi.hProcess);
-    return int(code);
+    return code;
 }
 
 std::string Installer::SqlStamp(fs::path const& setupDir)
@@ -333,7 +254,7 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
     std::vector<fs::path> created;
     bool read = Pak::Read(o.setupDir / "configs.pak", [&](std::string const& path, std::string const& data)
     {
-        fs::path dist = configs / fs::u8path(path);
+        fs::path dist = configs / Platform::Utf8ToPath(path);
         fs::create_directories(dist.parent_path(), ec);
         std::ofstream(dist, std::ios::binary | std::ios::trunc).write(data.data(), std::streamsize(data.size()));
         fs::path conf = dist;
@@ -366,7 +287,7 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
         ConfFile f;
         if (!f.Load(conf))
             continue;
-        std::string name = conf.filename().string();
+        std::string name = Platform::PathToUtf8(conf.filename());
         if (name == "worldserver.conf")
         {
             f.Set("LoginDatabaseInfo", "sqlite:db/auth.sqlite");
@@ -395,7 +316,7 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
         }
         if (!f.Save())
         {
-            error = Tr("install.error.write", WideToUtf8(conf.wstring()));
+            error = Tr("install.error.write", Platform::PathToUtf8(conf));
             return false;
         }
     }
@@ -420,10 +341,10 @@ bool Installer::RunDatabases()
     Log(Tr("install.log.unpack"));
     bool unpacked = Pak::Read(_o.setupDir / "sql.pak", [&](std::string const& path, std::string const& data)
     {
-        fs::path file = sql / fs::u8path(path);
+        fs::path file = sql / Platform::Utf8ToPath(path);
         fs::create_directories(file.parent_path(), ec);
         std::ofstream(file, std::ios::binary | std::ios::trunc).write(data.data(), std::streamsize(data.size()));
-        sizes[file.filename().string()] = data.size();
+        sizes[Platform::PathToUtf8(file.filename())] = data.size();
         total += data.size();
         return !_cancel;
     }, error, [&](uint64_t done, uint64_t all) { Progress("db", 0.1f * float(done) / float(std::max<uint64_t>(all, 1)), Tr("install.note.unpack")); });
@@ -437,21 +358,21 @@ bool Installer::RunDatabases()
         fs::create_directories(sql / "data" / "sql" / d, ec);
     Log(Tr("install.log.sql", sizes.size(), Tr("unit.mb", total >> 20)));
 
-    std::vector<std::pair<std::wstring, std::wstring>> env = {
-        { L"AC_DISABLE_INTERACTIVE", L"1" },
-        { L"AC_PLUGINS_DIR", (_o.exe.parent_path() / "plugins").wstring() },
-        { Utf8ToWide(EnvName("Updates.EnableDatabases")), L"7" },
-        { Utf8ToWide(EnvName("Playerbots.Updates.EnableDatabases")), L"1" },
-        { L"LONELYICE_REALMNAME", Utf8ToWide(_o.realmName) },
-        { L"LONELYICE_CLIENT", _o.client.wstring() } };
+    Platform::Env env = {
+        { "AC_DISABLE_INTERACTIVE", "1" },
+        { "AC_PLUGINS_DIR", Platform::PathToUtf8(_o.exe.parent_path() / "plugins") },
+        { EnvName("Updates.EnableDatabases"), "7" },
+        { EnvName("Playerbots.Updates.EnableDatabases"), "1" },
+        { "LONELYICE_REALMNAME", _o.realmName },
+        { "LONELYICE_CLIENT", Platform::PathToUtf8(_o.client) } };
     if (!_o.login.empty())
-        env.push_back({ L"LONELYICE_ACCOUNT", Utf8ToWide(_o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel)) });
+        env.push_back({ "LONELYICE_ACCOUNT", _o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel) });
 
     uint64_t applied = 0;
     std::string current = Tr("install.note.create_db");
     bool deployed = false;
     std::string failure;
-    int rc = RunChild(L"--server --deploy -c \"" + (_o.root / "configs" / "worldserver.conf").wstring() + L"\"", _o.root, env,
+    int rc = RunChild({ "--server", "--deploy", "-c", Platform::PathToUtf8(_o.root / "configs" / "worldserver.conf") }, _o.root, env,
         [&](std::string const& line)
         {
             if (line.rfind("@@LI ", 0) == 0)
@@ -494,7 +415,7 @@ bool Installer::RunMaps()
     int done = 0, total = 0;
     // the server's tables must be the stock ones, without the plugins' client patches
     ClientPatch::HiddenArchives hidden(_o.client);
-    int rc = RunChild(L"--tool maps \"" + _o.client.wstring() + L"\" \"" + data.wstring() + L"\"", _o.root, {},
+    int rc = RunChild({ "--tool", "maps", Platform::PathToUtf8(_o.client), Platform::PathToUtf8(data) }, _o.root, {},
         [&](std::string const& line)
         {
             // "Extract <name> (12/144)"
@@ -532,7 +453,7 @@ bool Installer::RunVmaps()
     fs::path data = _o.root / "data";
     int maps = 0, total = _mapCount > 0 ? _mapCount : 140;
     ClientPatch::HiddenArchives hidden(_o.client);
-    int rc = RunChild(L"--tool vmaps \"" + _o.client.wstring() + L"\" \"" + data.wstring() + L"\"", data, {},
+    int rc = RunChild({ "--tool", "vmaps", Platform::PathToUtf8(_o.client), Platform::PathToUtf8(data) }, data, {},
         [&](std::string const& line)
         {
             if (line.rfind("Processing Map", 0) == 0)
@@ -550,7 +471,7 @@ bool Installer::RunVmaps()
     }
 
     int trees = 0;
-    rc = RunChild(L"--tool assemble \"" + data.wstring() + L"\"", data, {},
+    rc = RunChild({ "--tool", "assemble", Platform::PathToUtf8(data) }, data, {},
         [&](std::string const& line)
         {
             if (line.rfind("Creating map tree", 0) == 0)
@@ -573,7 +494,7 @@ bool Installer::RunVmaps()
 bool Installer::RunMmaps()
 {
     fs::path data = _o.root / "data";
-    int rc = RunChild(L"--tool mmaps \"" + data.wstring() + L"\" " + std::to_wstring(std::max(1, _o.threads)), data, {},
+    int rc = RunChild({ "--tool", "mmaps", Platform::PathToUtf8(data), std::to_string(std::max(1, _o.threads)) }, data, {},
         [&](std::string const& line)
         {
             // "37% [Map 0571] Building tile [31,22]"
@@ -635,17 +556,12 @@ bool Installer::RunClient()
         Log("Config.wtf: accountName " + _o.login);
     }
     Progress("client", 0.8f);
-    if (_o.shortcut)
+    if (_o.shortcut && Platform::DesktopShortcutsSupported())
     {
-        wchar_t* desktop = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktop)))
-        {
-            if (CreateShortcut(_o.exe, fs::path(desktop) / L"LonelyIce.lnk", error))
-                Log(Tr("install.log.shortcut"));
-            else
-                Log(error);
-            CoTaskMemFree(desktop);
-        }
+        if (Platform::CreateDesktopShortcut("LonelyIce", _o.exe, {}, {}, error))
+            Log(Tr("install.log.shortcut"));
+        else
+            Log(error.empty() ? Tr("install.error.shortcut") : error);
     }
     return true;
 }

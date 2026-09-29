@@ -1,7 +1,7 @@
 # LonelyIce: single-player launcher around the LonelyIce fork of AzerothCore.
 #
 #   git clone --recursive https://github.com/LonelyIceProject/lonelyice
-#   tools\build-ui-deps.ps1                      (SDL3, FreeType, RmlUi into deps/)
+#   tools\build-ui-deps.ps1  or  tools/build-ui-deps.sh   (SDL3, FreeType, RmlUi, StormLib, miniz, libcurl into deps/)
 #   cmake -S . -B build -DBOOST_ROOT=... -DOPENSSL_ROOT_DIR=...
 #   cmake --build build --config RelWithDebInfo --target lonelyice_release
 #
@@ -34,6 +34,8 @@ set(AC_PLUGIN_SOURCE_DIRS "${LONELYICE_PLUGIN_DIRS}" CACHE STRING "" FORCE)
 set(WITH_MYSQL OFF CACHE BOOL "LonelyIce runs on SQLite only; no MySQL client library" FORCE)
 set(TOOLS_BUILD "maps-only" CACHE STRING "LonelyIce embeds the map extractors" FORCE)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# Linux, macOS: the core's shared libraries next to the executables too (found through the $ORIGIN rpath).
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 add_subdirectory("${LONELYICE_CORE_DIR}" azerothcore)
 add_subdirectory(src)

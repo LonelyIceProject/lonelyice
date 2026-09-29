@@ -13,9 +13,15 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+// System headers System.cpp includes itself (per platform), pulled in here first so they stay at global scope.
+#ifdef _WIN32
 #include <direct.h>
-#include <fcntl.h>
 #include <io.h>
+#else
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+#include <fcntl.h>
 #include <sys/stat.h>
 #include "Define.h"
 #include "StringFormat.h"

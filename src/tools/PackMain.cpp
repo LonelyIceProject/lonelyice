@@ -1,13 +1,13 @@
-// Release packer, run at build time: LonelyIce.exe --pack <source root> <out dir>
+// Release packer, run at build time: LonelyIce --pack <source root> <out dir>
 // Writes <out>/sql.pak (everything the database updater reads) and <out>/configs.pak (default configs).
 
 #include "Pak.h"
+#include "Platform.h"
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
-#include <Windows.h>
 
 namespace fs = std::filesystem;
 using LonelyIce::Pak::Entry;
@@ -53,12 +53,7 @@ namespace
 
 int PackMain(int argc, char** argv)
 {
-    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-    if ((!out || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS))
-    {
-        FILE* f = nullptr;
-        freopen_s(&f, "CONOUT$", "w", stdout);
-    }
+    LonelyIce::Platform::UseParentConsole();
 
     std::vector<std::string> a;
     for (int i = 1; i < argc; ++i)
@@ -66,7 +61,7 @@ int PackMain(int argc, char** argv)
             a.emplace_back(argv[i]);
     if (a.size() < 2)
     {
-        printf("usage: LonelyIce.exe --pack <source root> <out dir>\n");
+        printf("usage: LonelyIce --pack <source root> <out dir>\n");
         return 1;
     }
     fs::path src = fs::u8path(a[0]), dst = fs::u8path(a[1]);

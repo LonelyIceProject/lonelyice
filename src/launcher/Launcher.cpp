@@ -5,6 +5,7 @@
 #include "GameClient.h"
 #include "GitRevision.h"
 #include "Lang.h"
+#include "Platform.h"
 #include "LauncherSettings.h"
 #include "ServerProcess.h"
 #include "SettingsModel.h"
@@ -29,8 +30,6 @@
 #include <mutex>
 #include <sstream>
 #include <thread>
-#include <Windows.h>
-#include <shellapi.h>
 
 namespace fs = std::filesystem;
 using namespace LonelyIce;
@@ -83,12 +82,7 @@ namespace
     // First character of a UTF-8 string, upper-cased for Latin and Cyrillic.
     std::string Initial(std::string const& s)
     {
-        std::wstring w = Utf8ToWide(s);
-        if (w.empty())
-            return "?";
-        wchar_t c[2] = { w[0], 0 };
-        CharUpperW(c);
-        return WideToUtf8(c);
+        return FirstLetterUpper(s);
     }
 
     std::string UiPath(fs::path const& p)
@@ -120,7 +114,7 @@ namespace
     {
         std::time_t t = std::time(nullptr);
         std::tm tm{};
-        localtime_s(&tm, &t);
+        tm = Platform::LocalTime(t);
         char buf[32];
         std::strftime(buf, sizeof(buf), fmt, &tm);
         return buf;
@@ -195,7 +189,7 @@ namespace
     class Launcher : public Rml::EventListener
     {
     public:
-        int Run();
+        int Run(int argc, char** argv);
 
         void ProcessEvent(Rml::Event& ev) override
         {
@@ -328,7 +322,7 @@ namespace
         Rml::String _plView = "installed", _plRepoNew;     // installed, updates, catalog, repos
         int _plUpdates = 0;
         bool _plHasOfficial = true;
-        std::wstring _pickedRepo;
+        std::string _pickedRepo;
         Rml::String _plStatus = Tr("pl.status.not_loaded");
         bool _plBusy = false, _plIndexLoaded = false;
         std::thread _plThread;
@@ -339,10 +333,10 @@ namespace
         ServerState _lastState = ServerState::Stopped;
         bool _pendingPlay = false, _pendingRestart = false, _quitting = false, _startHidden = false, _scriptClose = false;
         uint64_t _lastStatsTick = 0, _accRefreshAt = 0, _lastBackupCheck = 0;
-        HANDLE _game = nullptr;
+        std::unique_ptr<Platform::Child> _game;
 
         std::mutex _asyncLock;
-        std::wstring _pickedDir;
+        std::string _pickedDir;
         std::thread _backupThread;
         std::atomic<bool> _backupDone{ false };
         BackupResult _backupResult;
@@ -394,15 +388,13 @@ namespace
         return p.is_absolute() ? p : Root() / p;
     }
 
-    int Launcher::Run()
+    int Launcher::Run(int argc, char** argv)
     {
-        wchar_t buf[MAX_PATH];
-        GetModuleFileNameW(nullptr, buf, MAX_PATH);
-        _exe = buf;
+        _exe = Platform::ExePath();
         _exeDir = _exe.parent_path();
 
-        for (int i = 1; i < __argc; ++i)
-            if (std::string_view(__argv[i]) == "--tray")
+        for (int i = 1; i < argc; ++i)
+            if (std::string_view(argv[i]) == "--tray")
                 _startHidden = true;
 
         _settings.file = _exeDir / "lonelyice.ini";
@@ -417,9 +409,9 @@ namespace
             [this] { return _settings.sqlStamp; },
             [this](InstallOptions const& o)
             {
-                _settings.dataRoot = o.root.wstring();
+                _settings.dataRoot = o.root;
                 _settings.serverConfig.clear();
-                _settings.clientPath = o.client.wstring();
+                _settings.clientPath = o.client;
                 if (o.db)
                 {
                     _settings.sqlStamp = Installer::SqlStamp(o.setupDir);
@@ -429,13 +421,13 @@ namespace
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
-                AddEvent(Tr("event.install_done", WideToUtf8(o.root.wstring())));
+                AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
             [this] { Play(); }, [] { UiBackend::Wake(); } });
 
         if (!UiBackend::Initialize("LonelyIce", 960, 680, _settings.uiScale / 100.f))
         {
-            MessageBoxW(nullptr, Utf8ToWide(Tr("error.no_opengl")).c_str(), L"LonelyIce", MB_ICONERROR);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "LonelyIce", Tr("error.no_opengl").c_str(), nullptr);
             return 1;
         }
         _settings.uiScale = int(UiBackend::GetUiScale() * 100.f + 0.5f);
@@ -450,7 +442,7 @@ namespace
         {
             Rml::Shutdown();
             UiBackend::Shutdown();
-            MessageBoxW(nullptr, Utf8ToWide(Tr("error.no_ui")).c_str(), L"LonelyIce", MB_ICONERROR);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "LonelyIce", Tr("error.no_ui").c_str(), nullptr);
             return 1;
         }
 
@@ -482,7 +474,7 @@ namespace
             closeRequested = closeRequested || std::exchange(_scriptClose, false);
             if (!alive)
             {
-                // Windows session ends: do not wait for anything.
+                // The session ends: do not wait for anything.
                 _server->Stop();
                 break;
             }
@@ -535,8 +527,6 @@ namespace
             _plThread.join();
         _settings.Save();
         _server.reset();
-        if (_game)
-            CloseHandle(_game);
         _tray.Destroy();
         Rml::Shutdown();
         if (_icon)
@@ -943,14 +933,14 @@ namespace
             RefreshClient();
             Message(Tr("msg.launch_locale", _settings.locale));
         });
-        on("open_server_dir", [this] { ShellExecuteW(nullptr, L"open", Root().c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
-        on("open_logs", [this] { ShellExecuteW(nullptr, L"open", ConfPath("LogsDir", "logs").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
-        on("open_data", [this] { ShellExecuteW(nullptr, L"open", ConfPath("DataDir", ".").c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+        on("open_server_dir", [this] { Platform::OpenInShell(Root()); });
+        on("open_logs", [this] { Platform::OpenInShell(ConfPath("LogsDir", "logs")); });
+        on("open_data", [this] { Platform::OpenInShell(ConfPath("DataDir", ".")); });
         on("open_backups", [this]
         {
             std::error_code ec;
             fs::create_directories(Root() / "backups", ec);
-            ShellExecuteW(nullptr, L"open", (Root() / "backups").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            Platform::OpenInShell(Root() / "backups");
         });
         on("backup_now", [this] { StartBackup(false); });
         on("announce", [this]
@@ -1015,7 +1005,7 @@ namespace
                 auto* me = static_cast<Launcher*>(self);
                 {
                     std::lock_guard<std::mutex> guard(me->_asyncLock);
-                    me->_pickedRepo = Utf8ToWide(list[0]);
+                    me->_pickedRepo = list[0];
                 }
                 UiBackend::Wake();
             }, this, UiBackend::GetWindow(), start.c_str(), false);
@@ -1029,12 +1019,7 @@ namespace
     // ("click <id>" or "type <id> <text>") is executed and the file is deleted.
     void Launcher::RunUiScript()
     {
-        static std::wstring const path = []
-        {
-            wchar_t buf[MAX_PATH];
-            DWORD n = GetEnvironmentVariableW(L"LONELYICE_UI_SCRIPT", buf, MAX_PATH);
-            return n > 0 && n < MAX_PATH ? std::wstring(buf) : std::wstring();
-        }();
+        static fs::path const path = Platform::Utf8ToPath(Platform::GetEnv("LONELYICE_UI_SCRIPT").value_or(""));
         if (path.empty() || !fs::exists(path))
             return;
 
@@ -1149,7 +1134,7 @@ namespace
             _model.DirtyVariable("cmd_target");
         }
 
-        uint64_t tick = GetTickCount64();
+        uint64_t tick = Platform::TickMs();
         if (_accRefreshAt && tick >= _accRefreshAt)
         {
             _accRefreshAt = 0;
@@ -1176,10 +1161,9 @@ namespace
             for (char const* v : { "uptime", "players", "bots", "diff", "memory", "state_sub" })
                 _model.DirtyVariable(v);
 
-            if (_game && WaitForSingleObject(_game, 0) == WAIT_OBJECT_0)
+            if (_game && !_game->Running())
             {
-                CloseHandle(_game);
-                _game = nullptr;
+                _game.reset();
                 AddEvent(Tr("event.game_closed"));
                 if (_settings.stopWithGame && _server->IsRunning())
                 {
@@ -1237,26 +1221,26 @@ namespace
             _backupBusy = false;
             _model.DirtyVariable("backup_busy");
             if (_backupResult.ok)
-                AddEvent(Tr("event.backup_done", FormatBytes(_backupResult.bytes), WideToUtf8(_backupResult.dir.filename().wstring())));
+                AddEvent(Tr("event.backup_done", FormatBytes(_backupResult.bytes), Platform::PathToUtf8(_backupResult.dir.filename())));
             else
                 AddEvent(Tr("event.backup_failed", _backupResult.message));
             RefreshBackups();
             RefreshNews();
         }
 
-        std::wstring picked, pickedRepo;
+        std::string picked, pickedRepo;
         {
             std::lock_guard<std::mutex> guard(_asyncLock);
             picked.swap(_pickedDir);
             pickedRepo.swap(_pickedRepo);
         }
         if (!pickedRepo.empty())
-            AddRepo(WideToUtf8(pickedRepo));
+            AddRepo(pickedRepo);
         if (!picked.empty())
         {
-            if (GameClient::IsClientDir(picked))
+            if (GameClient::IsClientDir(Platform::Utf8ToPath(picked)))
             {
-                _settings.clientPath = picked;
+                _settings.clientPath = Platform::Utf8ToPath(picked);
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
@@ -1284,7 +1268,7 @@ namespace
                 break;
             case ServerState::Ready:
             {
-                AddEvent(Tr("event.world_ready", (GetTickCount64() - _server->GetStartTick()) / 1000));
+                AddEvent(Tr("event.world_ready", (Platform::TickMs() - _server->GetStartTick()) / 1000));
                 std::string realm = _server->GetRealmName();
                 if (!_settings.pendingRealmName.empty() && _settings.pendingRealmName != realm)
                 {
@@ -1353,7 +1337,7 @@ namespace
         _soapPort = conf.Get("SOAP.Port").value_or("7878");
         std::string soap = conf.Get("SOAP.Enabled").value_or("0");
         _soapEnabled = soap == "1" || soap == "true";
-        _logsDir = WideToUtf8(ConfPath("LogsDir", "logs").wstring());
+        _logsDir = Platform::PathToUtf8(ConfPath("LogsDir", "logs"));
 
         _playLabel = Tr("play.play");
         if (NeedsSetup())
@@ -1420,10 +1404,10 @@ namespace
         }
         else
         {
-            _clientPath = WideToUtf8(_client.dir.wstring());
+            _clientPath = Platform::PathToUtf8(_client.dir);
             if (_settings.clientPath.empty())
             {
-                _settings.clientPath = _client.dir.wstring();
+                _settings.clientPath = _client.dir;
                 _settings.Save();
             }
 
@@ -1572,7 +1556,7 @@ namespace
         if (!newest.empty())
         {
             DirStats const s = Scan(newest);
-            _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", WideToUtf8(newest.filename().wstring()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
+            _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", Platform::PathToUtf8(newest.filename()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
         }
         else if (!NeedsSetup())
             _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
@@ -1622,7 +1606,7 @@ namespace
         {
             DirStats const s = Scan(d);
             total += s.bytes;
-            _backupRows.push_back({ WideToUtf8(d.filename().wstring()), Tr("backup.files", s.files), "ok", FormatBytes(s.bytes) });
+            _backupRows.push_back({ Platform::PathToUtf8(d.filename()), Tr("backup.files", s.files), "ok", FormatBytes(s.bytes) });
         }
         _backupSum = _settings.backupTime.empty() ? Tr("backup.sum_manual", dirs.size(), FormatBytes(total))
             : Tr("backup.sum", dirs.size(), FormatBytes(total), _settings.backupTime, _settings.backupKeep);
@@ -1634,7 +1618,7 @@ namespace
                 logs.push_back(*it);
         std::sort(logs.begin(), logs.end(), [](auto const& a, auto const& b) { return a.path().filename() < b.path().filename(); });
         for (fs::directory_entry const& e : logs)
-            _logRows.push_back({ WideToUtf8(e.path().filename().wstring()), "", "ok", FormatBytes(e.file_size(ec)) });
+            _logRows.push_back({ Platform::PathToUtf8(e.path().filename()), "", "ok", FormatBytes(e.file_size(ec)) });
         for (char const* v : { "backup_rows", "backup_sum", "log_rows" })
             _model.DirtyVariable(v);
     }
@@ -1646,10 +1630,10 @@ namespace
             { Tr("about.core"), Tr("about.core.text"), "", "" },
             { Tr("about.license"), Tr("about.license.text"), "", "" },
             { Tr("about.fonts"), Tr("about.fonts.text"), "", "" },
-            { Tr("about.app_dir"), WideToUtf8(_exeDir.wstring()), "", "" },
-            { Tr("about.data_dir"), WideToUtf8(Root().wstring()), "", "" },
-            { Tr("about.config"), WideToUtf8(ServerConfig().wstring()), "", "" },
-            { Tr("about.plugins_dir"), WideToUtf8((_exeDir / "plugins").wstring()), "", "" },
+            { Tr("about.app_dir"), Platform::PathToUtf8(_exeDir), "", "" },
+            { Tr("about.data_dir"), Platform::PathToUtf8(Root()), "", "" },
+            { Tr("about.config"), Platform::PathToUtf8(ServerConfig()), "", "" },
+            { Tr("about.plugins_dir"), Platform::PathToUtf8((_exeDir / "plugins")), "", "" },
         };
         _model.DirtyVariable("about_rows");
     }
@@ -1671,16 +1655,16 @@ namespace
         fs::path config = ServerConfig();
         if (!fs::exists(config))
         {
-            Message(Tr("msg.no_config", WideToUtf8(config.wstring())));
+            Message(Tr("msg.no_config", Platform::PathToUtf8(config)));
             return;
         }
-        AppendLog(Tr("log.starting", WideToUtf8(config.wstring())), "me");
+        AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
         EnvList env = ModuleConfigOverrides(config, Root());
-        env.emplace_back(L"AC_PLUGINS_DIR", (_exeDir / "plugins").wstring());
+        env.emplace_back("AC_PLUGINS_DIR", Platform::PathToUtf8(_exeDir / "plugins"));
         // the server builds the plugins' client patches while it starts
         if (_client.valid)
-            env.emplace_back(L"LONELYICE_CLIENT", _client.dir.wstring());
-        if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(Root().wstring()), env))
+            env.emplace_back("LONELYICE_CLIENT", Platform::PathToUtf8(_client.dir));
+        if (!_server->Start(Platform::PathToUtf8(_exe), Platform::PathToUtf8(config), Platform::PathToUtf8(Root()), env))
             Message(Tr("msg.start_failed", _server->GetFailReason()));
         RefreshServerView();
         RefreshTray();
@@ -1760,12 +1744,10 @@ namespace
             GameClient::ClearWdb(_client.dir);
 
         std::string error;
-        HANDLE process = nullptr;
-        if (GameClient::Launch(_client.dir, error, reinterpret_cast<void**>(&process)))
+        std::unique_ptr<Platform::Child> process;
+        if (GameClient::Launch(_client.dir, _settings.runner, error, process))
         {
-            if (_game)
-                CloseHandle(_game);
-            _game = process;
+            _game = std::move(process);
             AddEvent(launch.empty() ? Tr("event.game_started") : Tr("event.game_started_locale", launch));
             Message("");
         }
@@ -1804,7 +1786,7 @@ namespace
 
     void Launcher::BrowseClient()
     {
-        std::string start = _client.valid ? WideToUtf8(_client.dir.wstring()) : WideToUtf8(_exeDir.wstring());
+        std::string start = _client.valid ? Platform::PathToUtf8(_client.dir) : Platform::PathToUtf8(_exeDir);
         SDL_ShowOpenFolderDialog([](void* self, char const* const* list, int)
         {
             if (!list || !list[0])
@@ -1812,7 +1794,7 @@ namespace
             auto* me = static_cast<Launcher*>(self);
             {
                 std::lock_guard<std::mutex> guard(me->_asyncLock);
-                me->_pickedDir = Utf8ToWide(list[0]);
+                me->_pickedDir = list[0];
             }
             UiBackend::Wake();
         }, this, UiBackend::GetWindow(), start.c_str(), false);
@@ -1864,7 +1846,7 @@ namespace
         _accLogin.clear();
         _model.DirtyVariable("acc_pass");
         _model.DirtyVariable("acc_login");
-        _accRefreshAt = GetTickCount64() + 1500;
+        _accRefreshAt = Platform::TickMs() + 1500;
     }
 
     // ---- commands
@@ -2525,8 +2507,8 @@ namespace
     }
 }
 
-int LauncherMain(int /*argc*/, char** /*argv*/)
+int LauncherMain(int argc, char** argv)
 {
     Launcher launcher;
-    return launcher.Run();
+    return launcher.Run(argc, argv);
 }

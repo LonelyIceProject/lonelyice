@@ -1,14 +1,17 @@
 #include "Wizard.h"
 #include "Lang.h"
-#include "TextUtil.h"
+#include "Platform.h"
 #include "UiBackend.h"
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Event.h>
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <thread>
-#include <Windows.h>
 
 namespace fs = std::filesystem;
 using namespace LonelyIce;
@@ -21,7 +24,7 @@ namespace
 
     std::string Utf8(fs::path const& p)
     {
-        return WideToUtf8(p.wstring());
+        return Platform::PathToUtf8(p);
     }
 
     uint64_t FreeBytes(fs::path p)
@@ -29,11 +32,32 @@ namespace
         std::error_code ec;
         while (!p.empty() && !fs::exists(p, ec) && p.has_parent_path() && p.parent_path() != p)
             p = p.parent_path();
-        ULARGE_INTEGER free{};
-        if (!GetDiskFreeSpaceExW(p.c_str(), &free, nullptr, nullptr))
+        fs::space_info info = fs::space(p, ec);
+        if (ec || info.available == static_cast<std::uintmax_t>(-1))
             return 0;
-        return free.QuadPart;
+        return uint64_t(info.available);
     }
+
+#ifndef _WIN32
+    // Per-user application data: ~/Library/Application Support/LonelyIce on macOS; $XDG_DATA_HOME/LonelyIce or
+    // ~/.local/share/LonelyIce elsewhere. Empty when HOME is not set.
+    fs::path UserDataDir()
+    {
+        std::optional<std::string> home = Platform::GetEnv("HOME");
+#ifdef __APPLE__
+        if (!home || home->empty())
+            return {};
+        return Platform::Utf8ToPath(*home) / "Library" / "Application Support" / "LonelyIce";
+#else
+        std::optional<std::string> xdg = Platform::GetEnv("XDG_DATA_HOME");
+        if (xdg && !xdg->empty() && Platform::Utf8ToPath(*xdg).is_absolute())
+            return Platform::Utf8ToPath(*xdg) / "LonelyIce";
+        if (!home || home->empty())
+            return {};
+        return Platform::Utf8ToPath(*home) / ".local" / "share" / "LonelyIce";
+#endif
+    }
+#endif
 
     // "6.0 GB": one decimal, with the language's decimal separator (unit.decimal).
     std::string GbText(double gb)
@@ -52,12 +76,19 @@ namespace
         return GbText(double(bytes) / double(1ull << 30));
     }
 
-    uint32_t CountFiles(fs::path const& dir, std::wstring const& ext = {})
+    bool SameText(std::string const& a, std::string const& b)
+    {
+        return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
+            [](char x, char y) { return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y)); });
+    }
+
+    // Entries of dir; with ext (".MPQ"), only those with that extension, whatever its case.
+    uint32_t CountFiles(fs::path const& dir, std::string const& ext = {})
     {
         std::error_code ec;
         uint32_t n = 0;
         for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
-            if (ext.empty() || it->path().extension() == ext)
+            if (ext.empty() || SameText(Platform::PathToUtf8(it->path().extension()), ext))
                 ++n;
         return n;
     }
@@ -66,7 +97,7 @@ namespace
     {
         std::error_code ec;
         fs::create_directories(dir, ec);
-        fs::path probe = dir / L".lonelyice-write-test";
+        fs::path probe = dir / ".lonelyice-write-test";
         {
             std::ofstream out(probe);
             if (!out)
@@ -88,6 +119,10 @@ Wizard::Wizard(Host host) : _host(std::move(host)), _installer([w = _host.wake] 
     // A third of the logical CPUs stays free for the rest of the system (4 of 12 cores with SMT).
     _threads = std::to_string(std::max(1u, cores - cores / 3));
     _coresNote = Tr("wizard.cores_note", cores);
+    // Where the desktop has no shortcuts the option is hidden (wz_lnk_supported) and stays off.
+    _lnkSupported = Platform::DesktopShortcutsSupported();
+    if (!_lnkSupported)
+        _lnk = false;
 }
 
 Wizard::~Wizard() = default;
@@ -184,6 +219,7 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     c.Bind("wz_wdb", &_wdb);
     c.Bind("wz_accname", &_accName);
     c.Bind("wz_lnk", &_lnk);
+    c.Bind("wz_lnk_supported", &_lnkSupported);
     c.Bind("wz_rl_note", &_rlNote);
     c.Bind("wz_inst", &_inst);
     c.Bind("wz_log", &_log);
@@ -238,6 +274,14 @@ void Wizard::Open(fs::path const& client)
     if (fs::exists(root / "configs" / "worldserver.conf", ec) && !fs::equivalent(root, _host.exeDir, ec))
         _customPlace = root;
     _place = !_customPlace.empty() ? "custom" : (fs::exists(_host.exeDir / "configs" / "worldserver.conf", ec) ? "exe" : "client");
+#ifndef _WIN32
+    fs::path user = UserDataDir();
+    if (!_customPlace.empty() && !user.empty() && fs::equivalent(_customPlace, user, ec))
+    {
+        _customPlace.clear();
+        _place = "user";
+    }
+#endif
     BuildPlaces();
     BuildComponents();
     Go(0);
@@ -264,13 +308,13 @@ void Wizard::Inspect(fs::path const& client)
     bool build = _client.version == "3.3.5.12340";
     _checks.push_back({ build ? "ok" : "bad", Tr("wizard.check.version"), _client.version.empty() ? Tr("wizard.check.version_unread")
         : Tr("wizard.check.build", _client.version.substr(_client.version.rfind('.') + 1)) });
-    uint32_t mpq = CountFiles(_client.dir / "Data", L".MPQ") + CountFiles(_client.dir / "Data", L".mpq");
+    uint32_t mpq = CountFiles(GameClient::Child(_client.dir, "Data"), ".MPQ");
     _checks.push_back({ mpq >= 4 ? "ok" : "bad", Tr("wizard.check.mpq"), Tr("wizard.check.mpq_count", mpq) });
     for (ClientLocale const& l : _client.locales)
-        _checks.push_back({ "ok", Tr("wizard.check.locale", l.name), "Data\\" + l.name });
+        _checks.push_back({ "ok", Tr("wizard.check.locale", l.name), Utf8(fs::path("Data") / Platform::Utf8ToPath(l.name)) });
     if (_client.locales.empty())
         _checks.push_back({ "bad", Tr("wizard.check.locale_title"), Tr("wizard.check.locale_none") });
-    bool writable = Writable(_client.dir / "WTF");
+    bool writable = Writable(GameClient::Child(_client.dir, "WTF"));
     _checks.push_back({ writable ? "ok" : "bad", Tr("wizard.check.write"), writable ? Tr("wizard.check.write_ok") : Tr("wizard.check.write_denied") });
     bool running = GameClient::IsRunning(_client.dir);
     _checks.push_back({ running ? "warn" : "ok", running ? Tr("wizard.check.game_running") : Tr("wizard.check.game_stopped"),
@@ -288,20 +332,30 @@ fs::path Wizard::PlacePath() const
         return _client.valid ? _client.dir / "LonelyIce" : fs::path();
     if (_place == "exe")
         return _host.exeDir;
+#ifndef _WIN32
+    if (_place == "user")
+        return UserDataDir();
+#endif
     return _customPlace;
 }
 
 void Wizard::BuildPlaces()
 {
     _places.clear();
-    auto add = [&](std::string const& id, fs::path const& p)
+    // texts: wizard.place.<key>.title / .detail
+    auto add = [&](std::string const& id, fs::path const& p, std::string const& key)
     {
-        _places.push_back({ id, Tr("wizard.place." + id + ".title"), p.empty() ? Tr("wizard.place.none") : Utf8(p),
-            p.empty() ? "" : Tr("wizard.place.free", Gb(FreeBytes(p))), Tr("wizard.place." + id + ".detail") });
+        _places.push_back({ id, Tr("wizard.place." + key + ".title"), p.empty() ? Tr("wizard.place.none") : Utf8(p),
+            p.empty() ? "" : Tr("wizard.place.free", Gb(FreeBytes(p))), Tr("wizard.place." + key + ".detail") });
     };
-    add("client", _client.valid ? _client.dir / "LonelyIce" : fs::path());
-    add("exe", _host.exeDir);
-    add("custom", _customPlace);
+    add("client", _client.valid ? _client.dir / "LonelyIce" : fs::path(), "client");
+#ifdef _WIN32
+    add("exe", _host.exeDir, "exe");
+#else
+    add("user", UserDataDir(), "user");
+    add("exe", _host.exeDir, "exe_posix");
+#endif
+    add("custom", _customPlace, "custom");
 }
 
 void Wizard::BuildComponents()
@@ -312,7 +366,7 @@ void Wizard::BuildComponents()
     bool setup = fs::exists(_host.exeDir / "setup" / "sql.pak", ec) && fs::exists(_host.exeDir / "setup" / "configs.pak", ec);
     bool haveDb = !root.empty() && fs::exists(root / "db" / "world.sqlite", ec);
     uint32_t maps = root.empty() ? 0 : CountFiles(data / "maps");
-    uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", L".vmtree");
+    uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", ".vmtree");
     uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps");
 
     auto have = [](uint32_t count, char const* key) { return count ? Tr(key, count) : std::string(); };
@@ -492,7 +546,7 @@ void Wizard::StartInstall()
     o.realmlist = _rl;
     o.clearWdb = _wdb;
     o.accountName = _accName;
-    o.shortcut = _lnk;
+    o.shortcut = _lnk && _lnkSupported;
     _options = o;
     _log.clear();
     _installer.Start(o);
@@ -501,7 +555,7 @@ void Wizard::StartInstall()
 
 void Wizard::Tick()
 {
-    std::wstring picked;
+    std::string picked;     // UTF-8
     bool forClient = false;
     {
         std::lock_guard<std::mutex> guard(_pickLock);
@@ -512,12 +566,12 @@ void Wizard::Tick()
     {
         if (forClient)
         {
-            Inspect(picked);
+            Inspect(Platform::Utf8ToPath(picked));
             BuildPlaces();
         }
         else
         {
-            _customPlace = picked;
+            _customPlace = Platform::Utf8ToPath(picked);
             _place = "custom";
             BuildPlaces();
             BuildComponents();
@@ -614,7 +668,7 @@ void Wizard::BrowseFolder(bool forClient)
         auto* me = static_cast<Wizard*>(self);
         {
             std::lock_guard<std::mutex> guard(me->_pickLock);
-            me->_picked = Utf8ToWide(list[0]);
+            me->_picked = list[0];
         }
         if (me->_host.wake)
             me->_host.wake();

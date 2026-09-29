@@ -86,7 +86,7 @@ namespace LonelyIce
         Rml::String _clientPath, _clientTitle;
         bool _clientFound = false;
         std::vector<CheckRow> _checks;
-        // 1 place
+        // 1 place: client, exe, custom (and user, the per-user data folder, on Linux and macOS)
         Rml::String _place = "client";
         std::vector<PlaceRow> _places;
         std::filesystem::path _customPlace;
@@ -97,6 +97,7 @@ namespace LonelyIce
         Rml::String _realm = "LonelyIce", _rate = "2", _bots = "100", _login, _pass, _gm = "3";
         // 4 client preparation
         bool _rl = true, _wdb = true, _accName = true, _lnk = false;
+        bool _lnkSupported = true;              // the desktop has shortcuts (model: wz_lnk_supported)
         Rml::String _rlNote;
         // 5 install, 6 done
         std::vector<InstRow> _inst;
@@ -106,7 +107,7 @@ namespace LonelyIce
         bool _reported = false;
 
         std::mutex _pickLock;
-        std::wstring _picked;
+        std::string _picked;                    // folder from the dialog, UTF-8
         bool _pickedForClient = false;
     };
 }

@@ -15,7 +15,13 @@ namespace
 
     fs::path LocalPath(std::string const& url)
     {
+#ifdef _WIN32
+        // file:///C:/dir -> C:/dir
         std::string p = url.rfind("file:///", 0) == 0 ? url.substr(8) : url.rfind("file://", 0) == 0 ? url.substr(7) : url;
+#else
+        // file:///home/dir -> /home/dir
+        std::string p = url.rfind("file://", 0) == 0 ? url.substr(7) : url;
+#endif
         return fs::u8path(p);
     }
 

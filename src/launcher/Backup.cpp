@@ -1,7 +1,7 @@
 #include "Backup.h"
 #include "ConfFile.h"
 #include "Lang.h"
-#include "TextUtil.h"
+#include "Platform.h"
 #include <algorithm>
 #include <ctime>
 #include <sqlite3.h>
@@ -18,15 +18,13 @@ namespace
             return {};
         info = info.substr(7);
         info = info.substr(0, info.find(';'));
-        fs::path p = fs::u8path(info);
+        fs::path p = Platform::Utf8ToPath(info);
         return p.is_absolute() ? p : workDir / p;
     }
 
     std::string Stamp()
     {
-        std::time_t t = std::time(nullptr);
-        std::tm tm{};
-        localtime_s(&tm, &t);
+        std::tm tm = Platform::LocalTime(std::time(nullptr));
         char buf[32];
         std::strftime(buf, sizeof(buf), "%Y-%m-%d_%H%M%S", &tm);
         return buf;
@@ -55,7 +53,7 @@ BackupResult LonelyIce::BackupDatabases(std::vector<DatabaseFile> const& dbs, fs
     fs::create_directories(res.dir, ec);
     if (ec)
     {
-        res.message = Tr("backup.error.mkdir", WideToUtf8(res.dir.wstring()));
+        res.message = Tr("backup.error.mkdir", Platform::PathToUtf8(res.dir));
         return res;
     }
 
@@ -68,7 +66,7 @@ BackupResult LonelyIce::BackupDatabases(std::vector<DatabaseFile> const& dbs, fs
         fs::path target = res.dir / db.path.filename();
         sqlite3* src = nullptr;
         sqlite3* dst = nullptr;
-        std::string srcPath = WideToUtf8(db.path.wstring()), dstPath = WideToUtf8(target.wstring());
+        std::string srcPath = Platform::PathToUtf8(db.path), dstPath = Platform::PathToUtf8(target);
         bool ok = sqlite3_open_v2(srcPath.c_str(), &src, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK &&
             sqlite3_open_v2(dstPath.c_str(), &dst, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) == SQLITE_OK;
         if (ok)

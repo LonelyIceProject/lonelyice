@@ -19,9 +19,17 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+// System headers vmapexport.cpp includes itself, pulled in here first so they stay at global scope: Windows.h and
+// direct.h (mkdir) on Windows, sys/stat.h (mkdir, stat) everywhere.
+#ifdef _WIN32
 #include <Windows.h>
 #include <direct.h>
+#else
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 #include <sys/stat.h>
+#include "Define.h"
 #include "libmpq/mpq.h"
 
 namespace VmapExtractor

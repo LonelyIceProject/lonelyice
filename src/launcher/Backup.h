@@ -14,7 +14,7 @@ namespace LonelyIce
         std::filesystem::path path;     // empty when the database is not a local file (MySQL)
     };
 
-    // Reads *DatabaseInfo from worldserver.conf and modules\playerbots.conf.
+    // Reads *DatabaseInfo from worldserver.conf and modules/playerbots.conf.
     std::vector<DatabaseFile> FindDatabases(std::filesystem::path const& worldConf, std::filesystem::path const& workDir);
 
     struct BackupResult

@@ -1,4 +1,4 @@
-// World + auth in one process. Launched by the LonelyIce UI as "LonelyIce.exe --server -c <worldserver.conf>".
+// World + auth in one process. Launched by the LonelyIce UI as "LonelyIce --server -c <worldserver.conf>".
 // stdout carries the log plus "@@LI ..." control lines; stdin takes console commands, one per line.
 
 #include "ACSoap.h"
@@ -21,6 +21,7 @@
 #include "ModulesScriptLoader.h"
 #include "OpenSSLCrypto.h"
 #include "OutdoorPvPMgr.h"
+#include "Platform.h"
 #include "PluginMgr.h"
 #include "PluginPatches.h"
 #include "ProcessPriority.h"
@@ -47,12 +48,21 @@
 #include <boost/asio/signal_set.hpp>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <mutex>
 #include <openssl/crypto.h>
 #include <openssl/opensslv.h>
+
+#ifdef _WIN32
 #include <Windows.h>
 #include <timeapi.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
+#endif
 
 #ifndef _ACORE_CORE_CONFIG
 #define _ACORE_CORE_CONFIG "worldserver.conf"
@@ -73,14 +83,7 @@ namespace
 
     void SetupStdio()
     {
-        HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-        if ((!out || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS))
-        {
-            FILE* f = nullptr;
-            freopen_s(&f, "CONOUT$", "w", stdout);
-            freopen_s(&f, "CONOUT$", "w", stderr);
-            freopen_s(&f, "CONIN$", "r", stdin);
-        }
+        LonelyIce::Platform::UseParentConsole(true);
 
         setvbuf(stdout, nullptr, _IONBF, 0);
         setvbuf(stderr, nullptr, _IONBF, 0);
@@ -149,13 +152,7 @@ namespace
 
     std::string Env(char const* name)
     {
-        char* v = nullptr;
-        std::size_t n = 0;
-        std::string out;
-        if (_dupenv_s(&v, &n, name) == 0 && v)
-            out = v;
-        free(v);
-        return out;
+        return LonelyIce::Platform::GetEnv(name).value_or(std::string());
     }
 
     // First-run setup after the databases were created: the player's account (LONELYICE_ACCOUNT = login\tpassword\tgmlevel)
@@ -223,7 +220,8 @@ namespace
             LOG_ERROR("server.loading", "Plugin patches failed: {}", r.error);
         return r.ok;
     }
-    // Raw ReadFile instead of std::cin: the thread can be cancelled with CancelSynchronousIo without holding CRT locks.
+    // Windows: raw ReadFile instead of std::cin, so the thread can be cancelled with CancelSynchronousIo without holding
+    // CRT locks. POSIX: read() after poll() with a short timeout, so Stop() ends the thread by setting the flag.
     class CommandReader
     {
     public:
@@ -237,6 +235,7 @@ namespace
             _stop = true;
             if (!_thread.joinable())
                 return;
+#ifdef _WIN32
             for (int i = 0; i < 50; ++i)
             {
                 CancelSynchronousIo(_thread.native_handle());
@@ -247,21 +246,75 @@ namespace
                 }
             }
             _thread.detach();
+#else
+            _thread.join();
+#endif
         }
 
     private:
-        void Run()
+        enum class ReadResult
+        {
+            Data,
+            Nothing,        // timeout or interrupted: check the flag and try again
+            End             // end of input or an error
+        };
+
+#ifdef _WIN32
+        static bool InputAvailable()
         {
             HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
-            if (!in || in == INVALID_HANDLE_VALUE)
+            return in && in != INVALID_HANDLE_VALUE;
+        }
+
+        static ReadResult ReadInput(char* buf, std::size_t size, std::size_t& read)
+        {
+            DWORD n = 0;
+            if (!ReadFile(GetStdHandle(STD_INPUT_HANDLE), buf, DWORD(size), &n, nullptr) || n == 0)
+                return ReadResult::End;
+            read = n;
+            return ReadResult::Data;
+        }
+#else
+        static bool InputAvailable()
+        {
+            return fcntl(STDIN_FILENO, F_GETFD) != -1;
+        }
+
+        static ReadResult ReadInput(char* buf, std::size_t size, std::size_t& read)
+        {
+            pollfd pfd{};
+            pfd.fd = STDIN_FILENO;
+            pfd.events = POLLIN;
+            int const ready = poll(&pfd, 1, 100);
+            if (ready == 0 || (ready < 0 && errno == EINTR))
+                return ReadResult::Nothing;
+            if (ready < 0)
+                return ReadResult::End;
+            // POLLHUP / POLLERR without data: read() returns 0 or fails, which is the end of input
+            ssize_t const n = ::read(STDIN_FILENO, buf, size);
+            if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
+                return ReadResult::Nothing;
+            if (n <= 0)
+                return ReadResult::End;
+            read = std::size_t(n);
+            return ReadResult::Data;
+        }
+#endif
+
+        void Run()
+        {
+            if (!InputAvailable())
                 return;
 
             std::string pending;
             char buf[4096];
             while (!_stop)
             {
-                DWORD read = 0;
-                if (!ReadFile(in, buf, sizeof(buf), &read, nullptr) || read == 0)
+                std::size_t read = 0;
+                ReadResult const r = ReadInput(buf, sizeof(buf), read);
+                if (r == ReadResult::Nothing)
+                    continue;
+                if (r == ReadResult::End)
                 {
                     // Launcher went away: save everyone and stop.
                     if (!_stop && !World::IsStopped())
@@ -469,6 +522,7 @@ namespace
         return configFile;
     }
 
+#ifdef _WIN32
     // Highest timer resolution the system allows; restored on scope exit.
     struct TimerResolution
     {
@@ -488,6 +542,22 @@ namespace
         }
         UINT _period = 0;
     };
+#else
+    // POSIX sleeps are precise enough already.
+    struct TimerResolution
+    {
+    };
+#endif
+
+    void SetEnvironment(char const* name, char const* value)
+    {
+#ifdef _WIN32
+        // _putenv_s updates the CRT copy that getenv reads as well as the process environment.
+        _putenv_s(name, value);
+#else
+        setenv(name, value, 1);
+#endif
+    }
 }
 
 int ServerMain(int argc, char** argv)
@@ -496,7 +566,7 @@ int ServerMain(int argc, char** argv)
     Control("state starting");
 
     // Nobody can answer "create the database?" on this process's stdin.
-    _putenv_s("AC_DISABLE_INTERACTIVE", "1");
+    SetEnvironment("AC_DISABLE_INTERACTIVE", "1");
     bool deploy = false, applyOnly = false;
     for (int i = 1; i < argc; ++i)
     {
@@ -508,8 +578,13 @@ int ServerMain(int argc, char** argv)
 
     Acore::Impl::CurrentServerProcessHolder::_type = SERVER_PROCESS_WORLDSERVER;
     signal(SIGABRT, &Acore::AbortHandler);
+#ifndef _WIN32
+    // Log lines written after the launcher closed our stdout must not kill the process while it saves.
+    signal(SIGPIPE, SIG_IGN);
+#endif
 
     TimerResolution timerResolution;
+    (void)timerResolution;
 
     fs::path configFile = ParseConfigPath(argc, argv);
     std::vector<std::string> args;
@@ -548,7 +623,11 @@ int ServerMain(int argc, char** argv)
     seed.SetRand(16 * 8);
 
     boost::asio::signal_set signals(*ioContext, SIGINT, SIGTERM);
+#ifdef _WIN32
     signals.add(SIGBREAK);
+#else
+    signals.add(SIGHUP);
+#endif
     signals.async_wait([](boost::system::error_code const& error, int)
     {
         if (!error)

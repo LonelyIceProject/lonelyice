@@ -440,7 +440,7 @@
                         <div class="grow"><div class="o-title">@{wz.prep.wdb}</div><div class="o-desc">@{wz.prep.wdb.desc}</div></div><div class="o-size">Cache\WDB</div></div>
                     <div class="opt comp"><input type="checkbox" id="wz-accname" class="check" data-checked="wz_accname"/>
                         <div class="grow"><div class="o-title">@{wz.prep.accname}</div><div class="o-desc">SET accountName "{{wz_login}}"</div></div><div class="o-size">WTF\Config.wtf</div></div>
-                    <div class="opt comp"><input type="checkbox" id="wz-lnk" class="check" data-checked="wz_lnk"/>
+                    <div class="opt comp" data-if="wz_lnk_supported"><input type="checkbox" id="wz-lnk" class="check" data-checked="wz_lnk"/>
                         <div class="grow"><div class="o-title">@{wz.prep.lnk}</div><div class="o-desc">@{wz.prep.lnk.desc}</div></div></div>
                 </div>
                 <!-- 5 install -->

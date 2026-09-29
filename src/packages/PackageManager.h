@@ -10,7 +10,7 @@
 
 // Plugin packages (docs/plugin-format.md, 8): an index of packages, dependency resolution, and installing,
 // updating, removing, enabling and disabling plugins in a plugins folder. Changes to files only: the databases
-// and the client follow on the next server start (or LonelyIce.exe --server --apply).
+// and the client follow on the next server start (or LonelyIce --server --apply).
 namespace LonelyIce::Packages
 {
     // One package of an index.

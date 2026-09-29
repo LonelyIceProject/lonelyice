@@ -5,3 +5,4 @@
 *.tga binary
 *.rgba binary
 
+*.sh text eol=lf

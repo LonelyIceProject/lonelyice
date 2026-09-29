@@ -1,5 +1,6 @@
 #include "UiBackend.h"
 #include "Lang.h"
+#include "Platform.h"
 #include "Png.h"
 #include "RmlUi_Platform_SDL.h"
 #include "RmlUi_Renderer_GL3.h"
@@ -7,12 +8,13 @@
 #include <RmlUi/Core/Core.h>
 #include <RmlUi/Core/Log.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <iterator>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
-#include <Windows.h>
 
 namespace
 {
@@ -48,24 +50,24 @@ namespace
             return count;
         }
 
+        // Plugin icons are absolute disk paths; RmlUi's default would drop the leading / of a POSIX path.
+        void JoinPath(Rml::String& translated, Rml::String const& documentPath, Rml::String const& path) override
+        {
+            std::error_code ec;
+            if (!path.empty() && path[0] == '/' && std::filesystem::exists(LonelyIce::Platform::Utf8ToPath(path), ec))
+            {
+                translated = path;
+                return;
+            }
+            SystemInterface_SDL::JoinPath(translated, documentPath, path);
+        }
+
         bool LogMessage(Rml::Log::Type type, Rml::String const& message) override
         {
             if (type <= Rml::Log::LT_WARNING)
             {
-                static FILE* f = [] {
-                    wchar_t path[MAX_PATH];
-                    GetModuleFileNameW(nullptr, path, MAX_PATH);
-                    std::wstring p = path;
-                    p = p.substr(0, p.find_last_of(L"\\/") + 1) + L"lonelyice-ui.log";
-                    FILE* file = nullptr;
-                    _wfopen_s(&file, p.c_str(), L"w");
-                    return file;
-                }();
-                if (f)
-                {
-                    fprintf(f, "%s %s\n", type == Rml::Log::LT_WARNING ? "WARN " : "ERROR", message.c_str());
-                    fflush(f);
-                }
+                static std::ofstream f(LonelyIce::Platform::ExePath().parent_path() / "lonelyice-ui.log", std::ios::trunc);
+                f << (type == Rml::Log::LT_WARNING ? "WARN  " : "ERROR ") << message << std::endl;
             }
             return true;
         }
@@ -77,10 +79,12 @@ namespace
     public:
         Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions, Rml::String const& source) override
         {
-            if (source.size() < 4 || _stricmp(source.c_str() + source.size() - 4, ".png") != 0)
+            std::string ext = source.size() >= 4 ? source.substr(source.size() - 4) : std::string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+            if (ext != ".png")
                 return RenderInterface_GL3::LoadTexture(dimensions, source);
 
-            std::ifstream in(std::filesystem::u8path(source), std::ios::binary);
+            std::ifstream in(LonelyIce::Platform::Utf8ToPath(source), std::ios::binary);
             std::vector<uint8_t> file(std::istreambuf_iterator<char>(in), {});
             std::vector<uint8_t> rgba;
             int w = 0, h = 0;
@@ -138,7 +142,11 @@ bool LonelyIce::UiBackend::Initialize(char const* title, int width, int height, 
         return false;
     _wakeEvent = SDL_RegisterEvents(1);
 
+#ifdef __APPLE__
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);   // macOS core profiles need it
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+#endif
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
