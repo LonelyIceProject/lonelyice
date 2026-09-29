@@ -22,3 +22,31 @@
 	path = plugins/mod-lonelyice-qol
 	url = https://github.com/LonelyIceProject/mod-lonelyice-qol.git
 	branch = main
+[submodule "plugins/mod-ah-bot-plugin"]
+	path = plugins/mod-ah-bot-plugin
+	url = https://github.com/LonelyIceProject/mod-ah-bot-plugin.git
+	branch = main
+[submodule "plugins/mod-aoe-loot-plugin"]
+	path = plugins/mod-aoe-loot-plugin
+	url = https://github.com/LonelyIceProject/mod-aoe-loot-plugin.git
+	branch = main
+[submodule "plugins/mod-instance-reset-plugin"]
+	path = plugins/mod-instance-reset-plugin
+	url = https://github.com/LonelyIceProject/mod-instance-reset-plugin.git
+	branch = main
+[submodule "plugins/mod-learn-spells-plugin"]
+	path = plugins/mod-learn-spells-plugin
+	url = https://github.com/LonelyIceProject/mod-learn-spells-plugin.git
+	branch = main
+[submodule "plugins/mod-multibot-bridge-plugin"]
+	path = plugins/mod-multibot-bridge-plugin
+	url = https://github.com/LonelyIceProject/mod-multibot-bridge-plugin.git
+	branch = main
+[submodule "plugins/mod-npc-beastmaster-plugin"]
+	path = plugins/mod-npc-beastmaster-plugin
+	url = https://github.com/LonelyIceProject/mod-npc-beastmaster-plugin.git
+	branch = main
+[submodule "plugins/mod-transmog-plugin"]
+	path = plugins/mod-transmog-plugin
+	url = https://github.com/LonelyIceProject/mod-transmog-plugin.git
+	branch = main
