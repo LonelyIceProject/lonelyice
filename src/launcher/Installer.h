@@ -20,7 +20,13 @@ namespace LonelyIce
         std::filesystem::path root;         // server data: configs, db, data, logs, backups
         std::filesystem::path client;       // WoW 3.3.5a folder
 
-        bool db = true, maps = true, vmaps = true, mmaps = true, client_prep = true;
+        // Where the server reads the game data: "client" (the client's archives, nothing unpacked) or "unpacked"
+        // (maps and cameras extracted into data/, DBC files in dbc_* tables of the world database).
+        std::string storage = "client";
+        std::string locale;                 // client locale the server data is read in, empty = the client's first
+
+        // unpack: switch to "unpacked"; pack: switch back to "client" (drops what unpack made)
+        bool db = true, unpack = false, pack = false, vmaps = true, mmaps = true, client_prep = true;
         int threads = 4;
 
         std::string realmName = "LonelyIce";
@@ -68,7 +74,10 @@ namespace LonelyIce
     private:
         void Run();
         bool RunDatabases();
-        bool RunMaps();
+        bool RunUnpack();
+        bool RunPack();
+        bool RunDbcTables(std::string const& action, std::string const& step, float from, float to);
+        bool RunTiles(std::string const& step, float to);
         bool RunVmaps();
         bool RunMmaps();
         bool RunClient();

@@ -44,6 +44,9 @@ void LonelyIce::LauncherSettings::Load()
     lastBackupDay = ini.Get("backup", "lastDay", "");
     realmName = ini.Get("server", "realmName", "");
     sqlStamp = ini.Get("server", "sqlStamp", "");
+    storage = ini.Get("server", "storage", "client");
+    if (storage != "client" && storage != "unpacked" && storage != "mysql")
+        storage = "client";
     pendingRealmName = ini.Get("server", "pendingRealmName", "");
     packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
     packageIndexOff = ini.Get("packages", "disabled", "");
@@ -63,6 +66,7 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("server", "root", Platform::PathToUtf8(dataRoot));
     ini.Set("server", "realmName", realmName);
     ini.Set("server", "sqlStamp", sqlStamp);
+    ini.Set("server", "storage", storage);
     ini.Set("server", "pendingRealmName", pendingRealmName);
     ini.Set("launcher", "autoStart", flag(autoStart));
     ini.Set("launcher", "stopWithGame", flag(stopWithGame));

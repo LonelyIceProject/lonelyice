@@ -12,7 +12,9 @@
 #include "DatabaseEnv.h"
 #include "DatabaseLibrary.h"
 #include "DatabaseLoader.h"
+#include "ClientArchives.h"
 #include "ClientData.h"
+#include "DbcUnpack.h"
 #include "GameTime.h"
 #include "GitRevision.h"
 #include "IoContext.h"
@@ -221,16 +223,17 @@ namespace
             LOG_ERROR("server.loading", "Plugin patches failed: {}", r.error);
         return r.ok;
     }
-    // LONELYICE_DATA=client: the DBC data comes from the game client's archives (LONELYICE_CLIENT, locale
-    // LONELYICE_LOCALE or the client's first one) through the dbc_* tables instead of extracted files.
+
+    // LONELYICE_DATA=client: DBC data, terrain and cameras come from the game client's archives (LONELYICE_CLIENT,
+    // locale LONELYICE_LOCALE or the client's first one) instead of extracted files.
     bool UseClientData()
     {
         if (Env("LONELYICE_DATA") != "client")
             return true;
 
         std::string error;
-        fs::path const cache = fs::u8path(sConfigMgr->GetOption<std::string>("DataDir", "./")) / "cache";
-        if (!LonelyIce::ClientData::Enable(fs::u8path(Env("LONELYICE_CLIENT")), Env("LONELYICE_LOCALE"), cache, error))
+        fs::path const data = fs::u8path(sConfigMgr->GetOption<std::string>("DataDir", "./"));
+        if (!LonelyIce::ClientData::Enable(fs::u8path(Env("LONELYICE_CLIENT")), Env("LONELYICE_LOCALE"), data, error))
         {
             LOG_ERROR("server.loading", "Client data: {}", error);
             return false;
@@ -239,6 +242,44 @@ namespace
         LonelyIce::Platform::SetEnv("AC_DBC_FROM_DATABASE", "1");
         LOG_INFO("server.loading", "Client data: DBC tables, terrain and cameras read from the game client ({})", LonelyIce::ClientData::Locale());
         return true;
+    }
+
+    // --dbc fill: the client's DBC files (LONELYICE_CLIENT, LONELYICE_LOCALE) into dbc_* tables of the world database,
+    // for servers that run unpacked; --dbc drop removes them again. Progress as "@@LI dbc <done> <total> <table>".
+    bool UnpackDbc(std::string const& action)
+    {
+        if (action == "drop")
+        {
+            LonelyIce::DbcUnpack::Drop();
+            LOG_INFO("server.loading", "DBC tables removed from the world database");
+            return true;
+        }
+
+        fs::path const client = fs::u8path(Env("LONELYICE_CLIENT"));
+        std::string locale = Env("LONELYICE_LOCALE");
+        if (locale.empty())
+        {
+            std::vector<std::string> const locales = LonelyIce::ClientArchives::Locales(client);
+            if (!locales.empty())
+                locale = locales.front();
+        }
+        LonelyIce::ClientArchives::Reader archives(client, locale);
+        if (locale.empty() || !archives.IsOpen())
+        {
+            LOG_ERROR("server.loading", "Cannot open the archives of the game client in {}", client.string());
+            return false;
+        }
+
+        std::string error;
+        bool const ok = LonelyIce::DbcUnpack::Fill(archives, [](std::size_t done, std::size_t total, std::string const& table)
+        {
+            Control(Acore::StringFormat("dbc {} {} {}", done, total, table));
+        }, error);
+        if (!ok)
+            LOG_ERROR("server.loading", "Unpacking the DBC files failed: {}", error);
+        else
+            LOG_INFO("server.loading", "DBC files of the {} client unpacked into the world database", locale);
+        return ok;
     }
 
     // Windows: raw ReadFile instead of std::cin, so the thread can be cancelled with CancelSynchronousIo without holding
@@ -589,12 +630,15 @@ int ServerMain(int argc, char** argv)
     // Nobody can answer "create the database?" on this process's stdin.
     SetEnvironment("AC_DISABLE_INTERACTIVE", "1");
     bool deploy = false, applyOnly = false;
+    std::string dbcAction;
     for (int i = 1; i < argc; ++i)
     {
         if (std::string_view(argv[i]) == "--deploy")
             deploy = true;
         if (std::string_view(argv[i]) == "--apply")
             applyOnly = true;
+        if (std::string_view(argv[i]) == "--dbc" && i + 1 < argc)
+            dbcAction = argv[i + 1];
     }
 
     Acore::Impl::CurrentServerProcessHolder::_type = SERVER_PROCESS_WORLDSERVER;
@@ -698,6 +742,13 @@ int ServerMain(int argc, char** argv)
     }
 
     std::shared_ptr<void> dbHandle(nullptr, [](void*) { StopDB(); });
+
+    if (!dbcAction.empty())
+    {
+        bool const unpacked = UnpackDbc(dbcAction);
+        Control(unpacked ? "dbc ok" : "dbc failed");
+        return unpacked ? 0 : 1;
+    }
 
     bool const patched = ApplyPluginPatches();
     if (applyOnly)

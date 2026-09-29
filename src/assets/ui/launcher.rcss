@@ -310,6 +310,7 @@ input.check:checked { background-color: #b3441f; border-color: #6e1a10; box-shad
 .d-title { font-size: 14dp; font-weight: bold; color: #3a2a1a; }
 .d-detail { font-size: 12dp; color: #5e4f3a; }
 .d-size { font-family: "PT Mono"; font-size: 13dp; color: #3a2a1a; }
+.drow.storage { padding: 8dp 4dp; margin-bottom: 4dp; border-bottom: 1dp #6e5a3366; }
 
 /* console */
 #log {

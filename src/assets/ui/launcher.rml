@@ -308,6 +308,10 @@
             <div id="panel" class="sub">
                 <div class="pane" data-if="svc_section == 'data'">
                     <div class="ribbon">@{svc.data} <span class="ribbon-note">{{data_sum}}</span></div>
+                    <div class="drow storage">
+                        <div class="d-main"><div class="d-title">{{storage_title}}</div><div class="d-detail">{{storage_detail}}</div></div>
+                        <div id="btn-storage" class="btn small" data-event-click="storage_switch">{{storage_action}}</div>
+                    </div>
                     <div class="scroll grow">
                         <div class="drow" data-for="d : data_rows">
                             <div class="dot big" data-class-on="d.status == 'ok'" data-class-warn="d.status == 'warn'"></div>

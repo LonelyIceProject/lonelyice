@@ -1,8 +1,8 @@
 #include "DbcTables.h"
 #include "ClientArchives.h"
 #include "DBCStores.h"
+#include "DbcFile.h"
 #include "SQLiteExtensions.h"
-#include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -11,6 +11,8 @@
 // Built as an SQLite extension: SQLite lives in the core's database library, sqlite3ext.h routes every call through
 // the routines that library hands to Init.
 #include <sqlite3ext.h>
+
+using LonelyIce::DbcFile;
 
 namespace
 {
@@ -23,42 +25,20 @@ namespace
         std::string format;     // the core's format string, one character per field
     };
 
-    // A DBC file as read from the archives.
-    uint32_t constexpr RowNumber = ~0u;     // offset of a field the file does not have: the row number
-
-    struct DbcImage
-    {
-        std::vector<uint8_t> data;
-        uint32_t records = 0, fields = 0, recordSize = 0, stringSize = 0;
-        std::vector<uint32_t> offsets;          // per format character
-
-        uint8_t const* Record(uint32_t row) const { return data.data() + 20 + std::size_t(row) * recordSize; }
-        uint8_t const* Strings() const { return data.data() + 20 + std::size_t(records) * recordSize; }
-    };
-
     struct Source
     {
         std::shared_ptr<LonelyIce::ClientArchives::Reader const> reader;
         std::vector<TableInfo> tables;
         std::mutex cacheLock;
-        std::map<std::string, std::weak_ptr<DbcImage const>> cache;
+        std::map<std::string, std::weak_ptr<DbcFile const>> cache;     // files some cursor still reads
     };
 
     Source* _source = nullptr;
 
-    uint32_t U32(uint8_t const* p)
-    {
-        uint32_t v;
-        std::memcpy(&v, p, 4);
-        return v;
-    }
-
-    bool IsByte(char c) { return c == 'b' || c == 'X'; }
-
-    std::shared_ptr<DbcImage const> Load(TableInfo const& table, std::string& error)
+    std::shared_ptr<DbcFile const> Load(TableInfo const& table, std::string& error)
     {
         std::lock_guard guard(_source->cacheLock);
-        if (std::shared_ptr<DbcImage const> cached = _source->cache[table.file].lock())
+        if (std::shared_ptr<DbcFile const> cached = _source->cache[table.file].lock())
             return cached;
 
         std::optional<std::vector<uint8_t>> raw = _source->reader->Read("DBFilesClient\\" + table.file);
@@ -68,49 +48,10 @@ namespace
             return nullptr;
         }
 
-        auto image = std::make_shared<DbcImage>();
-        image->data = std::move(*raw);
-        std::vector<uint8_t> const& d = image->data;
-        if (d.size() < 20 || std::memcmp(d.data(), "WDBC", 4) != 0)
-        {
-            error = table.file + " is not a DBC file";
-            return nullptr;
-        }
-
-        image->records = U32(&d[4]);
-        image->fields = U32(&d[8]);
-        image->recordSize = U32(&d[12]);
-        image->stringSize = U32(&d[16]);
-
-        // A "d" field may be missing from the file (the gt* tables): the row number is the index then.
-        bool const rowIndex = image->fields + 1 == table.format.size() && table.format.find('d') != std::string::npos;
-        if (image->fields != table.format.size() && !rowIndex)
-        {
-            error = table.file + " has " + std::to_string(image->fields) + " fields, the server expects " +
-                std::to_string(table.format.size()) + " (a client of another version?)";
-            return nullptr;
-        }
-
-        uint32_t offset = 0;
-        for (char c : table.format)
-        {
-            if (rowIndex && c == 'd')
-            {
-                image->offsets.push_back(RowNumber);
-                continue;
-            }
-            image->offsets.push_back(offset);
-            offset += IsByte(c) ? 1 : 4;
-        }
-        // Unused fields ("x") may be declared wider than they are (PowerDisplay.dbc), so only the size is checked here.
-        if (20 + uint64_t(image->records) * image->recordSize + image->stringSize > d.size())
-        {
-            error = table.file + " is damaged";
-            return nullptr;
-        }
-
-        _source->cache[table.file] = image;
-        return image;
+        std::shared_ptr<DbcFile const> file = DbcFile::Parse(std::move(*raw), table.file, table.format, error);
+        if (file)
+            _source->cache[table.file] = file;
+        return file;
     }
 
     struct Table : sqlite3_vtab
@@ -120,24 +61,18 @@ namespace
 
     struct Cursor : sqlite3_vtab_cursor
     {
-        std::shared_ptr<DbcImage const> image;
+        std::shared_ptr<DbcFile const> file;
         uint32_t row = 0;
     };
 
-    // Columns follow the format string; the index field ("n", or "d" kept out of the record) is named ID, like in
-    // the core's override tables. A file without one gets ID on its first column.
     std::string Schema(std::string const& format)
     {
-        std::size_t index = format.find_first_of("nd");
-        if (index == std::string::npos)
-            index = 0;
-
         std::string sql = "CREATE TABLE x(";
         for (std::size_t i = 0; i < format.size(); ++i)
         {
             if (i)
                 sql += ", ";
-            sql += i == index ? std::string("ID") : "f" + std::to_string(i);
+            sql += DbcFile::ColumnName(format, i);
             switch (format[i])
             {
                 case 'f': sql += " REAL"; break;
@@ -191,9 +126,9 @@ namespace
         Cursor* cursor = static_cast<Cursor*>(base);
         Table* table = static_cast<Table*>(base->pVtab);
         std::string error;
-        cursor->image = Load(*table->info, error);
+        cursor->file = Load(*table->info, error);
         cursor->row = 0;
-        if (!cursor->image)
+        if (!cursor->file)
         {
             sqlite3_free(table->zErrMsg);
             table->zErrMsg = sqlite3_mprintf("%s", error.c_str());
@@ -211,55 +146,32 @@ namespace
     int Eof(sqlite3_vtab_cursor* base)
     {
         Cursor* cursor = static_cast<Cursor*>(base);
-        return !cursor->image || cursor->row >= cursor->image->records;
+        return !cursor->file || cursor->row >= cursor->file->Rows();
     }
 
     int Column(sqlite3_vtab_cursor* base, sqlite3_context* ctx, int column)
     {
         Cursor* cursor = static_cast<Cursor*>(base);
-        DbcImage const& image = *cursor->image;
-        char const type = static_cast<Table*>(base->pVtab)->info->format[column];
-        if (image.offsets[column] == RowNumber)
-        {
-            sqlite3_result_int64(ctx, cursor->row);
-            return SQLITE_OK;
-        }
-
-        if (image.offsets[column] + (IsByte(type) ? 1u : 4u) > image.recordSize)
+        DbcFile const& file = *cursor->file;
+        if (file.Missing(cursor->row, column))
         {
             sqlite3_result_null(ctx);
             return SQLITE_OK;
         }
 
-        uint8_t const* field = image.Record(cursor->row) + image.offsets[column];
-
-        switch (type)
+        switch (file.Format()[column])
         {
-            case 'b':
-            case 'X':
-                sqlite3_result_int(ctx, *field);
-                break;
             case 'f':
-            {
-                float value;
-                std::memcpy(&value, field, 4);
-                sqlite3_result_double(ctx, value);
+                sqlite3_result_double(ctx, file.Float(cursor->row, column));
                 break;
-            }
             case 's':
             {
-                uint32_t const offset = U32(field);
-                if (offset >= image.stringSize)
-                    sqlite3_result_text(ctx, "", 0, SQLITE_STATIC);
-                else
-                {
-                    char const* text = reinterpret_cast<char const*>(image.Strings() + offset);
-                    sqlite3_result_text(ctx, text, int(strnlen(text, image.stringSize - offset)), SQLITE_TRANSIENT);
-                }
+                std::string_view const text = file.String(cursor->row, column);
+                sqlite3_result_text(ctx, text.data() ? text.data() : "", int(text.size()), SQLITE_TRANSIENT);
                 break;
             }
             default:
-                sqlite3_result_int64(ctx, sqlite3_int64(U32(field)));
+                sqlite3_result_int64(ctx, sqlite3_int64(file.UInt(cursor->row, column)));
                 break;
         }
         return SQLITE_OK;

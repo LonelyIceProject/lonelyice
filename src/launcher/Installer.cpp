@@ -8,6 +8,7 @@
 #include "Platform.h"
 #include "Plugins.h"
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -67,7 +68,8 @@ void Installer::Start(InstallOptions const& options)
             _steps.push_back(s);
         };
         add(_o.db, "db");
-        add(_o.maps, "maps");
+        add(_o.unpack, "unpack");
+        add(_o.pack, "pack");
         add(_o.vmaps, "vmaps");
         add(_o.mmaps, "mmaps");
         add(_o.client_prep, "client");
@@ -152,8 +154,9 @@ void Installer::Run()
 {
     bool ok = true;
     struct Step { bool on; char const* id; bool (Installer::*fn)(); };
-    for (Step const& s : { Step{ _o.db, "db", &Installer::RunDatabases }, Step{ _o.maps, "maps", &Installer::RunMaps },
-             Step{ _o.vmaps, "vmaps", &Installer::RunVmaps }, Step{ _o.mmaps, "mmaps", &Installer::RunMmaps },
+    for (Step const& s : { Step{ _o.db, "db", &Installer::RunDatabases }, Step{ _o.unpack, "unpack", &Installer::RunUnpack },
+             Step{ _o.pack, "pack", &Installer::RunPack }, Step{ _o.vmaps, "vmaps", &Installer::RunVmaps },
+             Step{ _o.mmaps, "mmaps", &Installer::RunMmaps },
              Step{ _o.client_prep, "client", &Installer::RunClient } })
     {
         if (!s.on)
@@ -409,42 +412,126 @@ bool Installer::RunDatabases()
     return true;
 }
 
-bool Installer::RunMaps()
+// Maps and cameras into data/, the DBC files into dbc_* tables of the world database.
+bool Installer::RunUnpack()
 {
     fs::path data = _o.root / "data";
     int done = 0, total = 0;
-    // the server's tables must be the stock ones, without the plugins' client patches
-    ClientPatch::HiddenArchives hidden(_o.client);
-    int rc = RunChild({ "--tool", "maps", Platform::PathToUtf8(_o.client), Platform::PathToUtf8(data) }, _o.root, {},
-        [&](std::string const& line)
-        {
-            // "Extract <name> (12/144)"
-            if (line.rfind("Extract ", 0) == 0 && line.back() == ')')
+    int rc = 0;
+    {
+        // the server's tables must be the stock ones, without the plugins' client patches
+        ClientPatch::HiddenArchives hidden(_o.client);
+        // 5: maps and cameras; the DBC files go to the database below
+        rc = RunChild({ "--tool", "maps", Platform::PathToUtf8(_o.client), Platform::PathToUtf8(data), "5" }, _o.root, {},
+            [&](std::string const& line)
             {
-                std::size_t p = line.rfind('('), s = line.rfind('/');
-                if (p != std::string::npos && s != std::string::npos && s > p)
+                // "Extract <name> (12/144)"
+                if (line.rfind("Extract ", 0) == 0 && line.back() == ')')
                 {
-                    done = atoi(line.c_str() + p + 1);
-                    total = atoi(line.c_str() + s + 1);
-                    _mapCount = total;
-                    Progress("maps", 0.1f + 0.9f * float(done) / float(std::max(total, 1)), Tr("install.note.map", done, total));
+                    std::size_t p = line.rfind('('), s = line.rfind('/');
+                    if (p != std::string::npos && s != std::string::npos && s > p)
+                    {
+                        done = atoi(line.c_str() + p + 1);
+                        total = atoi(line.c_str() + s + 1);
+                        _mapCount = total;
+                        Progress("unpack", 0.05f + 0.65f * float(done) / float(std::max(total, 1)), Tr("install.note.map", done, total));
+                    }
+                    return;
                 }
-                return;
-            }
-            if (line.rfind("Processing", 0) == 0)
-                return;
-            if (line.find("DBC") != std::string::npos || line.find("locale") != std::string::npos || line.find("camera") != std::string::npos || line.rfind("@@LI fail", 0) == 0)
-            {
-                Log(line);
-                Progress("maps", 0.05f, Tr("install.note.dbc"));
-            }
-        });
+                if (line.rfind("Processing", 0) == 0)
+                    return;
+                if (line.find("locale") != std::string::npos || line.find("camera") != std::string::npos || line.rfind("@@LI fail", 0) == 0)
+                    Log(line);
+            });
+    }
     if (rc != 0)
     {
-        Fail("maps", Tr("install.error.exit_code", "map_extractor", rc));
+        Fail("unpack", Tr("install.error.exit_code", "map_extractor", rc));
         return false;
     }
     Log(Tr("install.log.maps", total));
+
+    // DBC files the old layout extracted next to the maps are not read any more.
+    std::error_code ec;
+    fs::remove_all(data / "dbc", ec);
+    return RunDbcTables("fill", "unpack", 0.7f, 1.f);
+}
+
+// Back to reading the client: the unpacked DBC tables and files go (built terrain tiles take the maps' place).
+bool Installer::RunPack()
+{
+    if (!RunDbcTables("drop", "pack", 0.f, 0.8f))
+        return false;
+    std::error_code ec;
+    fs::path const data = _o.root / "data";
+    for (char const* dir : { "dbc", "Cameras", "maps" })
+        fs::remove_all(data / dir, ec);
+    Log(Tr("install.log.packed"));
+    return true;
+}
+
+// LonelyIce --server --dbc fill|drop on the world database.
+bool Installer::RunDbcTables(std::string const& action, std::string const& step, float from, float to)
+{
+    Platform::Env env = {
+        { "AC_DISABLE_INTERACTIVE", "1" },
+        { "AC_PLUGINS_DIR", Platform::PathToUtf8(_o.exe.parent_path() / "plugins") },
+        { "LONELYICE_CLIENT", Platform::PathToUtf8(_o.client) },
+        { "LONELYICE_LOCALE", _o.locale } };
+
+    bool finished = false;
+    std::string failure;
+    Progress(step, from, Tr(action == "fill" ? "install.note.dbc" : "install.note.dbc_drop"));
+    int rc = RunChild({ "--server", "--dbc", action, "-c", Platform::PathToUtf8(_o.root / "configs" / "worldserver.conf") }, _o.root, env,
+        [&](std::string const& line)
+        {
+            // "@@LI dbc <done> <total> <table>"
+            if (line.rfind("@@LI dbc ", 0) == 0)
+            {
+                int d = 0, t = 0;
+                if (std::sscanf(line.c_str() + 9, "%d %d", &d, &t) == 2 && t > 0)
+                    Progress(step, from + (to - from) * float(d) / float(t), Tr("install.note.dbc_table", d, t));
+                else if (line.find("dbc ok") != std::string::npos)
+                    finished = true;
+                else if (line.find("failed") != std::string::npos)
+                    failure = line.substr(5);
+                return;
+            }
+            if (line.rfind("@@LI ", 0) == 0)
+            {
+                if (line.find("failed") != std::string::npos)
+                    failure = line.substr(5);
+                return;
+            }
+            if (line.find("ERROR") != std::string::npos || line.find("DBC") != std::string::npos)
+                Log(line);
+        });
+    if (rc != 0 || !finished)
+    {
+        Fail(step, _cancel ? Tr("install.note.aborted") : Tr("install.error.dbc", failure.empty() ? Tr("install.error.code", rc) : failure));
+        return false;
+    }
+    return true;
+}
+
+// Terrain tiles built from the client into data/maps, the way the server builds them (the mmaps generator reads them).
+bool Installer::RunTiles(std::string const& step, float to)
+{
+    fs::path data = _o.root / "data";
+    int rc = RunChild({ "--tool", "tiles", Platform::PathToUtf8(_o.client), Platform::PathToUtf8(data), _o.locale }, _o.root, {},
+        [&](std::string const& line)
+        {
+            int d = 0, t = 0;
+            if (std::sscanf(line.c_str(), "@@LI tiles %d %d", &d, &t) == 2 && t > 0)
+                Progress(step, to * float(d) / float(t), Tr("install.note.tiles", d, t));
+            else if (line.rfind("@@LI fail", 0) == 0)
+                Log(line);
+        });
+    if (rc != 0)
+    {
+        Fail(step, Tr("install.error.exit_code", "tiles", rc));
+        return false;
+    }
     return true;
 }
 
@@ -494,6 +581,11 @@ bool Installer::RunVmaps()
 bool Installer::RunMmaps()
 {
     fs::path data = _o.root / "data";
+    // The generator reads every terrain tile: reading the client, they are built first.
+    float const tiles = _o.storage == "client" ? 0.1f : 0.f;
+    if (tiles > 0.f && !RunTiles("mmaps", tiles))
+        return false;
+
     int rc = RunChild({ "--tool", "mmaps", Platform::PathToUtf8(data), std::to_string(std::max(1, _o.threads)) }, data, {},
         [&](std::string const& line)
         {
@@ -502,7 +594,8 @@ bool Installer::RunMmaps()
             if (pct != std::string::npos && pct > 0 && pct < 4)
             {
                 std::size_t m = pct + 7;
-                Progress("mmaps", float(atoi(line.c_str())) / 100.f, Tr("install.note.mmap", line.substr(m, line.find(']', m) - m), line.substr(0, pct)));
+                Progress("mmaps", tiles + (1.f - tiles) * float(atoi(line.c_str())) / 100.f,
+                    Tr("install.note.mmap", line.substr(m, line.find(']', m) - m), line.substr(0, pct)));
                 return;
             }
             if (line.find("We have") != std::string::npos || line.find("threads") != std::string::npos || line.rfind("@@LI fail", 0) == 0)

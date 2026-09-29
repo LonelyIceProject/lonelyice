@@ -1,5 +1,6 @@
 // Client data extraction, run by the launcher as child processes of the same exe:
-//   LonelyIce --tool maps <client dir> <data dir>        dbc, Cameras, maps
+//   LonelyIce --tool maps <client dir> <data dir> [what] dbc, Cameras, maps (what: extractor mask, 7 = all three)
+//   LonelyIce --tool tiles <client dir> <data dir> <locale>   maps built from the client's ADTs (as the server does)
 //   LonelyIce --tool vmaps <client dir> <data dir>       <data>/Buildings (raw models)
 //   LonelyIce --tool assemble <data dir>                 Buildings -> vmaps
 //   LonelyIce --tool mmaps <data dir> <threads>          mmaps
@@ -7,6 +8,7 @@
 // exit()), which is why they run in their own process.
 
 #include "Assets.h"
+#include "ClientData.h"
 #include "GameClient.h"
 #include "Platform.h"
 #include "TileAssembler.h"
@@ -50,7 +52,7 @@ namespace
         return p;
     }
 
-    int Maps(std::string const& client, std::string const& data)
+    int Maps(std::string const& client, std::string const& data, std::string const& what)
     {
         if (client.size() >= 120 || data.size() >= 120)
         {
@@ -59,7 +61,17 @@ namespace
         }
         std::error_code ec;
         fs::create_directories(data, ec);
-        return Run(MapExtractorMain, { "map_extractor", "-i", client, "-o", data, "-e", "7" });
+        return Run(MapExtractorMain, { "map_extractor", "-i", client, "-o", data, "-e", what });
+    }
+
+    int Tiles(std::string const& client, std::string const& data, std::string const& locale)
+    {
+        std::string error;
+        bool const ok = LonelyIce::ClientData::BuildAllTiles(fs::path(client), locale, fs::path(data),
+            [](uint32_t done, uint32_t total) { printf("@@LI tiles %u %u\n", done, total); }, error);
+        if (!ok)
+            printf("@@LI fail %s\n", error.c_str());
+        return ok ? 0 : 1;
     }
 
     int Vmaps(std::string const& client, std::string const& data)
@@ -156,7 +168,9 @@ int ToolMain(int argc, char** argv)
 
     int rc = 1;
     if (a.size() >= 3 && a[0] == "maps")
-        rc = Maps(a[1], a[2]);
+        rc = Maps(a[1], a[2], a.size() >= 4 ? a[3] : std::string("7"));
+    else if (a.size() >= 4 && a[0] == "tiles")
+        rc = Tiles(a[1], a[2], a[3]);
     else if (a.size() >= 3 && a[0] == "vmaps")
         rc = Vmaps(a[1], a[2]);
     else if (a.size() >= 2 && a[0] == "assemble")

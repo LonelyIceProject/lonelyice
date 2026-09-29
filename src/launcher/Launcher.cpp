@@ -262,6 +262,8 @@ namespace
 
         bool NeedsSetup() const;
         void OpenWizard();
+        std::string ServerLocale() const;
+        void SwitchStorage(std::string const& storage);
         fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
@@ -315,6 +317,7 @@ namespace
         // data
         std::vector<DataRow> _dataRows;
         Rml::String _dataSum;
+        Rml::String _storageTitle, _storageDetail, _storageAction;
         // plugins
         std::unique_ptr<Packages::Manager> _packages;
         std::vector<PluginView> _plRows;
@@ -356,9 +359,36 @@ namespace
         for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
             if (db.name == "world" && !db.path.empty() && !fs::exists(db.path, ec))
                 return true;
-        // An interrupted install leaves the databases but no client data; the server cannot start without DBC.
-        fs::path dbc = ConfPath("DataDir", ".") / "dbc";
-        return !fs::is_directory(dbc, ec) || fs::is_empty(dbc, ec);
+        // Unpacked, an interrupted install leaves the databases but no maps; reading the client needs nothing more.
+        if (_settings.storage != "unpacked")
+            return false;
+        fs::path maps = ConfPath("DataDir", ".") / "maps";
+        return !fs::is_directory(maps, ec) || fs::is_empty(maps, ec);
+    }
+
+    // Unpacking or going back to the client runs on the wizard's install page.
+    void Launcher::SwitchStorage(std::string const& storage)
+    {
+        if (_server->IsRunning())
+        {
+            Message(Tr("msg.storage_server_running"));
+            return;
+        }
+        if (!_client.valid)
+        {
+            Message(Tr("msg.client_data_needs_client"));
+            return;
+        }
+        ShowWindow();
+        _wizard->SwitchStorage(_client.dir, storage);
+    }
+
+    // Client locale the server reads its data in: the one the game starts in, else the client's own setting.
+    std::string Launcher::ServerLocale() const
+    {
+        if (!_settings.locale.empty())
+            return _settings.locale;
+        return _client.valid ? GameClient::ReadConfigLocale(_client.dir) : std::string();
     }
 
     void Launcher::OpenWizard()
@@ -407,11 +437,14 @@ namespace
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
         _wizard = std::make_unique<Wizard>(Wizard::Host{ _exe, _exeDir, [this] { return Root(); }, [this] { return _server->IsRunning(); },
             [this] { return _settings.sqlStamp; },
+            [this] { return _settings.storage; },
+            [this] { return ServerLocale(); },
             [this](InstallOptions const& o)
             {
                 _settings.dataRoot = o.root;
                 _settings.serverConfig.clear();
                 _settings.clientPath = o.client;
+                _settings.storage = o.storage;
                 if (o.db)
                 {
                     _settings.sqlStamp = Installer::SqlStamp(o.setupDir);
@@ -421,6 +454,7 @@ namespace
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
+                RefreshData();
                 AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
             [this] { Play(); }, [] { UiBackend::Wake(); } });
@@ -886,6 +920,9 @@ namespace
 
         c.Bind("data_rows", &_dataRows);
         c.Bind("data_sum", &_dataSum);
+        c.Bind("storage_title", &_storageTitle);
+        c.Bind("storage_detail", &_storageDetail);
+        c.Bind("storage_action", &_storageAction);
 
         auto on = [&](char const* name, std::function<void()> fn)
         {
@@ -981,6 +1018,7 @@ namespace
         });
         on("set_save", [this] { SaveSettings(); });
         on("data_check", [this] { RefreshData(); });
+        on("storage_switch", [this] { SwitchStorage(_settings.storage == "client" ? "unpacked" : "client"); });
         on("pl_check", [this] { CheckPackageIndex(); });
         on("pl_update_all", [this] { PluginAction("update_all", -1); });
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
@@ -1658,12 +1696,25 @@ namespace
             Message(Tr("msg.no_config", Platform::PathToUtf8(config)));
             return;
         }
+        if (_settings.storage == "client" && !_client.valid)
+        {
+            Message(Tr("msg.client_data_needs_client"));
+            return;
+        }
         AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
         EnvList env = ModuleConfigOverrides(config, Root());
         env.emplace_back("AC_PLUGINS_DIR", Platform::PathToUtf8(_exeDir / "plugins"));
         // the server builds the plugins' client patches while it starts
         if (_client.valid)
+        {
             env.emplace_back("LONELYICE_CLIENT", Platform::PathToUtf8(_client.dir));
+            env.emplace_back("LONELYICE_LOCALE", ServerLocale());
+        }
+        // game data: read from the client, or unpacked with the DBC files in the world database
+        if (_settings.storage == "client")
+            env.emplace_back("LONELYICE_DATA", "client");
+        else
+            env.emplace_back(EnvName("DBC.FromDatabase"), "1");
         if (!_server->Start(Platform::PathToUtf8(_exe), Platform::PathToUtf8(config), Platform::PathToUtf8(Root()), env))
             Message(Tr("msg.start_failed", _server->GetFailReason()));
         RefreshServerView();
@@ -2440,20 +2491,47 @@ namespace
         }
 
         fs::path data = ConfPath("DataDir", ".");
+        bool const fromClient = _settings.storage == "client";
+        if (fromClient)
+        {
+            // DBC and cameras stay in the client; terrain tiles are built into data/maps as grids load.
+            std::string const title = Tr("data.dbc");
+            _dataRows.push_back({ title, Tr("data.from_client"), _client.valid ? "ok" : "bad", "" });
+            if (!_client.valid)
+                missing.push_back(title);
+        }
         struct Part { char const* dir; char const* key; bool required; };
-        for (Part const& p : { Part{ "dbc", "data.dbc", true }, Part{ "maps", "data.maps", true }, Part{ "Cameras", "data.cameras", false },
+        for (Part const& p : { Part{ "maps", "data.maps", !fromClient }, Part{ "Cameras", "data.cameras", false },
                  Part{ "vmaps", "data.vmaps", false }, Part{ "mmaps", "data.mmaps", false } })
         {
+            if (fromClient && std::string_view(p.dir) == "Cameras")
+                continue;
             DirStats s = Scan(data / p.dir);
             total += s.bytes;
             bool ok = s.files > 0;
             std::string const title = Tr(p.key);
+            std::string detail = Tr(std::string(p.key) + ".detail");
+            if (fromClient && std::string_view(p.dir) == "maps")
+            {
+                // Built on demand: none yet is fine.
+                std::error_code ec;
+                std::size_t tiles = 0;
+                for (fs::directory_iterator it(data / p.dir, ec), end; !ec && it != end; it.increment(ec))
+                    tiles += it->path().extension() == ".map";
+                _dataRows.push_back({ title, Tr("data.maps.built", tiles), "ok", FormatBytes(s.bytes) });
+                continue;
+            }
             if (!ok)
                 missing.push_back(title);
-            std::string const detail = Tr(std::string(p.key) + ".detail");
             _dataRows.push_back({ title, ok ? Tr("data.detail_files", detail, s.files) : detail,
                 ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : Tr("data.none") });
         }
+
+        _storageTitle = Tr(fromClient ? "data.storage.client" : "data.storage.unpacked");
+        _storageDetail = Tr(fromClient ? "data.storage.client.detail" : "data.storage.unpacked.detail");
+        _storageAction = Tr(fromClient ? "data.storage.to_unpacked" : "data.storage.to_client");
+        for (char const* v : { "storage_title", "storage_detail", "storage_action" })
+            _model.DirtyVariable(v);
 
         if (missing.empty())
             _dataSum = Tr("data.all_present", FormatBytes(total));

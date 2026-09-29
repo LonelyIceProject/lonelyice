@@ -29,6 +29,8 @@ namespace LonelyIce
             std::function<std::filesystem::path()> currentRoot;
             std::function<bool()> serverRunning;
             std::function<std::string()> sqlStamp;                  // stamp of the last database deploy
+            std::function<std::string()> storage;                   // where the server reads game data now (InstallOptions::storage)
+            std::function<std::string()> serverLocale;              // client locale of the server data, empty = the client's first
             std::function<void(InstallOptions const&)> installed;   // install finished successfully
             std::function<void()> play;
             std::function<void()> wake;
@@ -41,6 +43,8 @@ namespace LonelyIce
         void SetModel(Rml::DataModelHandle model) { _model = model; }
 
         void Open(std::filesystem::path const& client);
+        // Switches where the server reads its game data ("client" or "unpacked"): straight to the install page.
+        void SwitchStorage(std::filesystem::path const& client, std::string const& storage);
         bool IsOpen() const { return _open; }
         bool IsInstalling() const { return _installer.IsRunning(); }
         void Tick();
@@ -105,6 +109,7 @@ namespace LonelyIce
         std::vector<CheckRow> _done;
         InstallOptions _options;
         bool _reported = false;
+        bool _switching = false;                // the install page runs a storage switch, not the wizard's choices
 
         std::mutex _pickLock;
         std::string _picked;                    // folder from the dialog, UTF-8

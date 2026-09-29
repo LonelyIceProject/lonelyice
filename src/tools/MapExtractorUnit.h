@@ -18,6 +18,14 @@ namespace LonelyIce::AdtMaps
     // The .map image of a grid, std::nullopt when the map has no terrain there. One tile at a time, a few ms each.
     std::optional<std::vector<char>> Build(uint32 mapId, uint32 gridX, uint32 gridY);
     bool Exists(uint32 mapId, uint32 gridX, uint32 gridY);
+
+    struct Tile
+    {
+        uint32 mapId, gridX, gridY;
+    };
+
+    // Every tile of every map that has terrain.
+    std::vector<Tile> AllTiles();
 }
 
 #endif

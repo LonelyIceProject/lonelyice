@@ -5,6 +5,7 @@
 #include "MapExtractorUnit.h"
 #include <algorithm>
 #include <charconv>
+#include <cstdio>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -150,19 +151,25 @@ namespace
 
 namespace LonelyIce::ClientData
 {
-    bool Enable(fs::path const& clientDir, std::string const& locale, fs::path const& cacheDir, std::string& error)
+    namespace
     {
-        std::string l = locale;
-        if (l.empty())
+        // The locale to read in: the given one or the client's first; empty (error set) without a usable client.
+        std::string ResolveLocale(fs::path const& clientDir, std::string const& locale, std::string& error)
         {
+            if (!locale.empty())
+                return locale;
             std::vector<std::string> const locales = ClientArchives::Locales(clientDir);
             if (locales.empty())
-            {
                 error = "no game client with locale archives in " + clientDir.string();
-                return false;
-            }
-            l = locales.front();
+            return locales.empty() ? std::string() : locales.front();
         }
+    }
+
+    bool Enable(fs::path const& clientDir, std::string const& locale, fs::path const& dataDir, std::string& error)
+    {
+        std::string const l = ResolveLocale(clientDir, locale, error);
+        if (l.empty())
+            return false;
 
         auto archives = std::make_shared<ClientArchives::Reader const>(clientDir, l);
         if (!archives->IsOpen())
@@ -174,7 +181,7 @@ namespace LonelyIce::ClientData
         if (!DbcTables::Enable(archives, error) || !AdtMaps::Open(clientDir, l, error))
             return false;
 
-        auto tiles = std::make_unique<TileCache>(cacheDir / "maps", Stamp(clientDir, l));
+        auto tiles = std::make_unique<TileCache>(dataDir / "maps", Stamp(clientDir, l));
         DataFiles::SetSource(std::make_shared<ClientFiles>(archives, std::move(tiles)));
         _locale = l;
         return true;
@@ -183,5 +190,26 @@ namespace LonelyIce::ClientData
     std::string const& Locale()
     {
         return _locale;
+    }
+
+    bool BuildAllTiles(fs::path const& clientDir, std::string const& locale, fs::path const& dataDir,
+        std::function<void(uint32_t done, uint32_t total)> const& progress, std::string& error)
+    {
+        std::string const l = ResolveLocale(clientDir, locale, error);
+        if (l.empty() || !AdtMaps::Open(clientDir, l, error))
+            return false;
+
+        TileCache tiles(dataDir / "maps", Stamp(clientDir, l));
+        std::vector<AdtMaps::Tile> const all = AdtMaps::AllTiles();
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            AdtMaps::Tile const& t = all[i];
+            char name[16];
+            snprintf(name, sizeof(name), "%03u%02u%02u.map", t.mapId, t.gridX, t.gridY);
+            tiles.Get(name, t.mapId, t.gridX, t.gridY);
+            if (progress && (i % 64 == 0 || i + 1 == all.size()))
+                progress(uint32_t(i + 1), uint32_t(all.size()));
+        }
+        return true;
     }
 }

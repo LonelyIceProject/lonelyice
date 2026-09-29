@@ -146,4 +146,16 @@ namespace LonelyIce::AdtMaps
         auto name = _mapNames.find(mapId);
         return _opened && name != _mapNames.end() && HasAdt(mapId, name->second, gridY, gridX);
     }
+
+    std::vector<Tile> AllTiles()
+    {
+        std::lock_guard guard(_lock);
+        std::vector<Tile> tiles;
+        for (auto const& [mapId, name] : _mapNames)
+            for (uint32 y = 0; y < WDT_MAP_SIZE; ++y)
+                for (uint32 x = 0; x < WDT_MAP_SIZE; ++x)
+                    if (HasAdt(mapId, name, x, y))
+                        tiles.push_back({ mapId, y, x });
+        return tiles;
+    }
 }

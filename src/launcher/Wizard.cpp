@@ -267,6 +267,7 @@ void Wizard::Open(fs::path const& client)
         return;
     }
     _open = true;
+    _switching = false;
     _customPlace.clear();
     Inspect(client);
     fs::path root = _host.currentRoot();
@@ -365,7 +366,8 @@ void Wizard::BuildComponents()
     std::error_code ec;
     bool setup = fs::exists(_host.exeDir / "setup" / "sql.pak", ec) && fs::exists(_host.exeDir / "setup" / "configs.pak", ec);
     bool haveDb = !root.empty() && fs::exists(root / "db" / "world.sqlite", ec);
-    uint32_t maps = root.empty() ? 0 : CountFiles(data / "maps");
+    uint32_t maps = root.empty() ? 0 : CountFiles(data / "maps", ".map");
+    bool const unpacked = _host.storage && _host.storage() == "unpacked";
     uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", ".vmtree");
     uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps");
 
@@ -377,7 +379,9 @@ void Wizard::BuildComponents()
         { "db", Tr("install.step.db"), Tr("wizard.comp.db.desc"), Tr("wizard.comp.db.size"),
             !setup ? Tr("wizard.comp.db.no_setup") : newSql ? Tr("wizard.comp.db.new_sql") : haveDb ? Tr("wizard.comp.db.have") : std::string(),
             setup && (!haveDb || newSql), !setup },
-        { "maps", Tr("install.step.maps"), Tr("wizard.comp.maps.desc"), Tr("wizard.comp.maps.size"), have(maps, "wizard.comp.maps.have"), maps == 0, false },
+        // Off: the server reads the game data straight from the client.
+        { "unpack", Tr("install.step.unpack"), Tr("wizard.comp.unpack.desc"), Tr("wizard.comp.unpack.size"),
+            unpacked && maps ? Tr("wizard.comp.unpack.have", maps) : std::string(), unpacked && maps == 0, false },
         { "vmaps", Tr("install.step.vmaps"), Tr("wizard.comp.vmaps.desc"), Tr("wizard.comp.vmaps.size"), have(vmaps, "wizard.comp.vmaps.have"), vmaps == 0, false },
         { "mmaps", Tr("install.step.mmaps"), Tr("wizard.comp.mmaps.desc"), Tr("wizard.comp.mmaps.size"), have(mmaps, "wizard.comp.mmaps.have"), mmaps == 0, false },
         { "client", Tr("install.step.client"), Tr("wizard.comp.client.desc"), Tr("wizard.comp.client.size"), "", true, false },
@@ -392,7 +396,7 @@ void Wizard::BuildComponents()
 
 void Wizard::RefreshTotal()
 {
-    static double const gb[] = { 0.4, 0.7, 0.6, 6.0, 0 };
+    static double const gb[] = { 0.4, 0.5, 0.6, 6.0, 0 };
     double need = 0;
     int n = 0;
     for (std::size_t i = 0; i < _comps.size(); ++i)
@@ -495,6 +499,11 @@ void Wizard::Next()
             if (!_installer.Succeeded())
             {
                 // Retry: steps that finished stay done.
+                if (_switching)
+                {
+                    _installer.Start(_options);
+                    return Go(5);
+                }
                 for (InstallStep const& s : _installer.Steps())
                     for (CompRow& c : _comps)
                         if (c.id == s.id && s.state == StepState::Done)
@@ -523,8 +532,35 @@ void Wizard::Cancel()
     Dirty();
 }
 
+void Wizard::SwitchStorage(fs::path const& client, std::string const& storage)
+{
+    _open = true;
+    if (_installer.IsRunning())
+        return Go(5);
+
+    Inspect(client);
+    InstallOptions o;
+    o.exe = _host.exe;
+    o.setupDir = _host.exeDir / "setup";
+    o.root = _host.currentRoot();
+    o.client = _client.dir;
+    o.storage = storage;
+    o.locale = _host.serverLocale ? _host.serverLocale() : std::string();
+    o.db = o.vmaps = o.mmaps = o.client_prep = false;
+    o.unpack = storage == "unpacked";
+    o.pack = storage == "client";
+    o.realmName = _realm;
+    _options = o;
+    _switching = true;
+    _log.clear();
+    _installer.Start(o);
+    Tick();
+    Go(5);
+}
+
 void Wizard::StartInstall()
 {
+    _switching = false;
     InstallOptions o;
     o.exe = _host.exe;
     o.setupDir = _host.exeDir / "setup";
@@ -532,7 +568,9 @@ void Wizard::StartInstall()
     o.client = _client.dir;
     auto on = [&](char const* id) { return std::any_of(_comps.begin(), _comps.end(), [&](CompRow const& c) { return c.id == id && c.on; }); };
     o.db = on("db");
-    o.maps = on("maps");
+    o.unpack = on("unpack");
+    o.storage = o.unpack ? "unpacked" : _host.storage ? _host.storage() : "client";
+    o.locale = _host.serverLocale ? _host.serverLocale() : std::string();
     o.vmaps = on("vmaps");
     o.mmaps = on("mmaps");
     o.client_prep = on("client");
@@ -646,8 +684,10 @@ void Wizard::BuildDone()
     fs::path root = _options.root;
     if (_options.db)
         _done.push_back({ "ok", Tr("wizard.done.db"), Utf8(root / "db") });
-    if (_options.maps || _options.vmaps || _options.mmaps)
+    if (_options.unpack || _options.vmaps || _options.mmaps)
         _done.push_back({ "ok", Tr("wizard.done.data"), Utf8(root / "data") });
+    if (_options.unpack || _options.pack)
+        _done.push_back({ "ok", Tr(_options.storage == "unpacked" ? "wizard.done.unpacked" : "wizard.done.client"), "" });
     if (_options.db && !_options.login.empty())
         _done.push_back({ "ok", _options.gmLevel ? Tr("wizard.done.account_gm", _options.login, _options.gmLevel) : Tr("wizard.done.account", _options.login), "" });
     if (_options.client_prep && _options.realmlist)
