@@ -1,16 +1,18 @@
 # LonelyIce: launcher UI + auth + world in one exe (Windows only).
-# UI deps (static SDL3, FreeType, RmlUi) are built by tools/build-ui-deps.ps1 into LONELYICE_DEPS.
+# Deps (static SDL3, FreeType, RmlUi, StormLib, miniz) are built by tools/build-ui-deps.ps1 into LONELYICE_DEPS.
 # The core (LONELYICE_CORE_DIR) is added by the top-level CMakeLists.txt; its targets are linked here.
 
 set(LONELYICE_DEPS "${CMAKE_SOURCE_DIR}/deps" CACHE PATH "Folder with sdl3/, freetype/, rmlui/ and src/rmlui (backends)")
 set(LONELYICE_RMLUI_BACKENDS "${LONELYICE_DEPS}/src/rmlui/Backends")
 
-list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui")
+list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui" "${LONELYICE_DEPS}/stormlib" "${LONELYICE_DEPS}/miniz")
 find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static)
 find_package(RmlUi CONFIG QUIET)
+find_package(StormLib CONFIG QUIET)
+find_package(miniz CONFIG QUIET)
 
-if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
-  message(STATUS "LonelyIce: SDL3/RmlUi not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1)")
+if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT StormLib_FOUND OR NOT miniz_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
+  message(STATUS "LonelyIce: SDL3/RmlUi/StormLib/miniz not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1)")
   return()
 endif()
 
@@ -84,6 +86,7 @@ target_include_directories(lonelyice PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/common"
   "${CMAKE_CURRENT_SOURCE_DIR}/server"
   "${CMAKE_CURRENT_SOURCE_DIR}/launcher"
+  "${CMAKE_CURRENT_SOURCE_DIR}/packages"
   "${AUTH_APP_DIR}/Server"
   "${AUTH_APP_DIR}/Authentication"
   "${WORLD_APP_DIR}/ACSoap"
@@ -107,6 +110,9 @@ target_link_libraries(lonelyice
     fkYAML
     RmlUi::RmlUi
     SDL3::SDL3-static
+    StormLib::storm
+    miniz::miniz
+    winhttp
     version
     psapi
     winmm

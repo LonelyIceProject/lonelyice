@@ -59,6 +59,7 @@
                 <div id="tab-console" class="tab" data-class-active="tab == 'console'" data-event-click="open_tab('console')">Консоль</div>
                 <div id="tab-commands" class="tab" data-class-active="tab == 'commands'" data-event-click="open_tab('commands')">Команды</div>
                 <div id="tab-settings" class="tab" data-class-active="tab == 'settings'" data-event-click="open_tab('settings')">Настройки</div>
+                <div id="tab-plugins" class="tab" data-class-active="tab == 'plugins'" data-event-click="open_tab('plugins')">Плагины</div>
                 <div id="tab-data" class="tab" data-class-active="tab == 'data'" data-event-click="open_tab('data')">Данные</div>
             </div>
 
@@ -180,6 +181,28 @@
                     <div class="note grow">{{set_status}}</div>
                     <span class="ap now">сразу</span><span class="ap rel">.reload</span><span class="ap rst">перезапуск</span>
                     <div id="btn-set-save" class="btn small" data-class-disabled="!set_can_save" data-event-click="set_save">{{set_save_label}}</div>
+                </div>
+            </div>
+
+            <!-- plugins -->
+            <div class="pane" data-if="tab == 'plugins'">
+                <div class="scroll grow">
+                    <div class="ccard" data-for="p, pi : pl_rows" data-class-off="p.installed && !p.enabled">
+                        <div class="cc-main">
+                            <div class="cc-title">{{p.name}}<span class="cc-group"> · {{p.version}}</span><span class="cc-group" data-if="p.update != ''"> · доступна {{p.update}}</span></div>
+                            <div class="cc-desc" data-if="p.desc != ''">{{p.desc}}</div>
+                            <div class="cc-preview">{{p.note}}</div>
+                        </div>
+                        <div class="btn small go" data-attr-id="'pl-install-' + p.id" data-if="!p.installed || p.update != ''" data-class-disabled="pl_busy" data-event-click="pl_install(pi)">{{p.installed ? 'Обновить' : 'Установить'}}</div>
+                        <div class="btn small go" data-attr-id="'pl-toggle-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_toggle(pi)">{{p.enabled ? 'Выключить' : 'Включить'}}</div>
+                        <div class="btn small go danger" data-attr-id="'pl-remove-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_remove(pi)">Удалить</div>
+                    </div>
+                    <div class="note pad" data-if="pl_rows.size == 0">Плагинов нет.</div>
+                </div>
+                <div class="statusbar">
+                    <div class="note grow">{{pl_status}}</div>
+                    <div id="btn-pl-check" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_check">Обновить каталог</div>
+                    <div id="btn-pl-update" class="btn small" data-class-disabled="pl_busy" data-event-click="pl_update_all">Обновить все</div>
                 </div>
             </div>
 

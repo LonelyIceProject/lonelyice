@@ -1,0 +1,213 @@
+// Plugin package manager on the command line:
+//   LonelyIce.exe --pkg list                           installed plugins
+//   LonelyIce.exe --pkg available                      packages of the index
+//   LonelyIce.exe --pkg install <id>[@<range>]...      with their dependencies
+//   LonelyIce.exe --pkg update [<id>...]               everything when no id is given
+//   LonelyIce.exe --pkg remove <id>
+//   LonelyIce.exe --pkg enable <id> | disable <id>
+//   LonelyIce.exe --pkg apply -c <worldserver.conf> [--client <game folder>]
+//                                                      install / remove the plugins' patches in the databases
+//                                                      (and the client) now instead of on the next server start
+//   LonelyIce.exe --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
+// Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: lonelyice.ini).
+
+#include "LauncherSettings.h"
+#include "PackageManager.h"
+#include "TextUtil.h"
+#include <cstdio>
+#include <map>
+#include <string>
+#include <vector>
+#include <Windows.h>
+
+namespace fs = std::filesystem;
+using namespace LonelyIce;
+
+int ServerMain(int argc, char** argv);
+
+namespace
+{
+    void Print(std::string const& s)
+    {
+        fputs((s + "\n").c_str(), stdout);
+    }
+
+    int Fail(std::string const& s)
+    {
+        Print("ошибка: " + s);
+        return 1;
+    }
+
+    fs::path ExeDir()
+    {
+        wchar_t buf[MAX_PATH];
+        GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        return fs::path(buf).parent_path();
+    }
+
+    void PrintPlan(Packages::Plan const& plan)
+    {
+        for (Packages::Step const& s : plan.steps)
+            Print("  " + s.package.id + " " + (s.from.empty() ? "" : s.from + " -> ") + s.package.version);
+    }
+}
+
+int PkgMain(int argc, char** argv)
+{
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    if ((!out || out == INVALID_HANDLE_VALUE) && AttachConsole(ATTACH_PARENT_PROCESS))
+    {
+        FILE* f = nullptr;
+        freopen_s(&f, "CONOUT$", "w", stdout);
+    }
+    SetConsoleOutputCP(CP_UTF8);
+
+    fs::path const exeDir = ExeDir();
+    LauncherSettings settings;
+    settings.file = exeDir / "lonelyice.ini";
+    settings.Load();
+
+    fs::path pluginsDir = exeDir / "plugins";
+    std::string index = settings.packageIndex, config, client;
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string const a = argv[i];
+        if (a == "--pkg")
+            continue;
+        if (a == "--plugins" && i + 1 < argc)
+            pluginsDir = fs::u8path(argv[++i]);
+        else if (a == "--index" && i + 1 < argc)
+            index = argv[++i];
+        else if ((a == "-c" || a == "--config") && i + 1 < argc)
+            config = argv[++i];
+        else if (a == "--client" && i + 1 < argc)
+            client = argv[++i];
+        else
+            args.push_back(a);
+    }
+    if (args.empty())
+    {
+        Print("использование: LonelyIce.exe --pkg list | available | install <id>[@<версии>]... | update [<id>...] | remove <id> |");
+        Print("                                enable <id> | disable <id> | apply -c <worldserver.conf> [--client <папка игры>] |");
+        Print("                                pack <папка плагина> [<куда>]");
+        Print("параметры: --plugins <папка>, --index <адреса через ;>");
+        return 1;
+    }
+
+    std::string const cmd = args[0];
+    std::vector<std::string> const rest(args.begin() + 1, args.end());
+    Packages::Manager pm(pluginsDir);
+    std::string error;
+
+    if (cmd == "list")
+    {
+        for (Packages::Local const& l : pm.Installed())
+            Print(l.manifest.id + " " + l.manifest.version + (l.enabled ? "" : " (выключен)") + "  " + l.manifest.name);
+        return 0;
+    }
+
+    if (cmd == "pack")
+    {
+        if (rest.empty())
+            return Fail("укажите папку плагина");
+        std::string entry;
+        if (!Packages::Manager::Pack(fs::u8path(rest[0]), rest.size() > 1 ? fs::u8path(rest[1]) : fs::current_path(), entry, error))
+            return Fail(error);
+        Print(entry);
+        return 0;
+    }
+
+    if (cmd == "apply")
+    {
+        if (config.empty())
+            return Fail("укажите -c <worldserver.conf>");
+        if (!client.empty())
+            _putenv_s("LONELYICE_CLIENT", client.c_str());
+        _putenv_s("AC_PLUGINS_DIR", pluginsDir.string().c_str());
+        std::vector<std::string> sargs = { argv[0], "--apply", "-c", config };
+        std::vector<char*> ptrs;
+        for (std::string& s : sargs)
+            ptrs.push_back(s.data());
+        return ServerMain(int(ptrs.size()), ptrs.data());
+    }
+
+    if (cmd == "remove" || cmd == "enable" || cmd == "disable")
+    {
+        if (rest.empty())
+            return Fail("укажите id плагина");
+        std::string const& id = rest[0];
+        if (cmd != "enable")
+        {
+            std::vector<std::string> const deps = pm.Dependents(id);
+            if (!deps.empty())
+            {
+                std::string list;
+                for (std::string const& d : deps)
+                    list += (list.empty() ? "" : ", ") + d;
+                return Fail(id + " нужен плагинам: " + list);
+            }
+        }
+        bool const ok = cmd == "remove" ? pm.Remove(id, error) : pm.SetEnabled(id, cmd == "enable", error);
+        if (!ok)
+            return Fail(error);
+        Print(id + (cmd == "remove" ? ": удалён" : cmd == "enable" ? ": включён" : ": выключен")
+            + ". Базы и клиент обновятся при следующем запуске сервера.");
+        return 0;
+    }
+
+    if (!pm.LoadIndex(index, error))
+        return Fail("индекс пакетов: " + error);
+
+    if (cmd == "available")
+    {
+        std::map<std::string, std::string> installed;
+        for (Packages::Local const& l : pm.Installed())
+            installed[l.manifest.id] = l.manifest.version;
+        for (Packages::Package const& p : pm.Available())
+            Print(p.id + " " + p.version + (installed.count(p.id) ? " (установлен " + installed[p.id] + ")" : "") + "  " + p.name);
+        return 0;
+    }
+
+    Packages::Plan plan;
+    if (cmd == "install")
+    {
+        if (rest.empty())
+            return Fail("укажите id плагина");
+        std::map<std::string, std::string> requests;
+        for (std::string const& r : rest)
+        {
+            std::size_t const at = r.find('@');
+            requests[r.substr(0, at)] = at == std::string::npos ? "*" : r.substr(at + 1);
+        }
+        plan = pm.Resolve(requests, false);
+    }
+    else if (cmd == "update")
+    {
+        if (rest.empty())
+            plan = pm.ResolveUpdates();
+        else
+        {
+            std::map<std::string, std::string> requests;
+            for (std::string const& id : rest)
+                requests[id] = "*";
+            plan = pm.Resolve(requests, true);
+        }
+    }
+    else
+        return Fail("неизвестная команда " + cmd);
+
+    if (!plan.error.empty())
+        return Fail(plan.error);
+    if (plan.steps.empty())
+    {
+        Print("Нечего устанавливать.");
+        return 0;
+    }
+    Print("Будет установлено:");
+    PrintPlan(plan);
+    if (!pm.Install(plan, error, [](std::string const& line) { Print(line); }))
+        return Fail(error);
+    Print("Готово. Базы и клиент обновятся при следующем запуске сервера.");
+    return 0;
+}

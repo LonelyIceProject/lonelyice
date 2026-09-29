@@ -22,6 +22,7 @@
 #include "OpenSSLCrypto.h"
 #include "OutdoorPvPMgr.h"
 #include "PluginMgr.h"
+#include "PluginPatches.h"
 #include "ProcessPriority.h"
 #include "RealmList.h"
 #include "Resolver.h"
@@ -203,6 +204,25 @@ namespace
         return true;
     }
 
+    // Patches of the installed plugins: named ids, server rows of DBC tables, recipe SQL and, when LONELYICE_CLIENT
+    // names the game folder, the client archives. Runs before the world loads the DBC stores.
+    bool ApplyPluginPatches()
+    {
+        LonelyIce::PluginPatches::Options o;
+        o.pluginsDir = sConfigMgr->GetOption<std::string>("PluginsDir", "plugins");
+        o.serverDbcDir = fs::path(sConfigMgr->GetOption<std::string>("DataDir", "./")) / "dbc";
+        o.clientDir = fs::u8path(Env("LONELYICE_CLIENT"));
+        for (PluginInfo const& plugin : sPluginMgr->GetPlugins())
+            if (plugin.loaded)
+                o.loaded.insert(plugin.id);
+
+        LonelyIce::PluginPatches::Result r = LonelyIce::PluginPatches::Apply(o);
+        for (std::string const& line : r.log)
+            LOG_INFO("server.loading", "Plugin patches: {}", line);
+        if (!r.ok)
+            LOG_ERROR("server.loading", "Plugin patches failed: {}", r.error);
+        return r.ok;
+    }
     // Raw ReadFile instead of std::cin: the thread can be cancelled with CancelSynchronousIo without holding CRT locks.
     class CommandReader
     {
@@ -477,10 +497,14 @@ int ServerMain(int argc, char** argv)
 
     // Nobody can answer "create the database?" on this process's stdin.
     _putenv_s("AC_DISABLE_INTERACTIVE", "1");
-    bool deploy = false;
+    bool deploy = false, applyOnly = false;
     for (int i = 1; i < argc; ++i)
+    {
         if (std::string_view(argv[i]) == "--deploy")
             deploy = true;
+        if (std::string_view(argv[i]) == "--apply")
+            applyOnly = true;
+    }
 
     Acore::Impl::CurrentServerProcessHolder::_type = SERVER_PROCESS_WORLDSERVER;
     signal(SIGABRT, &Acore::AbortHandler);
@@ -569,9 +593,16 @@ int ServerMain(int argc, char** argv)
 
     std::shared_ptr<void> dbHandle(nullptr, [](void*) { StopDB(); });
 
+    bool const patched = ApplyPluginPatches();
+    if (applyOnly)
+    {
+        Control(patched ? "apply ok" : "apply failed");
+        return patched ? 0 : 1;
+    }
+
     if (deploy)
     {
-        bool ok = DeploySetup();
+        bool ok = DeploySetup() && patched;
         Control(ok ? "deploy ok" : "deploy failed account");
         return ok ? 0 : 1;
     }

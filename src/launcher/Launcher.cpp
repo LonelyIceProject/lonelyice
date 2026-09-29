@@ -6,6 +6,8 @@
 #include "LauncherSettings.h"
 #include "ServerProcess.h"
 #include "SettingsModel.h"
+#include "ClientPatch.h"
+#include "PackageManager.h"
 #include "TextUtil.h"
 #include "Tray.h"
 #include "UiBackend.h"
@@ -20,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -55,6 +58,11 @@ namespace
         int index = 0;
     };
     struct DataRow { Rml::String title, detail, status, size; };
+    struct PluginView
+    {
+        Rml::String id, name, version, desc, note, update;   // update: newer version in the index
+        bool installed = false, enabled = false;
+    };
 
     std::string Now(char const* fmt = "%H:%M")
     {
@@ -164,6 +172,7 @@ namespace
         void ToggleServer();
         void RestartServer();
         void Play();
+        void LaunchGame();
         void FixRealmlist(std::vector<std::string> const& locales, bool quiet);
         std::string LaunchLocale() const;
         void BrowseClient();
@@ -184,6 +193,11 @@ namespace
         void SaveSettings();
 
         void RefreshData();
+        void RefreshPlugins();
+        void CheckPackageIndex();
+        void InstallPackages(std::map<std::string, std::string> const& requests, bool update);
+        void PluginAction(std::string const& action, int index);
+        bool PluginsLocked();
         void StartBackup(bool scheduled);
         void CheckScheduledBackup();
 
@@ -233,6 +247,15 @@ namespace
         // data
         std::vector<DataRow> _dataRows;
         Rml::String _dataSum;
+        // plugins
+        std::unique_ptr<Packages::Manager> _packages;
+        std::vector<PluginView> _plRows;
+        Rml::String _plStatus = "Список пакетов ещё не загружен.";
+        bool _plBusy = false, _plIndexLoaded = false;
+        std::thread _plThread;
+        std::atomic<bool> _plDone{ false };
+        std::string _plError, _plNewStatus;   // written by the plugins thread, taken over in Tick
+        std::vector<std::string> _plLog;
 
         ServerState _lastState = ServerState::Stopped;
         bool _pendingPlay = false, _pendingRestart = false, _quitting = false, _startHidden = false, _scriptClose = false;
@@ -244,6 +267,11 @@ namespace
         std::thread _backupThread;
         std::atomic<bool> _backupDone{ false };
         BackupResult _backupResult;
+        // client addons and patches, prepared before the game starts
+        std::thread _syncThread;
+        std::atomic<bool> _syncDone{ false };
+        bool _syncBusy = false;
+        ClientPatch::Result _syncResult;
     };
 
     // No config or no world database: the wizard has to run first.
@@ -299,6 +327,7 @@ namespace
                 _startHidden = true;
 
         _settings.file = _exeDir / "lonelyice.ini";
+        _packages = std::make_unique<Packages::Manager>(_exeDir / "plugins");
         _settings.Load();
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
@@ -416,6 +445,10 @@ namespace
 
         if (_backupThread.joinable())
             _backupThread.join();
+        if (_syncThread.joinable())
+            _syncThread.join();
+        if (_plThread.joinable())
+            _plThread.join();
         _settings.Save();
         _server.reset();
         if (_game)
@@ -611,6 +644,19 @@ namespace
         }
         c.RegisterArray<std::vector<FieldView>>();
 
+        if (auto s = c.RegisterStruct<PluginView>())
+        {
+            s.RegisterMember("id", &PluginView::id);
+            s.RegisterMember("name", &PluginView::name);
+            s.RegisterMember("version", &PluginView::version);
+            s.RegisterMember("desc", &PluginView::desc);
+            s.RegisterMember("note", &PluginView::note);
+            s.RegisterMember("update", &PluginView::update);
+            s.RegisterMember("installed", &PluginView::installed);
+            s.RegisterMember("enabled", &PluginView::enabled);
+        }
+        c.RegisterArray<std::vector<PluginView>>();
+
         if (auto s = c.RegisterStruct<DataRow>())
         {
             s.RegisterMember("title", &DataRow::title);
@@ -666,6 +712,9 @@ namespace
         c.Bind("cmd_last", &_cmdLast);
 
         c.Bind("set_groups", &_setGroups);
+        c.Bind("pl_rows", &_plRows);
+        c.Bind("pl_status", &_plStatus);
+        c.Bind("pl_busy", &_plBusy);
         c.Bind("set_fields", &_setFields);
         c.Bind("set_group", &_setGroup);
         c.Bind("set_hint", &_setHint);
@@ -756,6 +805,11 @@ namespace
         });
         on("set_save", [this] { SaveSettings(); });
         on("data_check", [this] { RefreshData(); });
+        on("pl_check", [this] { CheckPackageIndex(); });
+        on("pl_update_all", [this] { PluginAction("update_all", -1); });
+        onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
+        onArg("pl_remove", [this](Rml::Variant const& v) { PluginAction("remove", v.Get<int>()); });
+        onArg("pl_install", [this](Rml::Variant const& v) { PluginAction("install", v.Get<int>()); });
         on("open_wizard", [this] { OpenWizard(); });
     }
 
@@ -927,6 +981,38 @@ namespace
         {
             _lastBackupCheck = tick;
             CheckScheduledBackup();
+        }
+
+        if (_plDone.exchange(false))
+        {
+            if (_plThread.joinable())
+                _plThread.join();
+            _plBusy = false;
+            _plStatus = _plNewStatus;
+            _model.DirtyVariable("pl_status");
+            _model.DirtyVariable("pl_busy");
+            for (std::string const& line : _plLog)
+                AddEvent(line);
+            if (!_plError.empty())
+                Message(_plError);
+            RefreshPlugins();
+            LoadSettingsModel();
+        }
+
+        if (_syncDone.exchange(false))
+        {
+            if (_syncThread.joinable())
+                _syncThread.join();
+            _syncBusy = false;
+            for (std::string const& line : _syncResult.log)
+                AddEvent("Клиент: " + line);
+            if (_syncResult.ok)
+                LaunchGame();
+            else
+            {
+                AddEvent("Клиент не подготовлен: " + _syncResult.error);
+                Message("Клиент не подготовлен: " + _syncResult.error);
+            }
         }
 
         if (_backupDone.exchange(false))
@@ -1193,6 +1279,12 @@ namespace
             LoadSettingsModel();
         if (tab == "data")
             RefreshData();
+        if (tab == "plugins")
+        {
+            RefreshPlugins();
+            if (!_plIndexLoaded && !_plBusy)
+                CheckPackageIndex();
+        }
         _model.DirtyAllVariables();
     }
 
@@ -1219,6 +1311,9 @@ namespace
         AppendLog("-- запуск: " + WideToUtf8(config.wstring()), "me");
         EnvList env = ModuleConfigOverrides(config, Root());
         env.emplace_back(L"AC_PLUGINS_DIR", (_exeDir / "plugins").wstring());
+        // the server builds the plugins' client patches while it starts
+        if (_client.valid)
+            env.emplace_back(L"LONELYICE_CLIENT", _client.dir.wstring());
         if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(Root().wstring()), env))
             Message("Не удалось запустить сервер: " + _server->GetFailReason());
         RefreshServerView();
@@ -1275,7 +1370,21 @@ namespace
             Message("Игра уже запущена.");
             return;
         }
+        if (_syncBusy)
+            return;
 
+        // Plugin addons first (the server built the client patches when it started), off the UI thread.
+        _syncBusy = true;
+        Message("Готовлю клиент: аддоны плагинов…");
+        _syncThread = std::thread([this, client = _client.dir, plugins = ReadPlugins(_exeDir / "plugins")]
+        {
+            _syncResult = ClientPatch::SyncAddons(client, plugins);
+            _syncDone = true;
+        });
+    }
+
+    void Launcher::LaunchGame()
+    {
         std::string launch = LaunchLocale();
         if (_settings.writeRealmlist)
             FixRealmlist(launch.empty() ? std::vector<std::string>{} : std::vector<std::string>{ launch }, true);
@@ -1508,7 +1617,11 @@ namespace
         std::vector<std::string> locales;
         for (ClientLocale const& l : _client.locales)
             locales.push_back(l.name);
-        _settingsModel.Load(ServerConfig(), _settings, locales);
+        _settingsModel.Load(ServerConfig(), ReadPlugins(_exeDir / "plugins"), _settings, locales);
+        for (std::string const& e : _settingsModel.Errors())
+            AddEvent("Настройки плагина не прочитаны: " + e);
+        if (std::none_of(_settingsModel.Groups().begin(), _settingsModel.Groups().end(), [&](SetGroup const& g) { return g.id == _setGroup; }))
+            _setGroup = "rates";
         _setPreset = 0;
         BuildSettingsFields();
     }
@@ -1628,6 +1741,175 @@ namespace
     }
 
     // ---- data
+
+    // ---- plugins
+
+    void Launcher::RefreshPlugins()
+    {
+        if (_plBusy)
+            return;     // the plugins thread is changing the index or the folder
+        _plRows.clear();
+        std::map<std::string, Packages::Package const*> newest;
+        for (Packages::Package const& p : _packages->Available())
+            if (!newest.count(p.id) || Packages::Manager::CompareVersions(p.version, newest[p.id]->version) > 0)
+                newest[p.id] = &p;
+
+        std::set<std::string> installed;
+        for (Packages::Local const& l : _packages->Installed())
+        {
+            PluginView v;
+            v.id = l.manifest.id;
+            v.name = l.manifest.name;
+            v.version = l.manifest.version;
+            v.desc = l.manifest.description;
+            v.installed = true;
+            v.enabled = l.enabled;
+            if (auto it = newest.find(l.manifest.id); it != newest.end() && Packages::Manager::CompareVersions(it->second->version, l.manifest.version) > 0)
+                v.update = it->second->version;
+            std::string deps;
+            for (auto const& [dep, range] : l.manifest.depends)
+                deps += (deps.empty() ? "" : ", ") + dep + " " + range;
+            v.note = l.manifest.id + (deps.empty() ? "" : " · нужен " + deps) + (l.enabled ? "" : " · выключен");
+            installed.insert(l.manifest.id);
+            _plRows.push_back(std::move(v));
+        }
+        for (auto const& [id, p] : newest)
+        {
+            if (installed.count(id))
+                continue;
+            PluginView v;
+            v.id = id;
+            v.name = p->name;
+            v.version = p->version;
+            v.desc = p->description;
+            v.note = id + " · можно установить";
+            _plRows.push_back(std::move(v));
+        }
+        _model.DirtyVariable("pl_rows");
+    }
+
+    bool Launcher::PluginsLocked()
+    {
+        if (_plBusy)
+            return true;
+        if (_server->IsRunning())
+        {
+            Message("Остановите сервер: плагины меняются, пока он выключен.");
+            return true;
+        }
+        return false;
+    }
+
+    void Launcher::CheckPackageIndex()
+    {
+        if (_plBusy)
+            return;
+        _plBusy = true;
+        _plStatus = "Загружаем список пакетов…";
+        _model.DirtyVariable("pl_busy");
+        _model.DirtyVariable("pl_status");
+        _plThread = std::thread([this, index = _settings.packageIndex]
+        {
+            std::string error;
+            _plLog.clear();
+            _plError.clear();
+            if (_packages->LoadIndex(index, error))
+            {
+                _plIndexLoaded = true;
+                _plNewStatus = "Пакетов в каталоге: " + std::to_string(_packages->Available().size()) + ".";
+            }
+            else
+            {
+                _plNewStatus = "Каталог пакетов недоступен, подробности на вкладке «Обзор».";
+                _plLog.push_back("Каталог пакетов: " + error);
+            }
+            _plDone = true;
+        });
+    }
+
+    void Launcher::InstallPackages(std::map<std::string, std::string> const& requests, bool update)
+    {
+        Packages::Plan plan = requests.empty() ? _packages->ResolveUpdates() : _packages->Resolve(requests, update);
+        if (!plan.error.empty())
+        {
+            Message(plan.error);
+            return;
+        }
+        if (plan.steps.empty())
+        {
+            Message("Всё уже установлено.");
+            return;
+        }
+        _plBusy = true;
+        _plStatus = "Устанавливаем…";
+        _model.DirtyVariable("pl_busy");
+        _model.DirtyVariable("pl_status");
+        _plThread = std::thread([this, plan]
+        {
+            _plLog.clear();
+            _plError.clear();
+            std::string error;
+            bool const ok = _packages->Install(plan, error, [this](std::string const& line) { _plLog.push_back("Плагины: " + line); });
+            _plError = ok ? "" : error;
+            if (!ok)
+                _plLog.push_back("Плагины: " + error);
+            _plNewStatus = ok ? "Готово. Базы и клиент обновятся при запуске сервера." : "Не удалось, подробности на вкладке «Обзор».";
+            _plDone = true;
+        });
+    }
+
+    void Launcher::PluginAction(std::string const& action, int index)
+    {
+        if (PluginsLocked())
+            return;
+        if (action == "update_all")
+        {
+            if (!_plIndexLoaded)
+            {
+                Message("Сначала загрузите список пакетов.");
+                return;
+            }
+            InstallPackages({}, true);
+            return;
+        }
+        if (index < 0 || index >= int(_plRows.size()))
+            return;
+        PluginView const v = _plRows[index];
+        std::string const id = v.id;
+        std::string error;
+
+        if (action == "install")
+        {
+            InstallPackages({ { id, "*" } }, v.installed);
+            return;
+        }
+
+        // Disabling or removing a plugin others need would break them.
+        if ((action == "remove" || (action == "toggle" && v.enabled)))
+        {
+            std::vector<std::string> const deps = _packages->Dependents(id);
+            if (!deps.empty())
+            {
+                std::string list;
+                for (std::string const& d : deps)
+                    list += (list.empty() ? "" : ", ") + d;
+                Message(v.name + " нужен плагинам: " + list + ".");
+                return;
+            }
+        }
+
+        bool ok = action == "remove" ? _packages->Remove(id, error) : _packages->SetEnabled(id, !v.enabled, error);
+        if (!ok)
+        {
+            Message(error);
+            return;
+        }
+        std::string const what = action == "remove" ? "удалён" : v.enabled ? "выключен" : "включён";
+        AddEvent("Плагин " + v.name + " " + what);
+        Message("Плагин " + v.name + " " + what + ". Базы и клиент обновятся при запуске сервера.");
+        RefreshPlugins();
+        LoadSettingsModel();
+    }
 
     void Launcher::RefreshData()
     {

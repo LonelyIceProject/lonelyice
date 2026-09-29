@@ -76,12 +76,12 @@ std::optional<std::string> LonelyIce::ConfFile::Get(std::string const& key) cons
     return v;
 }
 
-void LonelyIce::ConfFile::Set(std::string const& key, std::string const& value)
+void LonelyIce::ConfFile::Set(std::string const& key, std::string const& value, bool quoteNew)
 {
     int i = Find(key);
     if (i < 0)
     {
-        _lines.push_back(key + " = " + value);
+        _lines.push_back(key + " = " + (quoteNew ? "\"" + value + "\"" : value));
         return;
     }
     std::string& line = _lines[i];

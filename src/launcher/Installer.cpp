@@ -1,4 +1,5 @@
 #include "Installer.h"
+#include "ClientPatch.h"
 #include "ConfFile.h"
 #include "ConfigEnv.h"
 #include "GameClient.h"
@@ -440,7 +441,8 @@ bool Installer::RunDatabases()
         { L"AC_PLUGINS_DIR", (_o.exe.parent_path() / "plugins").wstring() },
         { Utf8ToWide(EnvName("Updates.EnableDatabases")), L"7" },
         { Utf8ToWide(EnvName("Playerbots.Updates.EnableDatabases")), L"1" },
-        { L"LONELYICE_REALMNAME", Utf8ToWide(_o.realmName) } };
+        { L"LONELYICE_REALMNAME", Utf8ToWide(_o.realmName) },
+        { L"LONELYICE_CLIENT", _o.client.wstring() } };
     if (!_o.login.empty())
         env.push_back({ L"LONELYICE_ACCOUNT", Utf8ToWide(_o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel)) });
 
@@ -489,6 +491,8 @@ bool Installer::RunMaps()
 {
     fs::path data = _o.root / "data";
     int done = 0, total = 0;
+    // the server's tables must be the stock ones, without the plugins' client patches
+    ClientPatch::HiddenArchives hidden(_o.client);
     int rc = RunChild(L"--tool maps \"" + _o.client.wstring() + L"\" \"" + data.wstring() + L"\"", _o.root, {},
         [&](std::string const& line)
         {
@@ -526,6 +530,7 @@ bool Installer::RunVmaps()
 {
     fs::path data = _o.root / "data";
     int maps = 0, total = _mapCount > 0 ? _mapCount : 140;
+    ClientPatch::HiddenArchives hidden(_o.client);
     int rc = RunChild(L"--tool vmaps \"" + _o.client.wstring() + L"\" \"" + data.wstring() + L"\"", data, {},
         [&](std::string const& line)
         {
@@ -614,17 +619,14 @@ bool Installer::RunClient()
         GameClient::ClearWdb(_o.client);
         Log("Кэш клиента очищен");
     }
-    // Client addons of the installed plugins.
-    std::error_code ec;
-    for (PluginManifest const& plugin : ReadPlugins(_o.exe.parent_path() / "plugins"))
+    // Addons of the installed plugins (their client patches were built by the database step).
+    ClientPatch::Result sync = ClientPatch::SyncAddons(_o.client, ReadPlugins(_o.exe.parent_path() / "plugins"));
+    for (std::string const& line : sync.log)
+        Log(line);
+    if (!sync.ok)
     {
-        for (fs::path const& addon : plugin.addons)
-        {
-            fs::path dst = _o.client / "Interface" / "AddOns" / addon.filename();
-            fs::create_directories(dst, ec);
-            fs::copy(addon, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
-            Log(ec ? "Аддон " + addon.filename().string() + " не скопирован: " + ec.message() : "Аддон " + addon.filename().string());
-        }
+        Fail("client", sync.error);
+        return false;
     }
     if (_o.accountName && !_o.login.empty())
     {

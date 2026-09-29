@@ -18,8 +18,9 @@ namespace LonelyIce
         std::filesystem::path const& GetPath() const { return _path; }
 
         std::optional<std::string> Get(std::string const& key) const;
-        // Replaces the value in place; appends "Key = value" at the end if the key is missing.
-        void Set(std::string const& key, std::string const& value);
+        // Replaces the value in place, keeping its quotes; appends "Key = value" at the end if the key is
+        // missing, quoted when quoteNew is set.
+        void Set(std::string const& key, std::string const& value, bool quoteNew = false);
 
     private:
         int Find(std::string const& key) const;

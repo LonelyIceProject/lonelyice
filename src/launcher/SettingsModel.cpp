@@ -1,6 +1,8 @@
 #include "SettingsModel.h"
 #include "ConfFile.h"
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <map>
 
 namespace fs = std::filesystem;
@@ -53,18 +55,15 @@ namespace
 
 SettingsModel::SettingsModel()
 {
-    _groups = {
+    _coreGroups = {
         { "realm", "Мир", "Реалм, уровни и старт персонажа" },
         { "rates", "Множители", "Сколько опыта, денег и добычи вы получаете" },
         { "diff", "Сложность", "Для игры с малой группой ботов" },
-        { "bots", "Боты", "Населённость мира, modules\\playerbots.conf" },
-        { "mods", "Модули", "Модули, у которых есть переключатель в конфиге" },
         { "perf", "Сеть и ресурсы", "Порты, потоки и сохранение" },
         { "launch", "Лаунчер", "Параметры самого LonelyIce, lonelyice.ini" },
     };
 
-    std::string const pb = "playerbots.conf";
-    _defs = {
+    _coreDefs = {
         { "realm", "Имя мира", "realmlist.name", SetSource::Realm, {}, 't', "rst", "Хранится в базе входа, видно в списке миров", {}, "LonelyIce" },
         W("realm", "Тип мира", "GameType", 's', "rst", "0", {}, { { "0", "Обычный" }, { "1", "PvP" }, { "6", "RP" }, { "8", "RP-PvP" } }),
         W("realm", "Максимальный уровень", "MaxPlayerLevel", 'n', "rst", "80"),
@@ -92,29 +91,6 @@ SettingsModel::SettingsModel()
         W("diff", "Рейды без требования рейдовой группы", "Instance.IgnoreRaid", 'b', "rel", "0", "Позволяет идти в рейд группой из 5 ботов"),
         W("diff", "Рейдовые задания в обычной группе", "Quests.IgnoreRaid", 'b', "rel", "0"),
 
-        M("bots", pb, "Боты включены", "AiPlayerbot.Enabled", 'b', "rst", "1"),
-        M("bots", pb, "Случайных ботов, минимум", "AiPlayerbot.MinRandomBots", 'n', "rst", "50", "Около 5 МБ памяти и доля процессора на каждого бота"),
-        M("bots", pb, "Случайных ботов, максимум", "AiPlayerbot.MaxRandomBots", 'n', "rst", "50"),
-        M("bots", pb, "Уровень ботов, от", "AiPlayerbot.RandomBotMinLevel", 'n', "rst", "1"),
-        M("bots", pb, "Уровень ботов, до", "AiPlayerbot.RandomBotMaxLevel", 'n', "rst", "80"),
-        M("bots", pb, "Карты для ботов", "AiPlayerbot.RandomBotMaps", 's', "rst", "0,1,530,571", {},
-            { { "0,1,530,571", "Все континенты" }, { "0,1", "Только классика" }, { "0,1,530", "Классика и Запределье" }, { "571", "Только Нордскол" } }),
-        M("bots", pb, "Активны вдали от игрока, %", "AiPlayerbot.BotActiveAlone", 'n', "rst", "100", "Главный рычаг нагрузки на процессор"),
-        M("bots", pb, "Личных ботов на игрока", "AiPlayerbot.MaxAddedBots", 'n', "rst", "40"),
-        M("bots", pb, "Боты ходят в поиск подземелий", "AiPlayerbot.RandomBotJoinLfg", 'b', "rst", "1"),
-        M("bots", pb, "Боты ходят на поля боя", "AiPlayerbot.RandomBotJoinBG", 'b', "rst", "1"),
-        M("bots", pb, "Гильдии ботов", "AiPlayerbot.AllowGuildBots", 'b', "rst", "1"),
-
-        M("mods", "mod_lonelyice_tactics.conf", "Тактики ботов", "Tactics.Enable", 'b', "rst", "1"),
-        M("mods", "mod_lonelyice_citizens.conf", "Жители городов", "Citizens.Enable", 'b', "rst", "1"),
-        M("mods", "mod_ahbot.conf", "Аукцион: бот продаёт", "AuctionHouseBot.EnableSeller", 'b', "rst", "0"),
-        M("mods", "mod_ahbot.conf", "Аукцион: бот покупает", "AuctionHouseBot.EnableBuyer", 'b', "rst", "0"),
-        M("mods", "mod_aoe_loot.conf", "Сбор добычи по площади", "AOELoot.Enable", 'b', "rst", "1"),
-        M("mods", "transmog.conf", "Трансмогрификация", "Transmogrification.Enable", 'b', "rst", "1"),
-        M("mods", "mod_learnspells.conf", "Изучение заклинаний при повышении уровня", "LearnSpells.Enable", 'b', "rst", "1"),
-        M("mods", "mod_npc_beastmaster.conf", "Мастер питомцев", "BeastMaster.Enable", 'b', "rst", "1"),
-        M("mods", "instance-reset.conf", "Сброс подземелий", "instanceReset.Enable", 'b', "rst", "1"),
-
         W("perf", "Только этот компьютер", "BindIP", 'b', "rst", "0.0.0.0", "Выключите, чтобы подключаться из локальной сети"),
         W("perf", "Порт входа", "RealmServerPort", 'n', "rst", "3724"),
         W("perf", "Порт мира", "WorldServerPort", 'n', "rst", "8085"),
@@ -135,7 +111,7 @@ SettingsModel::SettingsModel()
         L("launch", "Хранить копий", "Backup.Keep", 'n'),
     };
 
-    for (SetDef& d : _defs)
+    for (SetDef& d : _coreDefs)
     {
         if (d.key == "PlayerSaveInterval")
             d.conv = SetConv::MsToMin;
@@ -144,13 +120,48 @@ SettingsModel::SettingsModel()
     }
 }
 
-void SettingsModel::Load(fs::path const& worldConf, LauncherSettings const& ls, std::vector<std::string> const& locales)
+void SettingsModel::Load(fs::path const& worldConf, std::vector<PluginManifest> const& plugins,
+    LauncherSettings const& ls, std::vector<std::string> const& locales)
 {
     _worldConf = worldConf;
-    std::map<std::string, ConfFile> files;
-    auto conf = [&](SetDef const& d) -> ConfFile&
+    _errors.clear();
+
+    // Core groups, then one group per plugin (by group name) before the network and launcher groups.
+    _defs = _coreDefs;
+    _groups.clear();
+    std::vector<SetGroup> pluginGroups;
+    for (PluginManifest const& p : plugins)
     {
-        fs::path p = d.source == SetSource::World ? worldConf : worldConf.parent_path() / "modules" / d.file;
+        PluginSettings s = ReadPluginSettings(p);
+        if (!s.error.empty())
+            _errors.push_back(s.error);
+        if (s.fields.empty() || p.configDist.empty())
+            continue;
+        pluginGroups.push_back({ "plugin:" + p.id, s.group, s.hint });
+        for (PluginSetting const& f : s.fields)
+        {
+            static std::map<std::string, std::string> const apply = { { "now", "now" }, { "reload", "rel" }, { "restart", "rst" } };
+            SetDef d{ "plugin:" + p.id, f.label, f.key, SetSource::Module, ConfigFileName(p), 't', apply.at(f.apply), f.hint, f.options, f.def.value_or("") };
+            d.type = f.type == "bool" ? 'b' : f.type == "choice" ? 's' : f.type == "string" ? 't' : 'n';
+            d.integer = f.type == "int";
+            d.quoted = f.type == "string" || f.type == "choice";
+            d.min = f.min;
+            d.max = f.max;
+            d.dist = p.configDist;
+            _defs.push_back(std::move(d));
+        }
+    }
+    std::sort(pluginGroups.begin(), pluginGroups.end(), [](SetGroup const& a, SetGroup const& b) { return a.name < b.name; });
+    for (SetGroup const& g : _coreGroups)
+    {
+        if (g.id == "perf")
+            _groups.insert(_groups.end(), pluginGroups.begin(), pluginGroups.end());
+        _groups.push_back(g);
+    }
+
+    std::map<std::string, ConfFile> files;
+    auto load = [&](fs::path const& p) -> ConfFile&
+    {
         ConfFile& f = files[p.string()];
         if (!f.IsLoaded())
             f.Load(p);
@@ -166,10 +177,14 @@ void SettingsModel::Load(fs::path const& worldConf, LauncherSettings const& ls, 
             case SetSource::World:
             case SetSource::Module:
             {
-                // Settings of a module that is not installed (no config file) are not shown.
-                if (d.source == SetSource::Module && !conf(d).IsLoaded())
+                ConfFile& f = load(d.source == SetSource::World ? worldConf : worldConf.parent_path() / "modules" / d.file);
+                std::optional<std::string> cur = f.IsLoaded() ? f.Get(d.key) : std::nullopt;
+                // A key missing from the plugin's config (or the whole config) has the .dist's value.
+                if (!cur && !d.dist.empty())
+                    cur = load(d.dist).Get(d.key);
+                if (!cur && d.source == SetSource::Module && d.dist.empty() && !f.IsLoaded())
                     continue;
-                v = conf(d).Get(d.key).value_or(d.def);
+                v = cur.value_or(d.def);
                 if (d.type == 'b' && d.conv == SetConv::None)
                     v = IsTrue(v) ? "1" : "0";
                 else if (d.conv == SetConv::BindIp)
@@ -226,10 +241,20 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
             {
                 fs::path p = d.source == SetSource::World ? _worldConf : _worldConf.parent_path() / "modules" / d.file;
                 ConfFile& f = files[p.string()];
-                if (!f.IsLoaded() && !f.Load(p))
+                if (!f.IsLoaded())
                 {
-                    res.error = "Не удалось открыть " + p.string();
-                    return res;
+                    // a plugin without its own config yet starts from its .dist
+                    std::error_code ec;
+                    if (!d.dist.empty() && !fs::exists(p, ec))
+                    {
+                        fs::create_directories(p.parent_path(), ec);
+                        fs::copy_file(d.dist, p, ec);
+                    }
+                    if (!f.Load(p))
+                    {
+                        res.error = "Не удалось открыть " + p.string();
+                        return res;
+                    }
                 }
                 std::string out = v.cur;
                 if (d.conv == SetConv::BindIp)
@@ -238,7 +263,30 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
                     out = std::to_string(std::max(1, std::atoi(v.cur.c_str())) * 60000);
                 else if (d.type == 'b')
                     out = BoolOut(v.cur == "1", f.Get(d.key));
-                f.Set(d.key, out);
+                else if (d.type == 'n' && (d.integer || d.min || d.max))
+                {
+                    char* end = nullptr;
+                    double n = std::strtod(v.cur.c_str(), &end);
+                    if (end == v.cur.c_str())
+                    {
+                        res.error = "«" + d.label + "»: нужно число";
+                        return res;
+                    }
+                    if (d.min)
+                        n = std::max(n, *d.min);
+                    if (d.max)
+                        n = std::min(n, *d.max);
+                    out = d.integer ? std::to_string(std::llround(n)) : out;
+                    if (!d.integer && (d.min || d.max))
+                    {
+                        out = std::to_string(n);
+                        out.erase(out.find_last_not_of('0') + 1);
+                        if (out.back() == '.')
+                            out.pop_back();
+                    }
+                    v.cur = out;
+                }
+                f.Set(d.key, out, d.quoted);
                 break;
             }
             case SetSource::Realm:

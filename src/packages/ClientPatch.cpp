@@ -1,0 +1,356 @@
+#include "ClientPatch.h"
+#include "CryptoHash.h"
+#include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <memory>
+#include <optional>
+
+#ifndef UNICODE
+#  define UNICODE
+#endif
+#ifndef _UNICODE
+#  define _UNICODE
+#endif
+#include <StormLib.h>
+
+namespace fs = std::filesystem;
+using namespace LonelyIce;
+using DbcRecipes::Recipe;
+
+namespace
+{
+    char const* const MarkerName = "lonelyice-patch.txt";
+
+    struct Archive
+    {
+        HANDLE h = nullptr;
+        explicit Archive(fs::path const& p)
+        {
+            if (!SFileOpenArchive(p.c_str(), 0, STREAM_FLAG_READ_ONLY, &h))
+                h = nullptr;
+        }
+        ~Archive() { if (h) SFileCloseArchive(h); }
+        Archive(Archive const&) = delete;
+        Archive& operator=(Archive const&) = delete;
+
+        std::optional<std::vector<uint8_t>> Read(std::string const& name) const
+        {
+            HANDLE f = nullptr;
+            if (!h || !SFileHasFile(h, name.c_str()) || !SFileOpenFileEx(h, name.c_str(), 0, &f))
+                return std::nullopt;
+            DWORD const size = SFileGetFileSize(f, nullptr);
+            std::optional<std::vector<uint8_t>> data;
+            if (size != SFILE_INVALID_SIZE)
+            {
+                data.emplace(size);
+                DWORD read = 0;
+                SFileReadFile(f, data->data(), size, &read, nullptr);
+                data->resize(read);
+            }
+            SFileCloseFile(f);
+            return data;
+        }
+    };
+
+    // Archives a locale's DBC files come from, highest priority first. Our own archive is not among them.
+    std::vector<fs::path> SourceArchives(fs::path const& data, std::string const& l)
+    {
+        std::vector<fs::path> out;
+        for (std::string n : { "patch-" + l + "-3", "patch-" + l + "-2", "patch-" + l, "lichking-locale-" + l,
+                 "expansion-locale-" + l, "locale-" + l })
+            out.push_back(data / l / (n + ".MPQ"));
+        for (char const* n : { "patch-3", "patch-2", "patch", "lichking", "expansion", "common-2", "common" })
+            out.push_back(data / (std::string(n) + ".MPQ"));
+        std::erase_if(out, [](fs::path const& p) { std::error_code ec; return !fs::exists(p, ec); });
+        return out;
+    }
+
+    std::vector<std::string> Locales(fs::path const& data)
+    {
+        std::vector<std::string> out;
+        std::error_code ec;
+        for (fs::directory_iterator it(data, ec), end; !ec && it != end; it.increment(ec))
+        {
+            std::string l = it->path().filename().string();
+            if (l.size() == 4 && fs::exists(it->path() / ("locale-" + l + ".MPQ"), ec))
+                out.push_back(l);
+        }
+        return out;
+    }
+
+    std::string ReadFile(fs::path const& p)
+    {
+        std::ifstream in(p, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    }
+
+    std::string Hex(std::string const& s)
+    {
+        Acore::Crypto::SHA256 sha;
+        sha.UpdateData(s);
+        sha.Finalize();
+        std::string out;
+        for (uint8_t b : sha.GetDigest())
+        {
+            char hex[3];
+            snprintf(hex, sizeof(hex), "%02x", b);
+            out += hex;
+        }
+        return out;
+    }
+
+    bool WriteArchive(fs::path const& path, std::vector<std::pair<std::string, std::vector<uint8_t>>> const& files, std::string& error)
+    {
+        std::error_code ec;
+        fs::path tmp = path;
+        tmp += ".tmp";
+        fs::remove(tmp, ec);
+        HANDLE h = nullptr;
+        if (!SFileCreateArchive(tmp.c_str(), MPQ_CREATE_LISTFILE | MPQ_CREATE_ATTRIBUTES | MPQ_CREATE_ARCHIVE_V1,
+                DWORD(std::max<std::size_t>(64, files.size() * 2)), &h))
+        {
+            error = "не удалось создать " + tmp.string() + " (" + std::to_string(GetLastError()) + ")";
+            return false;
+        }
+        bool ok = true;
+        for (auto const& [name, data] : files)
+        {
+            HANDLE f = nullptr;
+            if (!SFileCreateFile(h, name.c_str(), 0, DWORD(data.size()), 0, MPQ_FILE_COMPRESS | MPQ_FILE_REPLACEEXISTING, &f)
+                || !SFileWriteFile(f, data.data(), DWORD(data.size()), MPQ_COMPRESSION_ZLIB) || !SFileFinishFile(f))
+            {
+                error = "не удалось добавить " + name + " (" + std::to_string(GetLastError()) + ")";
+                ok = false;
+                break;
+            }
+        }
+        SFileCloseArchive(h);
+        if (ok)
+        {
+            fs::rename(tmp, path, ec);
+            if (ec)
+            {
+                error = "не удалось заменить " + path.filename().string() + ": вероятно, игра запущена";
+                ok = false;
+            }
+        }
+        if (!ok)
+            fs::remove(tmp, ec);
+        return ok;
+    }
+}
+
+std::string ClientPatch::ArchiveName(std::string const& locale)
+{
+    return "patch-" + locale + "-4.MPQ";
+}
+
+ClientPatch::HiddenArchives::HiddenArchives(fs::path const& clientDir)
+{
+    fs::path const data = clientDir / "Data";
+    for (std::string const& locale : Locales(data))
+    {
+        fs::path const archive = data / locale / ArchiveName(locale);
+        std::error_code ec;
+        if (!fs::exists(archive, ec) || !Archive(archive).Read(MarkerName))
+            continue;
+        fs::path hidden = archive;
+        hidden += ".hidden";
+        fs::rename(archive, hidden, ec);
+        if (!ec)
+            _moved.push_back(archive);
+    }
+}
+
+ClientPatch::HiddenArchives::~HiddenArchives()
+{
+    for (fs::path const& archive : _moved)
+    {
+        fs::path hidden = archive;
+        hidden += ".hidden";
+        std::error_code ec;
+        fs::rename(hidden, archive, ec);
+    }
+}
+
+std::vector<uint8_t> ClientPatch::ReadStockTable(fs::path const& clientDir, std::string const& table)
+{
+    fs::path data = clientDir / "Data";
+    for (std::string const& locale : Locales(data))
+        for (fs::path const& a : SourceArchives(data, locale))
+            if (auto raw = Archive(a).Read("DBFilesClient\\" + table))
+                return std::move(*raw);
+    return {};
+}
+
+ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Recipe> const& recipes, DbcRecipes::IdMap const& ids)
+{
+    Result res;
+    fs::path data = clientDir / "Data";
+    std::error_code ec;
+
+    // Everything that goes into the archives, for the stamp.
+    std::string stampSource;
+    std::vector<std::string> tables;
+    for (Recipe const& r : recipes)
+    {
+        stampSource += r.Plugin() + "@" + r.Version() + "\n" + r.Text() + "\n";
+        for (auto const& [to, from] : r.Files())
+            stampSource += to + "\n" + ReadFile(from) + "\n";
+        for (std::string const& t : r.Tables())
+            if (std::find(tables.begin(), tables.end(), t) == tables.end())
+                tables.push_back(t);
+    }
+    for (auto const& [name, id] : ids)
+        stampSource += name + "=" + std::to_string(id) + "\n";
+    bool const empty = tables.empty() && std::none_of(recipes.begin(), recipes.end(), [](Recipe const& r) { return !r.Files().empty(); });
+
+    for (std::string const& locale : Locales(data))
+    {
+        fs::path const target = data / locale / ArchiveName(locale);
+        std::vector<fs::path> const sources = SourceArchives(data, locale);
+
+        std::string stamp;
+        if (!empty)
+        {
+            std::string s = stampSource + locale;
+            for (fs::path const& a : sources)
+                s += "\n" + a.filename().string() + ":" + std::to_string(fs::file_size(a, ec));
+            stamp = Hex(s);
+        }
+
+        // What is there now: our archive (with its stamp), someone else's, or nothing.
+        std::optional<std::vector<uint8_t>> marker;
+        bool exists = fs::exists(target, ec);
+        if (exists)
+            marker = Archive(target).Read(MarkerName);
+        if (exists && !marker)
+        {
+            fs::path bak = target;
+            bak += ".bak";
+            if (!fs::exists(bak, ec))
+            {
+                fs::rename(target, bak, ec);
+                res.log.push_back(locale + ": чужой " + ArchiveName(locale) + " сохранён как .bak");
+            }
+            else
+                fs::remove(target, ec);
+            exists = false;
+        }
+
+        if (empty)
+        {
+            if (exists)
+            {
+                fs::remove(target, ec);
+                res.changed = true;
+                res.log.push_back(locale + ": патч удалён, плагинам он не нужен");
+            }
+            continue;
+        }
+        if (exists && marker)
+        {
+            std::string const m(marker->begin(), marker->end());
+            if (m.substr(0, m.find('\n')) == stamp)
+                continue;
+        }
+
+        std::vector<std::unique_ptr<Archive>> opened;
+        for (fs::path const& a : sources)
+            opened.push_back(std::make_unique<Archive>(a));
+
+        std::vector<std::pair<std::string, std::vector<uint8_t>>> files;
+        std::string marks = stamp + "\n";
+        for (Recipe const& r : recipes)
+            marks += r.Plugin() + " " + r.Version() + "\n";
+
+        for (std::string const& table : tables)
+        {
+            std::string const name = "DBFilesClient\\" + table;
+            std::optional<std::vector<uint8_t>> raw;
+            for (auto const& a : opened)
+                if ((raw = a->Read(name)))
+                    break;
+            DbcRecipes::Table t;
+            if (!raw || !t.Parse(*raw))
+            {
+                res.ok = false;
+                res.error = locale + ": " + table + " не найден в архивах клиента";
+                return res;
+            }
+            for (Recipe const& r : recipes)
+                if (!r.Patch(table, t, ids, locale, nullptr, res.error))
+                {
+                    res.ok = false;
+                    return res;
+                }
+            files.emplace_back(name, t.Write());
+        }
+        for (Recipe const& r : recipes)
+            for (auto const& [to, from] : r.Files())
+            {
+                std::string const content = ReadFile(from);
+                files.emplace_back(to, std::vector<uint8_t>(content.begin(), content.end()));
+            }
+        files.emplace_back(MarkerName, std::vector<uint8_t>(marks.begin(), marks.end()));
+        opened.clear();
+
+        if (!WriteArchive(target, files, res.error))
+        {
+            res.ok = false;
+            res.error = locale + ": " + res.error;
+            return res;
+        }
+        res.changed = true;
+        res.log.push_back(locale + ": собран " + ArchiveName(locale));
+    }
+    return res;
+}
+
+ClientPatch::Result ClientPatch::SyncAddons(fs::path const& clientDir, std::vector<PluginManifest> const& plugins)
+{
+    Result res;
+    std::error_code ec;
+    fs::path const addons = clientDir / "Interface" / "AddOns";
+    fs::path const list = addons / "lonelyice-addons.txt";
+
+    std::vector<std::string> installed;
+    for (PluginManifest const& p : plugins)
+        for (fs::path const& a : p.addons)
+        {
+            std::string const name = a.filename().string();
+            fs::path const dst = addons / a.filename();
+            fs::remove_all(dst, ec);
+            fs::create_directories(dst, ec);
+            fs::copy(a, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+            if (ec)
+            {
+                res.ok = false;
+                res.error = "аддон " + name + " не скопирован: " + ec.message();
+                return res;
+            }
+            installed.push_back(name);
+        }
+
+    // Addons a removed plugin left behind.
+    {
+        std::ifstream in(list);
+        for (std::string line; std::getline(in, line);)
+            if (!line.empty() && std::find(installed.begin(), installed.end(), line) == installed.end())
+            {
+                fs::remove_all(addons / fs::u8path(line), ec);
+                res.changed = true;
+                res.log.push_back("аддон " + line + " удалён");
+            }
+    }
+    if (installed.empty())
+        fs::remove(list, ec);
+    else
+    {
+        std::ofstream out(list, std::ios::trunc);
+        for (std::string const& n : installed)
+            out << n << "\n";
+    }
+    return res;
+}

@@ -239,6 +239,7 @@ input.check:checked { background-color: #b3441f; border-color: #6e1a10; box-shad
 .cc-main { flex: 1 1 0; min-width: 0; }
 .cc-title { font-weight: bold; font-size: 14dp; color: #3a1a0c; }
 .ccard.danger .cc-title { color: #9a2a17; }
+.ccard.off .cc-main { opacity: 0.55; }
 .cc-group { font-weight: normal; font-size: 12dp; color: #5e4f3a; }
 .cc-desc { font-size: 13dp; color: #5e4f3a; }
 .cc-args { display: flex; flex-direction: row; flex-wrap: wrap; gap: 5dp; margin-top: 3dp; }

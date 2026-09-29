@@ -1,6 +1,6 @@
 # LonelyIce plugin format
 
-Status: draft 1. Applies to the LonelyIce fork of AzerothCore (`LonelyIceProject/azerothcore-wotlk`). The server
+Status: format 1. Applies to the LonelyIce fork of AzerothCore (`LonelyIceProject/azerothcore-wotlk`). The server
 side (manifest core fields, library entry points, loading) is described in the fork's `doc/Plugins.md`; this
 document adds what LonelyIce and its package manager use on top: launcher settings, client files, packages.
 
@@ -28,15 +28,15 @@ lonelyice.tactics/
       liblonelyice_tactics.so
     macos-arm64/
       liblonelyice_tactics.dylib
-  sql/
-    world/ characters/ auth/   update files, AzerothCore updater layout (see 5)
-    <database id>/             base + updates of a database the plugin owns
+  data/
+    sql/world/ characters/ ... update files, AzerothCore updater layout (see 5)
+    patches.json               DBC rows with named ids, their SQL, client files (see 7)
   conf/
     mod_lonelyice_tactics.conf.dist
   lua/ ...                     any runtime files the plugin reads, found via its own folder
   client/
     addons/BotTactics/...      copied into Interface\AddOns
-    patches/...                recipes for client patches (see 7)
+  settings.json                launcher settings (see 6)
   icon.png                     64x64, shown by the launcher
   LICENSE
   README.md
@@ -71,7 +71,8 @@ directory). Each subfolder with a `plugin.json` is a plugin.
     "characters": "sql/characters"
   },
   "config": "conf/mod_lonelyice_tactics.conf.dist",
-  "settings": "settings",
+  "settings": "settings.json",
+  "patches": "data/patches.json",
   "client": {
     "addons": [ "client/addons/BotTactics" ]
   }
@@ -91,8 +92,9 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `server.library` | Library base name. The loader looks in `server/<platform>/` of the running system and adds the platform's form: `name.dll` on Windows, `libname.so` on Linux, `libname.dylib` on macOS. A plugin without a build for the running platform is skipped with a message. |
 | `databases` | Update folders per core database (`auth`, `characters`, `world`) and databases the plugin owns (see 5). |
 | `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager. |
-| `settings` | Launcher settings schema, inline array or the name of a file `settings.json` (see 6). |
-| `client` | Client files (see 7). |
+| `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
+| `patches` | Patch recipe file: DBC rows with named ids, SQL, client files (see 7). |
+| `client` | `addons`: client addon folders (see 7). |
 
 ## 3. Server library
 
@@ -174,8 +176,10 @@ same step during its install wizard so the first start is fast.
 
 ## 6. Launcher settings
 
-`settings.json` (or the inline array) describes what the launcher shows in its Settings tab. Values live
-in the plugin's config file; the launcher edits them in place, keeping comments.
+`settings.json` describes what the launcher shows for the plugin: one group in its Settings tab, named `group`, next to the
+core's groups. Values live in the plugin's config (`configs/modules/<name>.conf`, created from the plugin's `.dist`
+when first saved); a key missing there shows the `.dist` value. The launcher edits values in place, keeping comments.
+A plugin without `config` gets no group.
 
 ```json
 {
@@ -196,57 +200,113 @@ in the plugin's config file; the launcher edits them in place, keeping comments.
 | `type` | Control |
 |---|---|
 | `bool` | checkbox, written in the style the file already uses (`1`/`0`, `true`/`false`) |
-| `int`, `float` | number field with optional `min`, `max` |
+| `int`, `float` | number field with optional `min`, `max` (clamped on save) |
 | `string` | text field |
 | `choice` | drop-down of `options` |
 
-`apply`: `now` (read on every use), `reload` (`.reload config`), `restart` (server restart). The launcher
-uses it to decide what to do after saving.
+`apply`: `now` (read on every use), `reload` (`.reload config`), `restart` (server restart, the default). The launcher
+uses it to decide what to do after saving. `label`, `hint` and option labels are localized strings; `default` is
+used when neither the config nor the `.dist` has the key.
 
-## 7. Client files
+## 7. Patches: DBC rows, named ids, client files
 
-* `client.addons`: folders copied into `Interface\AddOns` of the game client, replaced on update and
-  removed on uninstall.
-* `client.patches`: declarative recipes, not binaries and not programs. Patches that change game data (DBC
-  rows, interface files) are built on the player's machine from the player's own client by code built into
-  the launcher and the command-line package manager, so a plugin never runs code on the client side:
+`patches` in the manifest names the plugin's recipe file (`data/patches.json` by convention). A recipe changes game
+data declaratively; the plugin never ships game data and never runs code on the client:
 
-  ```json
+```json
+{
+  "ids": {
+    "translocation": { "table": "Spell.dbc", "copy": 44080 }
+  },
   "patches": [ {
-    "name": "waystones",
-    "priority": "L",
-    "dbc": [ { "file": "DBFilesClient\\TaxiNodes.dbc", "rows": "client/dbc/TaxiNodes.csv", "key": "ID", "mode": "upsert" } ],
-    "files": [ { "from": "client/files/Interface/Icons/waystone.blp", "to": "Interface\\Icons\\waystone.blp" } ]
-  } ]
-  ```
+    "table": "Spell.dbc",
+    "rows": [ {
+      "id": "@translocation",
+      "set": {
+        "28": 6,
+        "133": 3167,
+        "136": { "en": "Translocation", "ru": "Транслокация" },
+        "153": { "en": "" }
+      }
+    } ]
+  } ],
+  "install":   { "world": [ "INSERT INTO `spell_script_names` (`spell_id`, `ScriptName`) VALUES ({{id:translocation}}, 'spell_custom_translocation')" ] },
+  "uninstall": { "world": [ "DELETE FROM `spell_script_names` WHERE `ScriptName` = 'spell_custom_translocation'" ] },
+  "files": [ { "from": "client/files/waystone.blp", "to": "Interface/Icons/waystone.blp" } ]
+}
+```
 
-  The installer reads the listed DBC tables from the player's MPQs for every installed locale, applies the
-  rows, adds the files, and writes `patch-<locale>-<priority>.MPQ` into `Data\<locale>`. Game data is never
-  distributed in a package; files a plugin adds must be its own.
+**Named ids.** A plugin does not pick ids for the rows it adds: two plugins could pick the same one. It declares a
+name (`ids`) with its table and, optionally, the stock row the new row starts as a copy of. The installer gives the name
+the next free id of the table (above the stock rows, the ids already given out and the fixed ids of all recipes) when
+the plugin is installed or enabled, and takes it back when the plugin is removed or disabled. The ids live in the
+world database, table `plugin_ids (plugin, name, dbc, id)`; while a plugin stays installed its ids never change.
 
-The same installer code creates and updates databases for the package manager, through the same core
-dialect layer, so installing a plugin offline and starting the server give identical results.
+* A row `"id": "@name"` is the plugin's named row (`"@other.plugin/name"` for another plugin's); it is added when
+  missing (`"mode": "upsert"`). A row with a number changes a stock row (`"mode": "update"`, the default) or adds one
+  (`"insert"`, `"upsert"`, `"copy": <id>`).
+* `set` takes field numbers of the table (as in DBC editors). Values: an integer, a float (`1.5`), a string, a
+  localized string (an object of locale → text; it fills the 16 locale slots, `ruRU` → `ru` → `en` fallback), or
+  `{ "ref": "name" }` for another named id.
+* `install` / `uninstall` are SQL statements per database (`world`, `characters`, `auth`) in the AzerothCore
+  dialect, with `{{id:name}}` replaced by the ids. `uninstall` is stored when the plugin is installed and run when it
+  is removed, even if its files are already gone.
+* Plugin code reads its ids through the core's database interfaces, for example
+  `SELECT id FROM plugin_ids WHERE plugin = 'lonelyice.waystones' AND name = 'translocation'` on `WorldDatabase`.
 
-## 8. Package repository (planned)
+**Where the rows go.** The installer applies the recipes
 
-An index file lists packages; the launcher downloads it, resolves dependencies and installs zips.
+* to the server: rows of tables the core reads from the world database as well (`Spell.dbc` → `spell_dbc`; each
+  slot gets its own locale) are written there, so the server's extracted DBC files stay stock;
+* to the client: for every locale installed in the client it takes the tables from the player's own stock archives,
+  applies all recipes in dependency order, adds `files` and writes one archive, `Data/<locale>/patch-<locale>-4.MPQ`,
+  marked as LonelyIce's (an archive of that name LonelyIce did not write is kept as `.bak`). Without recipes the
+  archive is removed.
+
+A stamp (recipe text, plugin version, installer version) is stored per plugin in `plugin_patches`; unchanged plugins
+are skipped, changed ones are uninstalled and installed again with the same ids.
+
+**When.** LonelyIce applies the patches every time its server starts, after the database updates and before the world
+loads. For a plain worldserver the package manager does it: `LonelyIce.exe --pkg apply -c <worldserver.conf>
+[--client <game folder>]`. Everything goes through the core's database layer, so it works on every backend the core
+supports.
+
+**Client addons.** `client.addons` folders are copied into `Interface/AddOns` before the game starts, replaced on
+update and removed with the plugin (LonelyIce keeps its list in `Interface/AddOns/lonelyice-addons.txt`).
+
+## 8. Packages
+
+A package is a zip of the plugin folder (at the root of the zip or in one top folder). `LonelyIce.exe --pkg pack
+<plugin folder> [<out dir>]` writes `<id>-<version>.zip` and prints its index entry.
+
+An index lists packages; the launcher's Plugins tab and `--pkg` read it (`[packages] index` in `lonelyice.ini`,
+several indexes separated by `;`, URLs or local paths). Package URLs are relative to the index.
 
 ```json
 {
   "format": 1,
   "packages": [
-    { "id": "lonelyice.tactics", "version": "1.3.0", "core": "lonelyice-ac-1",
-      "platforms": [ "windows-x64", "linux-x64" ],
+    { "id": "lonelyice.tactics", "version": "1.3.0", "name": { "en": "Bot tactics", "ru": "Тактики ботов" },
+      "core": "lonelyice-ac-1", "platforms": [ "windows-x64", "linux-x64" ],
       "depends": { "playerbots": ">=1.0.0" },
-      "url": "https://github.com/LonelyIceProject/mod-lonelyice-tactics/releases/download/v1.3.0/lonelyice.tactics-1.3.0-lonelyice-ac-1.zip",
-      "sha256": "…", "size": 1234567 }
+      "url": "lonelyice.tactics-1.3.0.zip", "sha256": "…", "size": 1234567 }
   ]
 }
 ```
 
-Client-only plugins (addons) have no `core` and no `platforms` and can be installed for any server. Paths
-inside packages always use `/`; the launcher and the loader convert them for the host system.
+Packages for another core ABI or without a build for this platform are not offered; client-only plugins (no
+`core`, no `platforms`) work with any server. Installing resolves the dependency tree (newest versions that satisfy
+every range, installed plugins kept when they fit, conflicts refused), downloads, checks size and sha256, and
+unpacks into `plugins/<id>`. A disabled plugin is moved to `plugins/.disabled/<id>`, where the core does not look.
+Removing or disabling a plugin that others need is refused. Changing plugins needs the server stopped; the databases
+and the client follow on its next start.
 
+```
+LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |
+                    enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |
+                    pack <plugin folder> [<out dir>]
+options: --plugins <dir> (default: plugins next to the exe), --index <urls>
+```
 ## 9. Static builds
 
 The same sources still build as classic AzerothCore modules: put the repository into `modules/` and build

@@ -15,4 +15,5 @@ cmake --build build --config RelWithDebInfo --target lonelyice_release
 - The server core is the `external/azerothcore` submodule; `LONELYICE_CORE_DIR` points elsewhere.
 - Plugins in `plugins/` (submodules with a `plugin.json`) are built and shipped with the release;
   `LONELYICE_PLUGIN_DIRS` replaces that list. Some plugins have their own requirements, see their READMEs.
-- `tools\build-ui-deps.ps1` fetches and builds the interface libraries into `deps/` once.
+- `tools\build-ui-deps.ps1` fetches and builds the libraries LonelyIce adds to the core into `deps/` once: SDL3, FreeType
+  and RmlUi for the interface, StormLib for client archives and miniz for plugin packages.

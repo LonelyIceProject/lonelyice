@@ -57,6 +57,7 @@ void LonelyIce::LauncherSettings::Load()
     realmName = Read(file, L"server", L"realmName", "");
     sqlStamp = Read(file, L"server", L"sqlStamp", "");
     pendingRealmName = Read(file, L"server", L"pendingRealmName", "");
+    packageIndex = Read(file, L"packages", L"index", DefaultPackageIndex);
 }
 
 void LonelyIce::LauncherSettings::Save() const
@@ -77,4 +78,5 @@ void LonelyIce::LauncherSettings::Save() const
     Write(file, L"backup", L"time", backupTime);
     Write(file, L"backup", L"keep", std::to_wstring(backupKeep));
     Write(file, L"backup", L"lastDay", lastBackupDay);
+    Write(file, L"packages", L"index", packageIndex);
 }

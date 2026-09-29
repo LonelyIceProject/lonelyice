@@ -27,6 +27,9 @@ namespace LonelyIce
         std::string sqlStamp;            // setup\sql.pak the databases were last deployed from
         std::string realmName;           // last known, for the settings tab while the server is down
         std::string pendingRealmName;    // applied when the server comes up
+        std::string packageIndex = DefaultPackageIndex;   // plugin package indexes, ";"-separated URLs or paths
+
+        static constexpr char const* DefaultPackageIndex = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
 
         void Load();
         void Save() const;
