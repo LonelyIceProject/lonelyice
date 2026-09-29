@@ -98,6 +98,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `client` | `addons`: client addon folders (see 7). |
 | `provides` | Capabilities the plugin gives, e.g. `database:mysql` for a library that registers the MySQL database backend (`RegisterBackendDriver`). Informational; the launcher offers a storage through `storage`. |
 | `storage` | A place for the server's databases that the plugin adds (a database server, see below). |
+| `source` | For a plugin built from a module's own repository (see 10): `repo` (git URL) and `commit` of the module. |
 
 ### `storage`
 
@@ -207,7 +208,10 @@ A plugin that owns a database declares it with a connection key and base folder:
 
 The server applies plugin SQL itself on start when `Updates.EnableDatabases` allows it, and creates a
 plugin-owned database when `Updates.AutoSetup` is on, exactly as for core databases. LonelyIce runs the
-same step during its install wizard so the first start is fast.
+same step during its install wizard so the first start is fast. Afterwards its updates stay off; when the SQL
+files of the loaded plugins or the database connections differ from the last start (a hash kept in
+`plugins/.cache/sql.stamp`), the server runs the updater over the plugins' folders only, so a plugin installed
+or updated later gets its tables on the next start.
 
 ## 6. Launcher settings
 
@@ -356,3 +360,24 @@ options: --plugins <dir> (default: plugins next to the exe), --index <urls>
 
 The same sources still build as classic AzerothCore modules: put the repository into `modules/` and build
 with `MODULES=static`. `plugin.json` is then used only for the launcher settings and client files.
+
+## 10. Modules from their own repositories
+
+An AzerothCore module that is not written as a plugin is packaged the way a distribution packages a program:
+a small repository (`<module>-plugin`) holds only what turns the module's original sources into a plugin, and
+the module itself is not forked.
+
+```
+mod-transmog-plugin/
+  plugin.json          manifest; "source": { "repo": "https://github.com/azerothcore/mod-transmog.git", "commit": "<sha>" }
+  CMakeLists.txt       FetchContent of source.repo at source.commit, git apply of patches/*.patch,
+                       AddPlugin(<id> SOURCES <module>/src/* plugin/plugin.cpp), the module's conf/ and data/
+                       laid out with the plugin
+  plugin/plugin.cpp    AC_PLUGIN(Add<module>Scripts): the module's own script loader
+  patches/*.patch      changes the module needs as a plugin, if any
+```
+
+`databases` and `config` in the manifest name the module's own files (`data/sql/db-world`,
+`conf/transmog.conf.dist`). Patches stay small: paths a module hard-codes for `modules/<name>/`, calls into core
+code the core does not export. A module that needs larger changes is forked instead, and `source.repo` points
+at the fork.

@@ -7,14 +7,17 @@
 #include "Banner.h"
 #include "BattlegroundMgr.h"
 #include "BigNumber.h"
+#include "BuiltInConfig.h"
 #include "Common.h"
 #include "Config.h"
+#include "CryptoHash.h"
 #include "DatabaseEnv.h"
 #include "DatabaseLibrary.h"
 #include "DatabaseLoader.h"
 #include "ClientArchives.h"
 #include "ClientData.h"
 #include "DBCStores.h"
+#include "DBUpdater.h"
 #include "DbcUnpack.h"
 #include "GameTime.h"
 #include "GitRevision.h"
@@ -54,6 +57,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <openssl/crypto.h>
 #include <openssl/opensslv.h>
@@ -223,6 +227,75 @@ namespace
         if (!r.ok)
             LOG_ERROR("server.loading", "Plugin patches failed: {}", r.error);
         return r.ok;
+    }
+
+    // The SQL files of the loaded plugins and the database connections, hashed. The updater is off on normal starts;
+    // when this differs from the value saved by the last start, plugins were installed or updated (or the storage
+    // changed) and their SQL has to be applied.
+    std::string PluginSqlStamp()
+    {
+        std::set<std::string> lines;
+        for (char const* key : { "LoginDatabaseInfo", "CharacterDatabaseInfo", "WorldDatabaseInfo" })
+            lines.insert(Acore::StringFormat("{} {}", key, sConfigMgr->GetOption<std::string>(key, "", false)));
+        for (PluginInfo const& plugin : sPluginMgr->GetPlugins())
+        {
+            if (!plugin.loaded)
+                continue;
+            for (auto const& [database, dir] : plugin.databases)
+            {
+                std::error_code ec;
+                for (fs::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+                    if (it->is_regular_file(ec) && it->path().extension() == ".sql")
+                        lines.insert(Acore::StringFormat("{} {} {} {} {}", plugin.id, plugin.version, database,
+                            fs::relative(it->path(), dir, ec).generic_string(), it->file_size(ec)));
+            }
+        }
+
+        std::string all;
+        for (std::string const& line : lines)
+            all += line + '\n';
+        return ByteArrayToHexStr(Acore::Crypto::SHA256::GetDigestOf(all));
+    }
+
+    // Updates are off on normal starts: the installer applies the release SQL once and removes it. The SQL of plugins
+    // installed or updated since the last start is applied here, by the core's updater limited to the plugins' folders.
+    bool UpdatePluginDatabases()
+    {
+        fs::path const stampFile = fs::path(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins")) / ".cache" / "sql.stamp";
+        std::string const stamp = PluginSqlStamp();
+        std::string saved;
+        if (std::ifstream in{ stampFile })
+            std::getline(in, saved);
+        if (saved == stamp)
+            return true;
+
+        // With updates on (deploy) the updater has already applied them together with the core's SQL.
+        if (!sConfigMgr->GetOption<int32>("Updates.EnableDatabases", 0, false))
+        {
+            LOG_INFO("server.loading", "Plugins changed since the last start: applying their SQL");
+            // The updater reads the folders relative to the source directory, which the installer leaves empty.
+            std::error_code ec;
+            fs::path const source = fs::absolute(fs::u8path(BuiltInConfig::GetSourceDirectory()), ec);
+            fs::create_directories(source, ec);
+            std::map<std::string, std::vector<std::string>> folders;
+            for (PluginInfo const& plugin : sPluginMgr->GetPlugins())
+                if (plugin.loaded)
+                    for (auto const& [database, dir] : plugin.databases)
+                        folders[database].push_back("/" + fs::relative(fs::absolute(dir, ec), source, ec).generic_string());
+
+            if ((folders.count("auth") && !DBUpdater<LoginDatabaseConnection>::Update(LoginDatabase, &folders["auth"])) ||
+                (folders.count("characters") && !DBUpdater<CharacterDatabaseConnection>::Update(CharacterDatabase, &folders["characters"])) ||
+                (folders.count("world") && !DBUpdater<WorldDatabaseConnection>::Update(WorldDatabase, &folders["world"])))
+            {
+                LOG_ERROR("server.loading", "Applying the plugins' SQL failed");
+                return false;
+            }
+        }
+
+        std::error_code ec;
+        fs::create_directories(stampFile.parent_path(), ec);
+        std::ofstream(stampFile) << stamp << '\n';
+        return true;
     }
 
     // LONELYICE_DATA=client: DBC data, terrain and cameras come from the game client's archives (LONELYICE_CLIENT,
@@ -807,6 +880,12 @@ int ServerMain(int argc, char** argv)
     }
 
     std::shared_ptr<void> dbHandle(nullptr, [](void*) { StopDB(); });
+
+    if (!UpdatePluginDatabases())
+    {
+        Control("state failed database");
+        return 1;
+    }
 
     if (!dbcAction.empty())
     {

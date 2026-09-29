@@ -15,7 +15,7 @@ set(LONELYICE_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/azerothcore" CACHE 
 file(GLOB LONELYICE_DEFAULT_PLUGINS LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*")
 set(LONELYICE_FOUND_PLUGINS "")
 foreach(dir ${LONELYICE_DEFAULT_PLUGINS})
-  if (EXISTS "${dir}/plugin.json" AND EXISTS "${dir}/CMakeLists.txt")
+  if (EXISTS "${dir}/plugin.json")
     list(APPEND LONELYICE_FOUND_PLUGINS "${dir}")
   endif()
 endforeach()
