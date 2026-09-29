@@ -156,6 +156,18 @@ if (USE_REAL_LIBSIDECAR AND LIBSIDECAR_SHARED_FILE)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBSIDECAR_SHARED_FILE}" "$<TARGET_FILE_DIR:lonelyice>")
 endif()
 
+# OpenSSL's libraries and its legacy provider (the core requires legacy.dll next to the executable) so the build
+# folder runs as is.
+if (WIN32)
+  get_filename_component(OPENSSL_RUNTIME_DIR "${OPENSSL_INCLUDE_DIR}/../bin" ABSOLUTE)
+  foreach(lib libcrypto-3-x64.dll libssl-3-x64.dll legacy.dll)
+    if (EXISTS "${OPENSSL_RUNTIME_DIR}/${lib}")
+      add_custom_command(TARGET lonelyice POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OPENSSL_RUNTIME_DIR}/${lib}" "$<TARGET_FILE_DIR:lonelyice>")
+    endif()
+  endforeach()
+endif()
+
 install(TARGETS lonelyice DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
 # Release folder: LonelyIce, the core libraries and plain worldserver/authserver, the plugins, the libraries they need
