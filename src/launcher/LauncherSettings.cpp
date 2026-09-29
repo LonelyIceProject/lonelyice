@@ -47,6 +47,11 @@ void LonelyIce::LauncherSettings::Load()
     storage = ini.Get("server", "storage", "client");
     if (storage != "client" && storage != "unpacked" && storage != "mysql")
         storage = "client";
+    mysqlHost = ini.Get("mysql", "host", mysqlHost);
+    mysqlPort = ini.Get("mysql", "port", mysqlPort);
+    mysqlUser = ini.Get("mysql", "user", mysqlUser);
+    mysqlPassword = ini.Get("mysql", "password", "");
+    mysqlPrefix = ini.Get("mysql", "prefix", mysqlPrefix);
     pendingRealmName = ini.Get("server", "pendingRealmName", "");
     packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
     packageIndexOff = ini.Get("packages", "disabled", "");
@@ -67,6 +72,11 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("server", "realmName", realmName);
     ini.Set("server", "sqlStamp", sqlStamp);
     ini.Set("server", "storage", storage);
+    ini.Set("mysql", "host", mysqlHost);
+    ini.Set("mysql", "port", mysqlPort);
+    ini.Set("mysql", "user", mysqlUser);
+    ini.Set("mysql", "password", mysqlPassword);
+    ini.Set("mysql", "prefix", mysqlPrefix);
     ini.Set("server", "pendingRealmName", pendingRealmName);
     ini.Set("launcher", "autoStart", flag(autoStart));
     ini.Set("launcher", "stopWithGame", flag(stopWithGame));

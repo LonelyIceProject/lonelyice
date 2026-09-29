@@ -24,6 +24,7 @@ namespace LonelyIce
         // (maps and cameras extracted into data/, DBC files in dbc_* tables of the world database).
         std::string storage = "client";
         std::string locale;                 // client locale the server data is read in, empty = the client's first
+        Platform::Env serverEnv;            // added to every server child (storage "mysql": the connection strings)
 
         // unpack: switch to "unpacked"; pack: switch back to "client" (drops what unpack made)
         bool db = true, unpack = false, pack = false, vmaps = true, mmaps = true, client_prep = true;

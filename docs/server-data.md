@@ -2,7 +2,8 @@
 
 The server needs data from the game client: the DBC tables (spells, maps, areas, ...), terrain tiles
 (`maps/*.map`), cinematic cameras, and optionally collision (`vmaps`) and paths (`mmaps`). LonelyIce can take it
-in two ways; `[server] storage` in `lonelyice.ini` says which, and Maintenance → Server data switches it.
+in two ways, or keep everything on MySQL; `[server] storage` in `lonelyice.ini` says which, and Maintenance →
+Server data switches it.
 
 ## `client`: read from the client (default)
 
@@ -28,6 +29,16 @@ Everything is unpacked once and the server no longer needs the client: maps and 
 `DBC.FromDatabase = 1`. Going back to `client` drops those tables and files (`--server --dbc drop`).
 
 A real `dbc_*` table takes precedence over the virtual one of the same name.
+
+## `mysql`
+
+With a plugin that provides `database:mysql` (mod-lonelyice-mysql) the databases can live on a MySQL 8 server.
+The launcher keeps the server in `[mysql]` of `lonelyice.ini` (host, port, user, password, prefix) and passes
+`mysql:host;port;user;password;<prefix><name>` for every `*DatabaseInfo` (auth, characters, world,
+playerbots) plus `MySQLExecutable` (the plugin's `mysql` program) as environment overrides. Switching deploys the
+databases there (missing ones are created, existing ones updated) and unpacks as above, the DBC tables going into
+the MySQL world database; MySQL has no virtual tables. The launcher's backups work on the built-in files only and
+are off on MySQL.
 
 ## Table layout
 

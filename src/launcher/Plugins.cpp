@@ -119,6 +119,10 @@ std::vector<LonelyIce::PluginManifest> LonelyIce::ReadPlugins(fs::path const& pl
             if (!patches.empty())
                 m.patches = m.dir / fs::u8path(patches);
             m.serverLibrary = root.contains("server") && !Str(root["server"], "library").empty();
+            if (root.contains("provides") && root["provides"].is_sequence())
+                for (auto const& p : root["provides"].as_seq())
+                    if (p.is_string())
+                        m.provides.push_back(p.get_value<std::string>());
             out.push_back(std::move(m));
         }
         catch (std::exception const&)

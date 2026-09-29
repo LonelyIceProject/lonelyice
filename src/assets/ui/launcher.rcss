@@ -311,6 +311,9 @@ input.check:checked { background-color: #b3441f; border-color: #6e1a10; box-shad
 .d-detail { font-size: 12dp; color: #5e4f3a; }
 .d-size { font-family: "PT Mono"; font-size: 13dp; color: #3a2a1a; }
 .drow.storage { padding: 8dp 4dp; margin-bottom: 4dp; border-bottom: 1dp #6e5a3366; }
+.mysql { padding: 4dp 4dp 10dp 4dp; margin-bottom: 4dp; border-bottom: 1dp #6e5a3366; }
+.mysql .form-row { margin-top: 6dp; }
+.form-row .f.short, .form-row .f.short input.field { width: 70dp; }
 
 /* console */
 #log {

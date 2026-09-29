@@ -532,7 +532,7 @@ void Wizard::Cancel()
     Dirty();
 }
 
-void Wizard::SwitchStorage(fs::path const& client, std::string const& storage)
+void Wizard::SwitchStorage(fs::path const& client, std::string const& storage, bool db, Platform::Env const& serverEnv)
 {
     _open = true;
     if (_installer.IsRunning())
@@ -546,8 +546,11 @@ void Wizard::SwitchStorage(fs::path const& client, std::string const& storage)
     o.client = _client.dir;
     o.storage = storage;
     o.locale = _host.serverLocale ? _host.serverLocale() : std::string();
-    o.db = o.vmaps = o.mmaps = o.client_prep = false;
-    o.unpack = storage == "unpacked";
+    o.serverEnv = serverEnv;
+    o.db = db;
+    o.vmaps = o.mmaps = o.client_prep = false;
+    // MySQL has no virtual tables: its DBC data is always unpacked
+    o.unpack = storage == "unpacked" || storage == "mysql";
     o.pack = storage == "client";
     o.realmName = _realm;
     _options = o;
@@ -569,7 +572,10 @@ void Wizard::StartInstall()
     auto on = [&](char const* id) { return std::any_of(_comps.begin(), _comps.end(), [&](CompRow const& c) { return c.id == id && c.on; }); };
     o.db = on("db");
     o.unpack = on("unpack");
-    o.storage = o.unpack ? "unpacked" : _host.storage ? _host.storage() : "client";
+    std::string const current = _host.storage ? _host.storage() : "client";
+    o.storage = current == "mysql" ? current : o.unpack ? "unpacked" : current;
+    if (_host.serverEnv)
+        o.serverEnv = _host.serverEnv();
     o.locale = _host.serverLocale ? _host.serverLocale() : std::string();
     o.vmaps = on("vmaps");
     o.mmaps = on("mmaps");

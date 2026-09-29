@@ -312,6 +312,18 @@
                         <div class="d-main"><div class="d-title">{{storage_title}}</div><div class="d-detail">{{storage_detail}}</div></div>
                         <div id="btn-storage" class="btn small" data-event-click="storage_switch">{{storage_action}}</div>
                     </div>
+                    <div class="mysql" data-if="mysql_available && storage_mode != 'mysql'">
+                        <div class="d-title">@{data.mysql.title}</div>
+                        <div class="d-detail">{{mysql_detail}}</div>
+                        <div class="form-row">
+                            <div class="f"><div class="f-label">@{data.mysql.host}</div><input type="text" id="mysql-host" class="field" data-value="mysql_host"/></div>
+                            <div class="f short"><div class="f-label">@{data.mysql.port}</div><input type="text" id="mysql-port" class="field" data-value="mysql_port"/></div>
+                            <div class="f"><div class="f-label">@{data.mysql.user}</div><input type="text" id="mysql-user" class="field" data-value="mysql_user"/></div>
+                            <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="mysql-pass" class="field" data-value="mysql_pass"/></div>
+                            <div class="f"><div class="f-label">@{data.mysql.prefix}</div><input type="text" id="mysql-prefix" class="field" data-value="mysql_prefix"/></div>
+                            <div id="btn-mysql" class="btn small" data-event-click="storage_mysql">@{data.mysql.use}</div>
+                        </div>
+                    </div>
                     <div class="scroll grow">
                         <div class="drow" data-for="d : data_rows">
                             <div class="dot big" data-class-on="d.status == 'ok'" data-class-warn="d.status == 'warn'"></div>

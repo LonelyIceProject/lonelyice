@@ -95,6 +95,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
 | `patches` | Patch recipe file: DBC rows with named ids, SQL, client files (see 7). |
 | `client` | `addons`: client addon folders (see 7). |
+| `provides` | Capabilities the launcher looks for: `database:mysql` for a plugin whose library registers the MySQL database backend (`RegisterBackendDriver`), which makes MySQL a choice under Maintenance → Server data (see `docs/server-data.md`). |
 
 ## 3. Server library
 

@@ -80,3 +80,14 @@ LonelyIce::EnvList LonelyIce::ModuleConfigOverrides(fs::path const& configFile, 
     }
     return env;
 }
+
+LonelyIce::EnvList LonelyIce::MySqlDatabaseOverrides(MySqlServer const& s, fs::path const& mysqlProgram)
+{
+    EnvList env;
+    // "host;port;user;password;database", the core's MySQL connection string
+    for (auto [key, name] : { std::pair{ "LoginDatabaseInfo", "auth" }, { "CharacterDatabaseInfo", "characters" },
+             { "WorldDatabaseInfo", "world" }, { "PlayerbotsDatabaseInfo", "playerbots" } })
+        env.emplace_back(EnvName(key), "mysql:" + s.host + ";" + s.port + ";" + s.user + ";" + s.password + ";" + s.prefix + name);
+    env.emplace_back(EnvName("MySQLExecutable"), Platform::PathToUtf8(mysqlProgram));
+    return env;
+}

@@ -31,6 +31,7 @@ namespace LonelyIce
             std::function<std::string()> sqlStamp;                  // stamp of the last database deploy
             std::function<std::string()> storage;                   // where the server reads game data now (InstallOptions::storage)
             std::function<std::string()> serverLocale;              // client locale of the server data, empty = the client's first
+            std::function<Platform::Env()> serverEnv;               // for the server children (MySQL connection strings)
             std::function<void(InstallOptions const&)> installed;   // install finished successfully
             std::function<void()> play;
             std::function<void()> wake;
@@ -44,7 +45,8 @@ namespace LonelyIce
 
         void Open(std::filesystem::path const& client);
         // Switches where the server reads its game data ("client" or "unpacked"): straight to the install page.
-        void SwitchStorage(std::filesystem::path const& client, std::string const& storage);
+        // "mysql" deploys the databases there first (db), as does any switch that finds no databases yet.
+        void SwitchStorage(std::filesystem::path const& client, std::string const& storage, bool db, Platform::Env const& serverEnv);
         bool IsOpen() const { return _open; }
         bool IsInstalling() const { return _installer.IsRunning(); }
         void Tick();

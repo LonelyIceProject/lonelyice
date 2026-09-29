@@ -264,6 +264,8 @@ namespace
         void OpenWizard();
         std::string ServerLocale() const;
         void SwitchStorage(std::string const& storage);
+        fs::path MySqlPluginDir() const;
+        EnvList MySqlEnv() const;
         fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
@@ -317,7 +319,10 @@ namespace
         // data
         std::vector<DataRow> _dataRows;
         Rml::String _dataSum;
-        Rml::String _storageTitle, _storageDetail, _storageAction;
+        Rml::String _storageTitle, _storageDetail, _storageAction, _storageMode;
+        // MySQL (with the MySQL plugin installed): connection fields of the data page
+        bool _mysqlAvailable = false;
+        Rml::String _mysqlHost, _mysqlPort, _mysqlUser, _mysqlPass, _mysqlPrefix, _mysqlDetail;
         // plugins
         std::unique_ptr<Packages::Manager> _packages;
         std::vector<PluginView> _plRows;
@@ -356,17 +361,19 @@ namespace
         std::error_code ec;
         if (!fs::exists(ServerConfig(), ec))
             return true;
-        for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
-            if (db.name == "world" && !db.path.empty() && !fs::exists(db.path, ec))
-                return true;
+        // On MySQL the databases are on the MySQL server, the files of the config are not used.
+        if (_settings.storage != "mysql")
+            for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
+                if (db.name == "world" && !db.path.empty() && !fs::exists(db.path, ec))
+                    return true;
         // Unpacked, an interrupted install leaves the databases but no maps; reading the client needs nothing more.
-        if (_settings.storage != "unpacked")
+        if (_settings.storage == "client")
             return false;
         fs::path maps = ConfPath("DataDir", ".") / "maps";
         return !fs::is_directory(maps, ec) || fs::is_empty(maps, ec);
     }
 
-    // Unpacking or going back to the client runs on the wizard's install page.
+    // Unpacking, going back to the client or moving to MySQL runs on the wizard's install page.
     void Launcher::SwitchStorage(std::string const& storage)
     {
         if (_server->IsRunning())
@@ -379,8 +386,61 @@ namespace
             Message(Tr("msg.client_data_needs_client"));
             return;
         }
+
+        EnvList env;
+        bool db = false;
+        if (storage == "mysql")
+        {
+            if (MySqlPluginDir().empty())
+            {
+                Message(Tr("msg.mysql_no_plugin"));
+                return;
+            }
+            _settings.mysqlHost = _mysqlHost;
+            _settings.mysqlPort = _mysqlPort;
+            _settings.mysqlUser = _mysqlUser;
+            _settings.mysqlPassword = _mysqlPass;
+            _settings.mysqlPrefix = _mysqlPrefix;
+            if (_settings.mysqlHost.empty() || _settings.mysqlUser.empty() || _settings.mysqlPrefix.empty())
+            {
+                Message(Tr("msg.mysql_incomplete"));
+                return;
+            }
+            _settings.Save();
+            env = MySqlEnv();
+            // the databases are created there, or brought up to date when they exist
+            db = true;
+        }
+        else
+        {
+            // back from MySQL to databases that were never made here
+            std::error_code ec;
+            for (DatabaseFile const& f : FindDatabases(ServerConfig(), Root()))
+                if (f.name == "world" && !f.path.empty() && !fs::exists(f.path, ec))
+                    db = true;
+        }
         ShowWindow();
-        _wizard->SwitchStorage(_client.dir, storage);
+        _wizard->SwitchStorage(_client.dir, storage, db, env);
+    }
+
+    // Folder of the installed plugin that gives the server a MySQL backend, empty when there is none.
+    fs::path Launcher::MySqlPluginDir() const
+    {
+        for (PluginManifest const& p : ReadPlugins(_exeDir / "plugins"))
+            if (std::find(p.provides.begin(), p.provides.end(), "database:mysql") != p.provides.end())
+                return p.dir;
+        return {};
+    }
+
+    EnvList Launcher::MySqlEnv() const
+    {
+        MySqlServer const server{ _settings.mysqlHost, _settings.mysqlPort, _settings.mysqlUser, _settings.mysqlPassword, _settings.mysqlPrefix };
+#ifdef _WIN32
+        char const* const program = "mysql.exe";
+#else
+        char const* const program = "mysql";
+#endif
+        return MySqlDatabaseOverrides(server, MySqlPluginDir() / "server" / Packages::Manager::Platform() / program);
     }
 
     // Client locale the server reads its data in: the one the game starts in, else the client's own setting.
@@ -439,6 +499,7 @@ namespace
             [this] { return _settings.sqlStamp; },
             [this] { return _settings.storage; },
             [this] { return ServerLocale(); },
+            [this] { return _settings.storage == "mysql" ? MySqlEnv() : EnvList(); },
             [this](InstallOptions const& o)
             {
                 _settings.dataRoot = o.root;
@@ -923,6 +984,14 @@ namespace
         c.Bind("storage_title", &_storageTitle);
         c.Bind("storage_detail", &_storageDetail);
         c.Bind("storage_action", &_storageAction);
+        c.Bind("storage_mode", &_storageMode);
+        c.Bind("mysql_available", &_mysqlAvailable);
+        c.Bind("mysql_host", &_mysqlHost);
+        c.Bind("mysql_port", &_mysqlPort);
+        c.Bind("mysql_user", &_mysqlUser);
+        c.Bind("mysql_pass", &_mysqlPass);
+        c.Bind("mysql_prefix", &_mysqlPrefix);
+        c.Bind("mysql_detail", &_mysqlDetail);
 
         auto on = [&](char const* name, std::function<void()> fn)
         {
@@ -1019,6 +1088,7 @@ namespace
         on("set_save", [this] { SaveSettings(); });
         on("data_check", [this] { RefreshData(); });
         on("storage_switch", [this] { SwitchStorage(_settings.storage == "client" ? "unpacked" : "client"); });
+        on("storage_mysql", [this] { SwitchStorage("mysql"); });
         on("pl_check", [this] { CheckPackageIndex(); });
         on("pl_update_all", [this] { PluginAction("update_all", -1); });
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
@@ -1596,7 +1666,7 @@ namespace
             DirStats const s = Scan(newest);
             _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", Platform::PathToUtf8(newest.filename()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
         }
-        else if (!NeedsSetup())
+        else if (!NeedsSetup() && _settings.storage != "mysql")
             _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
         _model.DirtyVariable("news");
     }
@@ -1715,6 +1785,16 @@ namespace
             env.emplace_back("LONELYICE_DATA", "client");
         else
             env.emplace_back(EnvName("DBC.FromDatabase"), "1");
+        if (_settings.storage == "mysql")
+        {
+            if (MySqlPluginDir().empty())
+            {
+                Message(Tr("msg.mysql_no_plugin"));
+                return;
+            }
+            EnvList const mysql = MySqlEnv();
+            env.insert(env.end(), mysql.begin(), mysql.end());
+        }
         if (!_server->Start(Platform::PathToUtf8(_exe), Platform::PathToUtf8(config), Platform::PathToUtf8(Root()), env))
             Message(Tr("msg.start_failed", _server->GetFailReason()));
         RefreshServerView();
@@ -2469,6 +2549,9 @@ namespace
         uint64_t total = 0;
         std::vector<std::string> missing;
 
+        bool const onMySql = _settings.storage == "mysql";
+        std::string const mysqlAt = _settings.mysqlHost + ":" + _settings.mysqlPort;
+
         // data.db.<name> / data.db.<name>.detail for the known databases
         for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
         {
@@ -2477,6 +2560,11 @@ namespace
             bool const known = Lang::Has(key);
             std::string title = known ? Tr(key) : db.name;
             std::string detail = known ? Tr(key + ".detail") : std::string();
+            if (onMySql)
+            {
+                _dataRows.push_back({ title, Tr("data.on_mysql", _settings.mysqlPrefix + db.name, mysqlAt), "ok", "" });
+                continue;
+            }
             if (db.path.empty())
             {
                 _dataRows.push_back({ title, Tr("data.external_db"), "ok", "" });
@@ -2527,10 +2615,30 @@ namespace
                 ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : Tr("data.none") });
         }
 
-        _storageTitle = Tr(fromClient ? "data.storage.client" : "data.storage.unpacked");
-        _storageDetail = Tr(fromClient ? "data.storage.client.detail" : "data.storage.unpacked.detail");
-        _storageAction = Tr(fromClient ? "data.storage.to_unpacked" : "data.storage.to_client");
-        for (char const* v : { "storage_title", "storage_detail", "storage_action" })
+        _storageMode = _settings.storage;
+        if (onMySql)
+        {
+            _storageTitle = Tr("data.storage.mysql", mysqlAt);
+            _storageDetail = Tr("data.storage.mysql.detail");
+            _storageAction = Tr("data.storage.to_builtin");
+        }
+        else
+        {
+            _storageTitle = Tr(fromClient ? "data.storage.client" : "data.storage.unpacked");
+            _storageDetail = Tr(fromClient ? "data.storage.client.detail" : "data.storage.unpacked.detail");
+            _storageAction = Tr(fromClient ? "data.storage.to_unpacked" : "data.storage.to_client");
+        }
+
+        // The MySQL block: offered once the MySQL plugin is installed.
+        _mysqlAvailable = !MySqlPluginDir().empty();
+        _mysqlHost = _settings.mysqlHost;
+        _mysqlPort = _settings.mysqlPort;
+        _mysqlUser = _settings.mysqlUser;
+        _mysqlPass = _settings.mysqlPassword;
+        _mysqlPrefix = _settings.mysqlPrefix;
+        _mysqlDetail = Tr("data.mysql.detail");
+        for (char const* v : { "storage_title", "storage_detail", "storage_action", "storage_mode", "mysql_available", "mysql_host",
+                 "mysql_port", "mysql_user", "mysql_pass", "mysql_prefix", "mysql_detail" })
             _model.DirtyVariable(v);
 
         if (missing.empty())
@@ -2553,7 +2661,8 @@ namespace
         if (_backupBusy)
             return;
         std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), Root());
-        if (std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
+        // On MySQL the files of the config are not the server's databases.
+        if (_settings.storage == "mysql" || std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
         {
             Message(Tr("msg.backup_files_only"));
             return;
@@ -2574,7 +2683,7 @@ namespace
 
     void Launcher::CheckScheduledBackup()
     {
-        if (_settings.backupTime.size() != 5 || _backupBusy)
+        if (_settings.backupTime.size() != 5 || _backupBusy || _settings.storage == "mysql")
             return;
         std::string today = Now("%Y-%m-%d");
         if (_settings.lastBackupDay == today || Now("%H:%M") < _settings.backupTime)

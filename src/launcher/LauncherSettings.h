@@ -28,6 +28,8 @@ namespace LonelyIce
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled backup
         std::string sqlStamp;            // setup/sql.pak the databases were last deployed from
         std::string storage = "client"; // where the server reads game data: client (its archives), unpacked, mysql
+        // storage = mysql: the server's databases on a MySQL server (the MySQL plugin), named <prefix><auth|world|...>
+        std::string mysqlHost = "127.0.0.1", mysqlPort = "3306", mysqlUser = "acore", mysqlPassword, mysqlPrefix = "acore_";
         std::string realmName;           // last known, for the settings tab while the server is down
         std::string pendingRealmName;    // applied when the server comes up
         std::string packageIndex = DefaultPackageIndex;   // plugin package indexes, ";"-separated URLs, files or folders

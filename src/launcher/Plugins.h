@@ -32,6 +32,7 @@ namespace LonelyIce
         std::vector<std::filesystem::path> addons;  // client addon folders
         std::filesystem::path patches;              // patch recipes (DBC rows, named ids, SQL), empty: none
         bool serverLibrary = false;                 // has server code (must be loaded to count as enabled)
+        std::vector<std::string> provides;          // capabilities, e.g. "database:mysql" (a database backend)
     };
 
     // A plugin's settings group; empty fields when it has none or the file is broken (error set).

@@ -370,6 +370,7 @@ bool Installer::RunDatabases()
         { "LONELYICE_CLIENT", Platform::PathToUtf8(_o.client) } };
     if (!_o.login.empty())
         env.push_back({ "LONELYICE_ACCOUNT", _o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel) });
+    env.insert(env.end(), _o.serverEnv.begin(), _o.serverEnv.end());
 
     uint64_t applied = 0;
     std::string current = Tr("install.note.create_db");
@@ -451,9 +452,11 @@ bool Installer::RunUnpack()
     }
     Log(Tr("install.log.maps", total));
 
-    // DBC files the old layout extracted next to the maps are not read any more.
+    // DBC files the old layout extracted next to the maps are not read any more; the maps are the extractor's now,
+    // not built tiles of a stamped client.
     std::error_code ec;
     fs::remove_all(data / "dbc", ec);
+    fs::remove(data / "maps" / "stamp.txt", ec);
     return RunDbcTables("fill", "unpack", 0.7f, 1.f);
 }
 
@@ -478,6 +481,7 @@ bool Installer::RunDbcTables(std::string const& action, std::string const& step,
         { "AC_PLUGINS_DIR", Platform::PathToUtf8(_o.exe.parent_path() / "plugins") },
         { "LONELYICE_CLIENT", Platform::PathToUtf8(_o.client) },
         { "LONELYICE_LOCALE", _o.locale } };
+    env.insert(env.end(), _o.serverEnv.begin(), _o.serverEnv.end());
 
     bool finished = false;
     std::string failure;
