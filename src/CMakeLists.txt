@@ -126,16 +126,17 @@ install(TARGETS lonelyice DESTINATION "${CMAKE_INSTALL_PREFIX}")
 # (taken from the build or install folder) and setup/*.pak with the core SQL and default configs.
 #   cmake --build build --config RelWithDebInfo --target lonelyice_release
 set(LONELYICE_RELEASE_DIR "${CMAKE_BINARY_DIR}/lonelyice-release" CACHE PATH "Where lonelyice_release puts the release")
+get_filename_component(OPENSSL_BIN_DIR "${OPENSSL_INCLUDE_DIR}/../bin" ABSOLUTE)
 file(CONFIGURE OUTPUT "${GEN_DIR}/copy-dlls.cmake" @ONLY CONTENT
 "foreach(dll common.dll shared.dll database.dll game.dll libcrypto-3-x64.dll libssl-3-x64.dll legacy.dll)
   set(found OFF)
-  foreach(dir \"\${BIN_DIR}\" \"@CMAKE_INSTALL_PREFIX@\")
+  foreach(dir \"\${BIN_DIR}\" \"@OPENSSL_BIN_DIR@\" \"@CMAKE_INSTALL_PREFIX@\")
     if (NOT found AND dir AND EXISTS \"\${dir}/\${dll}\")
       file(COPY \"\${dir}/\${dll}\" DESTINATION \"@LONELYICE_RELEASE_DIR@\")
       set(found ON)
     endif()
   endforeach()
-  if (NOT found)
+  if (NOT found AND NOT dll STREQUAL \"legacy.dll\")
     message(FATAL_ERROR \"\${dll} not found\")
   endif()
 endforeach()
@@ -147,7 +148,8 @@ file(CONFIGURE OUTPUT "${GEN_DIR}/copy-extras.cmake" @ONLY CONTENT
   endif()
 endforeach()
 if (EXISTS \"\${SRC}/plugins\")
-  file(COPY \"\${SRC}/plugins\" DESTINATION \"\${DST}\")
+  file(COPY \"\${SRC}/plugins\" DESTINATION \"\${DST}\"
+    PATTERN \"*.pdb\" EXCLUDE PATTERN \"*.lib\" EXCLUDE PATTERN \"*.exp\" EXCLUDE PATTERN \"*.ilk\" EXCLUDE)
 endif()
 ")
 add_custom_target(lonelyice_release

@@ -355,7 +355,7 @@ namespace
         {
             std::string stamp = Installer::SqlStamp(_exeDir / "setup");
             if (!stamp.empty() && stamp != _settings.sqlStamp)
-                AddEvent("В setup\\sql.pak новые обновления баз: «Данные» → «Мастер установки…», пункт «Базы данных».");
+                AddEvent("В setup\\sql.pak новые обновления баз: вкладка «Данные», кнопка «Мастер установки…», пункт «Базы данных».");
             if (_startHidden && _settings.trayOnClose)
                 UiBackend::HideWindow();
             if (_settings.autoStart)
