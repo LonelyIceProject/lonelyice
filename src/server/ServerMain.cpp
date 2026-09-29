@@ -770,8 +770,9 @@ int ServerMain(int argc, char** argv)
 
     SetProcessPriority("server.worldserver", sConfigMgr->GetOption<int32>(CONFIG_PROCESSOR_AFFINITY, 0), sConfigMgr->GetOption<bool>(CONFIG_HIGH_PRIORITY, true));
 
-    // Plugins register their configs and SQL folders, so they load before module configs and databases.
-    sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"));
+    // Plugins register their configs, SQL folders and database backends, so they load before module configs and
+    // databases. World and auth run in this process: plugins made for either load.
+    sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"), { "worldserver", "authserver" });
     sConfigMgr->LoadModulesConfigs();
 
     sScriptMgr->SetScriptLoader(AddScripts);

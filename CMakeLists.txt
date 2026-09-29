@@ -29,9 +29,8 @@ endif()
 # What LonelyIce needs from the core.
 set(WITH_DYNAMIC_LINKING ON CACHE BOOL "Core as shared libraries (plugins link against them)" FORCE)
 set(WITH_PLAYERBOTS_HOOKS ON CACHE BOOL "Core hooks for the playerbots plugin" FORCE)
-set(AC_PLUGIN_ABI "lonelyice-ac-1" CACHE STRING "Plugin binary interface of LonelyIce releases" FORCE)
+set(AC_PLUGIN_ABI "lonelyice-ac-2" CACHE STRING "Plugin binary interface of LonelyIce releases" FORCE)
 set(AC_PLUGIN_SOURCE_DIRS "${LONELYICE_PLUGIN_DIRS}" CACHE STRING "" FORCE)
-set(WITH_MYSQL OFF CACHE BOOL "LonelyIce runs on SQLite only; no MySQL client library" FORCE)
 set(TOOLS_BUILD "maps-only" CACHE STRING "LonelyIce embeds the map extractors" FORCE)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # Linux, macOS: the core's shared libraries next to the executables too (found through the $ORIGIN rpath).

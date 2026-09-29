@@ -58,7 +58,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
   "license": "GPL-2.0-or-later",
   "homepage": "https://github.com/LonelyIceProject/mod-lonelyice-tactics",
 
-  "core": { "abi": "lonelyice-ac-1" },
+  "core": { "abi": "lonelyice-ac-2" },
   "platforms": [ "windows-x64", "linux-x64" ],
   "depends": { "playerbots": ">=1.0.0" },
   "conflicts": [],
@@ -90,6 +90,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `depends` | Plugin id → version range (`>=1.2.0`, `^1.2`, `1.2.x`, `*`). Loaded before this plugin. |
 | `conflicts` | Plugin ids that must not be installed together with this one. |
 | `server.library` | Library base name. The loader looks in `server/<platform>/` of the running system and adds the platform's form: `name.dll` on Windows, `libname.so` on Linux, `libname.dylib` on macOS. A plugin without a build for the running platform is skipped with a message. |
+| `server.apps` | Programs that load the plugin: `worldserver`, `authserver`, `dbimport` (default `["worldserver"]`). The LonelyIce server process runs world and auth and loads plugins made for either. A database backend lists all three. |
 | `databases` | Update folders per core database (`auth`, `characters`, `world`) and databases the plugin owns (see 5). |
 | `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager. |
 | `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
@@ -117,16 +118,17 @@ prefix:
 | `id` | The backend's connection string scheme. Every database is passed as `<id>:host;port;user;password;<prefix><name>` (`auth`, `characters`, `world`, `playerbots`). |
 | `name` | Localized name of the storage. |
 | `port` | Default port. |
-| `config` | Optional config values the server needs with this storage, passed as `AC_*` overrides. `{bin}` is the plugin's `server/<platform>` folder, `{exe}` is `.exe` on Windows and empty elsewhere (e.g. `"MySQLExecutable": "{bin}/mysql{exe}"` for a backend registered with `externalScripts`). |
+| `config` | Optional config values the server needs with this storage, passed as `AC_*` overrides. `{bin}` is the plugin's `server/<platform>` folder, `{exe}` is `.exe` on Windows and empty elsewhere. |
 
 The launcher checks a storage by running the core against it (`LonelyIce --server --storage-check`), so the
-backend has to be registered while the scripts load (see 3).
+backend has to be registered when the library loads (`AC_PLUGIN_ON_LOAD`, see 3).
 
 ## 3. Server library
 
 The library links against the core shared libraries of the same ABI (`common`, `shared`, `database`,
-`game`) and against the libraries of the plugins it depends on. It exports two C functions; the SDK header
-generates them, using `__declspec(dllexport)` on MSVC and default visibility on GCC and Clang:
+`game`; only up to `shared` for a plugin that also loads in authserver and dbimport) and against the libraries
+of the plugins it depends on. It exports C functions; the SDK header generates them, using
+`__declspec(dllexport)` on MSVC and default visibility on GCC and Clang:
 
 ```cpp
 #include "PluginApi.h"
@@ -141,10 +143,17 @@ expands to
 ```cpp
 extern "C" char const* AcorePlugin_Abi()        { return AC_PLUGIN_ABI; }
 extern "C" char const* AcorePlugin_Platform()   { return AC_PLUGIN_PLATFORM; }
+extern "C" void        AcorePlugin_OnLoad()     { }
 extern "C" void        AcorePlugin_AddScripts() { AddTacticsScripts(); }
 ```
 
-Load order at server start (worldserver and the LonelyIce server process run the same code):
+`AC_PLUGIN_ON_LOAD(fn)` fills `AcorePlugin_OnLoad` instead, run right after the library loads in every
+program that loads it (a database backend calls `RegisterBackendDriver` there), and
+`AC_PLUGIN_ENTRY(onLoad, addScripts)` fills both. Built with the core configured without shared libraries,
+the same sources are compiled into the programs of `server.apps` (the core's `doc/Plugins.md`).
+
+Load order at server start (worldserver, authserver, dbimport and the LonelyIce server process run the same
+code; each takes the plugins made for it, `server.apps`):
 
 1. Read all manifests, drop the ones with an unknown `format`, check `conflicts`, resolve `depends` into a
    load order (topological, by id for ties). A plugin with a missing or out-of-range dependency is skipped
@@ -154,7 +163,7 @@ Load order at server start (worldserver and the LonelyIce server process run the
    that depend on it), compare `AcorePlugin_Abi()` and `AcorePlugin_Platform()` with the core's; a
    mismatch skips the plugin.
 3. Register the plugin's config (`<config dir>/modules/<conf name>`, falling back to the `.dist` in the
-   plugin folder), its SQL folders (5) and its id in the enabled-modules list.
+   plugin folder), its SQL folders (5) and its id in the enabled-modules list, then call its load function.
 4. After the static modules' scripts, call each plugin's scripts function in load order.
 
 Plugins are loaded once per process; there is no hot reload.
@@ -164,7 +173,7 @@ Plugins are loaded once per process; there is no hot reload.
 C++ plugins share classes, allocators and the C++ runtime with the core, so a library only works with the
 core build it was compiled against. Compatibility is the pair of
 
-* `AC_PLUGIN_ABI`: a string set when the core is configured (`-DAC_PLUGIN_ABI=lonelyice-ac-1` for LonelyIce releases), fixed per fork release, for example `lonelyice-ac-1`, bumped whenever a
+* `AC_PLUGIN_ABI`: a string set when the core is configured (`-DAC_PLUGIN_ABI=lonelyice-ac-2` for LonelyIce releases), fixed per fork release, for example `lonelyice-ac-2`, bumped whenever a
   header change can break binaries;
 * `AC_PLUGIN_PLATFORM`: operating system, architecture and C++ runtime family, for example `windows-x64`
   (MSVC 14.x, dynamic release CRT), `linux-x64` (GCC/Clang with libstdc++), `macos-arm64` (Apple Clang, libc++).
@@ -316,7 +325,7 @@ A catalog that cannot be read is skipped; the others still work. Package and ico
   "name": { "en": "My catalog", "ru": "Мой каталог" },
   "packages": [
     { "id": "lonelyice.tactics", "version": "1.3.0", "name": { "en": "Bot tactics", "ru": "Тактики ботов" },
-      "core": "lonelyice-ac-1", "platforms": [ "windows-x64", "linux-x64" ],
+      "core": "lonelyice-ac-2", "platforms": [ "windows-x64", "linux-x64" ],
       "depends": { "playerbots": ">=1.0.0" },
       "icon": "lonelyice.tactics-1.3.0.png",
       "url": "lonelyice.tactics-1.3.0.zip", "sha256": "…", "size": 1234567 }
