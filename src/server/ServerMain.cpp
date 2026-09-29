@@ -908,6 +908,13 @@ int ServerMain(int argc, char** argv)
         return ok ? 0 : 1;
     }
 
+    if (std::string error; !LonelyIce::ClientData::OpenTerrain(error))
+    {
+        LOG_ERROR("server.loading", "Client data: {}", error);
+        Control("state failed client");
+        return 1;
+    }
+
     LoginDatabase.DirectExecute("UPDATE realmlist SET flag = (flag & ~{}) | {} WHERE id = '{}'", REALM_FLAG_OFFLINE, REALM_FLAG_VERSION_MISMATCH, realm.Id.Realm);
 
     if (!LoadRealmInfo(*ioContext))

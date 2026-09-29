@@ -16,6 +16,11 @@ namespace LonelyIce::ClientData
     bool Enable(std::filesystem::path const& clientDir, std::string const& locale, std::filesystem::path const& dataDir,
         std::string& error);
 
+    // Opens the archives the terrain tiles are built from; nothing to do when not enabled. Call after the plugin
+    // patches: the map extractor keeps every patch-<locale>-N.MPQ open, LonelyIce's own client patch among them,
+    // which could then not be rebuilt.
+    bool OpenTerrain(std::string& error);
+
     // Locale the data is read in, empty when not enabled.
     std::string const& Locale();
 

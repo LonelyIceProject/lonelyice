@@ -15,6 +15,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
+    fs::path _clientDir;
     std::string _locale;
 
     // "maps/0001234.map": map 000, grid 12, 34.
@@ -178,13 +179,19 @@ namespace LonelyIce::ClientData
             return false;
         }
 
-        if (!DbcTables::Enable(archives, error) || !AdtMaps::Open(clientDir, l, error))
+        if (!DbcTables::Enable(archives, error))
             return false;
 
         auto tiles = std::make_unique<TileCache>(dataDir / "maps", Stamp(clientDir, l));
         DataFiles::SetSource(std::make_shared<ClientFiles>(archives, std::move(tiles)));
+        _clientDir = clientDir;
         _locale = l;
         return true;
+    }
+
+    bool OpenTerrain(std::string& error)
+    {
+        return _locale.empty() || AdtMaps::Open(_clientDir, _locale, error);
     }
 
     std::string const& Locale()
