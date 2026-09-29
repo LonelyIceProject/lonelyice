@@ -182,7 +182,7 @@
                 </div>
             </div>
             <div id="panel" class="sub">
-                <div class="pane" data-if="set_group != 'about'">
+                <div class="pane" data-if="set_group != 'about' && set_group != 'storage'">
                     <div class="toolbar" data-if="set_group == 'rates'">
                         <div class="f-inline">@{set.preset}</div>
                         <div class="pre" data-class-active="set_preset == 1" data-event-click="set_preset_pick(1)">@{set.preset.x1}</div>
@@ -213,6 +213,39 @@
                         <div class="note grow">{{set_status}}</div>
                         <span class="ap now">@{apply.now}</span><span class="ap rel">@{apply.reload}</span><span class="ap rst">@{apply.restart}</span>
                         <div id="btn-set-save" class="btn small" data-class-disabled="!set_can_save" data-event-click="set_save">{{set_save_label}}</div>
+                    </div>
+                </div>
+                <div class="pane" data-if="set_group == 'storage'">
+                    <div class="group-hint">@{storage.hint}</div>
+                    <div class="scroll grow">
+                        <div class="ribbon">@{storage.location}</div>
+                        <div class="opt" data-for="l : st_locs" data-attr-id="'st-loc-' + l.id" data-class-active="st_loc == l.id" data-event-click="st_pick(l.id)">
+                            <div class="radio"></div>
+                            <div class="grow"><div class="o-title">{{l.title}}</div><div class="o-desc">{{l.detail}}</div></div>
+                            <div class="o-size" data-if="st_current == l.id">@{storage.current}</div>
+                        </div>
+                        <div class="remote form-row" data-if="st_remote">
+                            <div class="f"><div class="f-label">@{storage.host}</div><input type="text" id="st-host" class="field" data-value="st_host"/></div>
+                            <div class="f short"><div class="f-label">@{storage.port}</div><input type="text" id="st-port" class="field" data-value="st_port"/></div>
+                            <div class="f"><div class="f-label">@{storage.user}</div><input type="text" id="st-user" class="field" data-value="st_user"/></div>
+                            <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="st-pass" class="field" data-value="st_pass"/></div>
+                            <div class="f"><div class="f-label">@{storage.prefix}</div><input type="text" id="st-prefix" class="field" data-value="st_prefix"/></div>
+                        </div>
+                        <div class="ribbon">@{storage.game_data}</div>
+                        <div class="opt comp">
+                            <input type="checkbox" id="st-cache" class="check" data-if="!st_remote" data-checked="st_cache"/>
+                            <div class="ic ok" data-if="st_remote">+</div>
+                            <div class="grow"><div class="o-title">@{storage.cache}</div><div class="o-desc">{{st_cache_desc}}</div></div>
+                        </div>
+                        <div class="stcheck" data-if="st_note != ''" data-class-ok="st_state == 'ok'" data-class-warn="st_state == 'warn'" data-class-bad="st_state == 'bad'" data-class-run="st_state == 'run'">
+                            <div class="grow">{{st_note}}</div>
+                            <div id="st-check" class="btn small" data-if="st_state != 'run'" data-event-click="st_check">@{storage.check}</div>
+                        </div>
+                    </div>
+                    <div class="statusbar">
+                        <div class="note grow">{{st_status}}</div>
+                        <div id="btn-st-revert" class="btn small" data-class-disabled="!st_changed || st_busy" data-event-click="st_revert">@{storage.revert}</div>
+                        <div id="btn-st-apply" class="btn small" data-class-disabled="!st_changed || st_busy" data-event-click="st_apply">@{storage.apply}</div>
                     </div>
                 </div>
                 <div class="pane" data-if="set_group == 'about'">
@@ -253,6 +286,7 @@
                                 <div class="cc-desc" data-if="p.desc != ''">{{p.desc}}</div>
                                 <div class="cc-preview">{{p.note}}</div>
                             </div>
+                            <div class="btn small go gear" data-attr-id="'pl-settings-' + p.id" data-if="p.settings != ''" data-attr-title="'@{pl.settings}'" data-event-click="open_page('settings', p.settings)"></div>
                             <div class="btn small go" data-attr-id="'pl-install-' + p.id" data-if="!p.installed || p.update != ''" data-class-disabled="pl_busy" data-event-click="pl_install(pi)">{{p.installed ? '@{pl.update}' : '@{pl.install}'}}</div>
                             <div class="btn small go" data-attr-id="'pl-toggle-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_toggle(pi)">{{p.enabled ? '@{ui.disable}' : '@{ui.enable}'}}</div>
                             <div class="btn small go danger" data-attr-id="'pl-remove-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_remove(pi)">@{ui.remove}</div>
@@ -310,19 +344,7 @@
                     <div class="ribbon">@{svc.data} <span class="ribbon-note">{{data_sum}}</span></div>
                     <div class="drow storage">
                         <div class="d-main"><div class="d-title">{{storage_title}}</div><div class="d-detail">{{storage_detail}}</div></div>
-                        <div id="btn-storage" class="btn small" data-event-click="storage_switch">{{storage_action}}</div>
-                    </div>
-                    <div class="mysql" data-if="mysql_available && storage_mode != 'mysql'">
-                        <div class="d-title">@{data.mysql.title}</div>
-                        <div class="d-detail">{{mysql_detail}}</div>
-                        <div class="form-row">
-                            <div class="f"><div class="f-label">@{data.mysql.host}</div><input type="text" id="mysql-host" class="field" data-value="mysql_host"/></div>
-                            <div class="f short"><div class="f-label">@{data.mysql.port}</div><input type="text" id="mysql-port" class="field" data-value="mysql_port"/></div>
-                            <div class="f"><div class="f-label">@{data.mysql.user}</div><input type="text" id="mysql-user" class="field" data-value="mysql_user"/></div>
-                            <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="mysql-pass" class="field" data-value="mysql_pass"/></div>
-                            <div class="f"><div class="f-label">@{data.mysql.prefix}</div><input type="text" id="mysql-prefix" class="field" data-value="mysql_prefix"/></div>
-                            <div id="btn-mysql" class="btn small" data-event-click="storage_mysql">@{data.mysql.use}</div>
-                        </div>
+                        <div id="btn-storage" class="btn small" data-event-click="open_page('settings', 'storage')">@{data.storage.change}</div>
                     </div>
                     <div class="scroll grow">
                         <div class="drow" data-for="d : data_rows">
@@ -414,13 +436,44 @@
                     <div class="row"><div id="wz-browse-place" class="btn small" data-event-click="wz_browse_place">@{wz.place.browse}</div></div>
                     <div class="note">@{wz.place.note}</div>
                 </div>
-                <!-- 2 components -->
+                <!-- 2 data: where it is kept, then what gets installed -->
                 <div data-if="wz_step == 2">
-                    <div class="wh">@{wz.comps}</div>
-                    <div class="opt comp" data-for="c : wz_comps" data-class-locked="c.locked">
-                        <input type="checkbox" class="check" data-attr-id="'wz-comp-' + c.id" data-checked="c.on"/>
-                        <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
-                        <div class="o-size">{{c.size}}</div>
+                    <div class="wh">@{wz.storage}</div>
+                    <div class="opt" data-for="l : wzs_locs" data-attr-id="'wz-loc-' + l.id" data-class-active="wzs_loc == l.id" data-event-click="wzs_pick(l.id)">
+                        <div class="radio"></div>
+                        <div class="grow"><div class="o-title">{{l.title}}</div><div class="o-desc">{{l.detail}}</div></div>
+                    </div>
+                    <div class="remote form-row" data-if="wzs_remote">
+                        <div class="f"><div class="f-label">@{storage.host}</div><input type="text" id="wzs-host" class="field" data-value="wzs_host"/></div>
+                        <div class="f short"><div class="f-label">@{storage.port}</div><input type="text" id="wzs-port" class="field" data-value="wzs_port"/></div>
+                        <div class="f"><div class="f-label">@{storage.user}</div><input type="text" id="wzs-user" class="field" data-value="wzs_user"/></div>
+                        <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="wzs-pass" class="field" data-value="wzs_pass"/></div>
+                        <div class="f"><div class="f-label">@{storage.prefix}</div><input type="text" id="wzs-prefix" class="field" data-value="wzs_prefix"/></div>
+                    </div>
+                    <div class="opt comp">
+                        <input type="checkbox" id="wzs-cache" class="check" data-if="!wzs_remote" data-checked="wzs_cache"/>
+                        <div class="ic ok" data-if="wzs_remote">+</div>
+                        <div class="grow"><div class="o-title">@{storage.cache}</div><div class="o-desc">{{wzs_cache_desc}}</div></div>
+                    </div>
+                    <div class="stcheck" data-if="wzs_note != ''" data-class-ok="wzs_state == 'ok'" data-class-warn="wzs_state == 'warn'" data-class-bad="wzs_state == 'bad'" data-class-run="wzs_state == 'run'">
+                        <div class="grow">{{wzs_note}}</div>
+                        <div id="wzs-check" class="btn small" data-if="wzs_state != 'run'" data-event-click="wzs_check">@{storage.check}</div>
+                    </div>
+                    <div class="wh2">@{wz.comps.required}</div>
+                    <div data-for="c : wz_comps">
+                        <div class="opt comp" data-if="c.required" data-attr-id="'wz-comp-' + c.id" data-class-locked="c.locked" data-class-have="!c.on">
+                            <div class="ic" data-class-ok="c.on">{{c.on ? '+' : '•'}}</div>
+                            <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
+                            <div class="o-size" data-if="c.on">{{c.size}}</div>
+                        </div>
+                    </div>
+                    <div class="wh2">@{wz.comps.optional}</div>
+                    <div data-for="c : wz_comps">
+                        <div class="opt comp" data-if="!c.required">
+                            <input type="checkbox" class="check" data-attr-id="'wz-comp-' + c.id" data-checked="c.on"/>
+                            <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
+                            <div class="o-size">{{c.size}}</div>
+                        </div>
                     </div>
                     <div class="form-row wz-threads">
                         <div class="f-inline">@{wz.threads}</div>
@@ -478,12 +531,30 @@
                     <div class="check" data-for="c : wz_done">
                         <div class="ic ok">+</div><div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
                     </div>
-                    <div class="pad">@{wz.done.note}</div>
+                    <div class="pad" data-if="!wz_switching">@{wz.done.note}</div>
+                </div>
+                <!-- 7 moving to another storage -->
+                <div data-if="wz_step == 7">
+                    <div class="wh">@{wz.transfer}</div>
+                    <div class="pad">{{wz_transfer_title}}</div>
+                    <div class="check" data-for="c : wz_transfer">
+                        <div class="ic ok">+</div><div class="grow">{{c.text}}</div><div class="cdetail">{{c.detail}}</div>
+                    </div>
+                    <div data-if="wz_need_account">
+                        <div class="wh2">@{wz.transfer.account}</div>
+                        <div class="form-row">
+                            <div class="f"><div class="f-label">@{acc.login}</div><input type="text" id="wzt-login" class="field" data-value="wz_login"/></div>
+                            <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="wzt-pass" class="field" data-value="wz_pass"/></div>
+                            <div class="f"><div class="f-label">@{wz.rights}</div>
+                                <select id="wzt-gm" class="field" data-value="wz_gm"><option value="0">@{acc.player}</option><option value="3">@{wz.rights.admin}</option></select></div>
+                        </div>
+                    </div>
+                    <div class="note" data-if="wz_transfer_note != ''">{{wz_transfer_note}}</div>
                 </div>
             </div>
             <div class="werr" data-if="wz_error != ''">{{wz_error}}</div>
             <div class="wfoot">
-                <div id="wz-cancel" class="btn small" data-event-click="wz_cancel">{{wz_cancel_label}}</div>
+                <div id="wz-cancel" class="btn small" data-if="!(wz_switching && wz_step == 6)" data-event-click="wz_cancel">{{wz_cancel_label}}</div>
                 <div class="spacer"></div>
                 <div id="wz-back" class="btn small" data-if="wz_back_visible" data-event-click="wz_back">@{ui.back_step}</div>
                 <div id="wz-next" class="btn next" data-class-disabled="!wz_next_ok" data-event-click="wz_next">{{wz_next_label}}</div>

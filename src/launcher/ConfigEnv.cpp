@@ -81,13 +81,44 @@ LonelyIce::EnvList LonelyIce::ModuleConfigOverrides(fs::path const& configFile, 
     return env;
 }
 
-LonelyIce::EnvList LonelyIce::MySqlDatabaseOverrides(MySqlServer const& s, fs::path const& mysqlProgram)
+namespace
+{
+    constexpr std::pair<char const*, char const*> Databases[] = { { "LoginDatabaseInfo", "auth" }, { "CharacterDatabaseInfo", "characters" },
+        { "WorldDatabaseInfo", "world" }, { "PlayerbotsDatabaseInfo", "playerbots" } };
+
+    void Replace(std::string& s, std::string const& from, std::string const& to)
+    {
+        for (std::size_t p = s.find(from); p != std::string::npos; p = s.find(from, p + to.size()))
+            s.replace(p, from.size(), to);
+    }
+}
+
+LonelyIce::EnvList LonelyIce::RemoteDatabaseOverrides(StorageProvider const& provider, RemoteDatabase const& db, fs::path const& binDir)
 {
     EnvList env;
-    // "host;port;user;password;database", the core's MySQL connection string
-    for (auto [key, name] : { std::pair{ "LoginDatabaseInfo", "auth" }, { "CharacterDatabaseInfo", "characters" },
-             { "WorldDatabaseInfo", "world" }, { "PlayerbotsDatabaseInfo", "playerbots" } })
-        env.emplace_back(EnvName(key), "mysql:" + s.host + ";" + s.port + ";" + s.user + ";" + s.password + ";" + s.prefix + name);
-    env.emplace_back(EnvName("MySQLExecutable"), Platform::PathToUtf8(mysqlProgram));
+    std::string const port = db.port.empty() ? provider.port : db.port;
+    // "<scheme>:host;port;user;password;database", the core's connection string
+    for (auto [key, name] : Databases)
+        env.emplace_back(EnvName(key), provider.id + ":" + db.host + ";" + port + ";" + db.user + ";" + db.password + ";" + db.prefix + name);
+    for (auto const& [key, value] : provider.config)
+    {
+        std::string v = value;
+        Replace(v, "{bin}", Platform::PathToUtf8(binDir));
+#ifdef _WIN32
+        Replace(v, "{exe}", ".exe");
+#else
+        Replace(v, "{exe}", "");
+#endif
+        env.emplace_back(EnvName(key), v);
+    }
+    return env;
+}
+
+LonelyIce::EnvList LonelyIce::LocalDatabaseOverrides(fs::path const& root)
+{
+    EnvList env;
+    auto file = [&](char const* name) { return Platform::PathToUtf8(root / "db" / (std::string(name) + ".sqlite")); };
+    for (auto [key, name] : Databases)
+        env.emplace_back(EnvName(key), "sqlite:" + file(name) + (std::string_view(name) == "playerbots" ? ";attach=characters=" + file("characters") : ""));
     return env;
 }

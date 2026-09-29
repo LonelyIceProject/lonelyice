@@ -14,6 +14,7 @@
 #include "DatabaseLoader.h"
 #include "ClientArchives.h"
 #include "ClientData.h"
+#include "DBCStores.h"
 #include "DbcUnpack.h"
 #include "GameTime.h"
 #include "GitRevision.h"
@@ -280,6 +281,60 @@ namespace
         else
             LOG_INFO("server.loading", "DBC files of the {} client unpacked into the world database", locale);
         return ok;
+    }
+
+    // --storage-check: whether the databases the config names can be opened and hold the server's tables, and how many
+    // DBC files are unpacked into the world database. Reports "@@LI check db <name> ok|missing|empty|error <message>",
+    // "@@LI check dbc <present> <total>" (only when the world database opens) and "@@LI check done".
+    enum class CheckResult { Filled, Missing, Unreachable };
+
+    template <class T>
+    CheckResult CheckDatabase(DatabaseWorkerPool<T>& pool, std::string const& name, std::string const& key, std::string const& probe)
+    {
+        std::string const info = sConfigMgr->GetOption<std::string>(key, "");
+        if (info.empty())
+        {
+            Control(Acore::StringFormat("check db {} error {} is not set", name, key));
+            return CheckResult::Unreachable;
+        }
+        pool.SetConnectionInfo(info, 1, 1);
+        DbError const error = pool.Open();
+        if (error.IsError())
+        {
+            pool.Close();
+            if (error.cls == DbErrorClass::DatabaseMissing)
+            {
+                Control(Acore::StringFormat("check db {} missing", name));
+                return CheckResult::Missing;
+            }
+            Control(Acore::StringFormat("check db {} error {}", name, error.message.empty() ? std::to_string(error.native) : error.message));
+            return CheckResult::Unreachable;
+        }
+        bool const filled = pool.Query("SELECT COUNT(*) FROM " + probe) != nullptr;
+        Control(Acore::StringFormat("check db {} {}", name, filled ? "ok" : "empty"));
+        return filled ? CheckResult::Filled : CheckResult::Missing;
+    }
+
+    void CheckStorage()
+    {
+        DatabaseLibrary::Init();
+        // a server that does not answer is not asked again for the other databases
+        if (CheckDatabase(LoginDatabase, "auth", "LoginDatabaseInfo", "realmlist") != CheckResult::Unreachable
+            && CheckDatabase(CharacterDatabase, "characters", "CharacterDatabaseInfo", "characters") != CheckResult::Unreachable
+            && CheckDatabase(WorldDatabase, "world", "WorldDatabaseInfo", "version") == CheckResult::Filled)
+        {
+            // unpacking fills the tables in this order, so the first missing one ends the count
+            std::vector<DBCFileInfo> const& files = GetDBCFiles();
+            std::size_t present = 0;
+            while (present < files.size() && WorldDatabase.Query("SELECT COUNT(*) FROM `" + GetDBCTableName(files[present].file) + "`"))
+                ++present;
+            Control(Acore::StringFormat("check dbc {} {}", present, files.size()));
+        }
+        CharacterDatabase.Close();
+        WorldDatabase.Close();
+        LoginDatabase.Close();
+        DatabaseLibrary::End();
+        Control("check done");
     }
 
     // Windows: raw ReadFile instead of std::cin, so the thread can be cancelled with CancelSynchronousIo without holding
@@ -629,7 +684,7 @@ int ServerMain(int argc, char** argv)
 
     // Nobody can answer "create the database?" on this process's stdin.
     SetEnvironment("AC_DISABLE_INTERACTIVE", "1");
-    bool deploy = false, applyOnly = false;
+    bool deploy = false, applyOnly = false, checkStorage = false;
     std::string dbcAction;
     for (int i = 1; i < argc; ++i)
     {
@@ -637,6 +692,8 @@ int ServerMain(int argc, char** argv)
             deploy = true;
         if (std::string_view(argv[i]) == "--apply")
             applyOnly = true;
+        if (std::string_view(argv[i]) == "--storage-check")
+            checkStorage = true;
         if (std::string_view(argv[i]) == "--dbc" && i + 1 < argc)
             dbcAction = argv[i + 1];
     }
@@ -728,6 +785,13 @@ int ServerMain(int argc, char** argv)
 
     LOG_INFO("server.loading", "Initializing Scripts...");
     sScriptMgr->Initialize();
+
+    // the plugins' database backends are registered now
+    if (checkStorage)
+    {
+        CheckStorage();
+        return 0;
+    }
 
     if (!UseClientData())
     {

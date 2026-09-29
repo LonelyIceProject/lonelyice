@@ -123,6 +123,20 @@ std::vector<LonelyIce::PluginManifest> LonelyIce::ReadPlugins(fs::path const& pl
                 for (auto const& p : root["provides"].as_seq())
                     if (p.is_string())
                         m.provides.push_back(p.get_value<std::string>());
+            if (root.contains("storage") && root["storage"].is_mapping())
+            {
+                fkyaml::node const& s = root["storage"];
+                StorageProvider p;
+                p.id = Str(s, "id");
+                p.name = s.contains("name") ? Localized(s["name"]) : m.name;
+                p.port = s.contains("port") ? Scalar(s["port"]).value_or("") : std::string();
+                if (s.contains("config") && s["config"].is_mapping())
+                    for (auto const& [k, v] : s["config"].as_map())
+                        if (k.is_string() && v.is_string())
+                            p.config.emplace_back(k.get_value<std::string>(), v.get_value<std::string>());
+                if (!p.id.empty() && p.id != "local")
+                    m.storage = std::move(p);
+            }
             out.push_back(std::move(m));
         }
         catch (std::exception const&)

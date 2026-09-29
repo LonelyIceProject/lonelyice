@@ -9,7 +9,9 @@
 #include "LauncherSettings.h"
 #include "ServerProcess.h"
 #include "SettingsModel.h"
+#include "StorageForm.h"
 #include "ClientPatch.h"
+#include "ConfigEnv.h"
 #include "PackageManager.h"
 #include "TextUtil.h"
 #include "Tray.h"
@@ -66,6 +68,7 @@ namespace
     {
         Rml::String id, name, version, desc, note, update;   // update: newer version in the index
         Rml::String icon, letter;                            // icon: absolute path of a PNG; letter: shown without one
+        Rml::String settings;                                // settings group the gear opens, empty: none
         bool installed = false, enabled = false;
     };
     struct RepoView
@@ -263,9 +266,14 @@ namespace
         bool NeedsSetup() const;
         void OpenWizard();
         std::string ServerLocale() const;
-        void SwitchStorage(std::string const& storage);
-        fs::path MySqlPluginDir() const;
-        EnvList MySqlEnv() const;
+        StorageChoice CurrentStorage() const;
+        std::vector<StorageProviderInfo> StorageProviders() const;
+        std::optional<StorageProviderInfo> FindProvider(std::string const& location) const;
+        EnvList RemoteEnv(StorageChoice const& choice) const;
+        void LoadStorageForm();
+        void ApplyStorage();
+        void FinishApplyStorage(StorageState const& state);
+        void StorageTick();
         fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
@@ -319,10 +327,11 @@ namespace
         // data
         std::vector<DataRow> _dataRows;
         Rml::String _dataSum;
-        Rml::String _storageTitle, _storageDetail, _storageAction, _storageMode;
-        // MySQL (with the MySQL plugin installed): connection fields of the data page
-        bool _mysqlAvailable = false;
-        Rml::String _mysqlHost, _mysqlPort, _mysqlUser, _mysqlPass, _mysqlPrefix, _mysqlDetail;
+        Rml::String _storageTitle, _storageDetail;
+        // settings > storage: the form (st_*), what it was loaded from, and an apply waiting for its check
+        std::unique_ptr<StorageForm> _storageForm;
+        Rml::String _stCurrent, _stStatus;
+        bool _stChanged = false, _stBusy = false, _stApplying = false;
         // plugins
         std::unique_ptr<Packages::Manager> _packages;
         std::vector<PluginView> _plRows;
@@ -361,86 +370,146 @@ namespace
         std::error_code ec;
         if (!fs::exists(ServerConfig(), ec))
             return true;
-        // On MySQL the databases are on the MySQL server, the files of the config are not used.
-        if (_settings.storage != "mysql")
+        // On a database server the files of the config are not used.
+        if (_settings.location == "local")
             for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
                 if (db.name == "world" && !db.path.empty() && !fs::exists(db.path, ec))
                     return true;
-        // Unpacked, an interrupted install leaves the databases but no maps; reading the client needs nothing more.
-        if (_settings.storage == "client")
+        // With the cache, an interrupted install leaves the databases but no maps; reading the client needs nothing more.
+        if (_settings.ReadsClient())
             return false;
         fs::path maps = ConfPath("DataDir", ".") / "maps";
         return !fs::is_directory(maps, ec) || fs::is_empty(maps, ec);
     }
 
-    // Unpacking, going back to the client or moving to MySQL runs on the wizard's install page.
-    void Launcher::SwitchStorage(std::string const& storage)
+    StorageChoice Launcher::CurrentStorage() const
     {
+        return { _settings.location, _settings.dataCache, _settings.remote };
+    }
+
+    // The storages of the installed (enabled) plugins.
+    std::vector<StorageProviderInfo> Launcher::StorageProviders() const
+    {
+        std::vector<StorageProviderInfo> list;
+        for (PluginManifest const& p : ReadPlugins(_exeDir / "plugins"))
+            if (p.storage)
+                list.push_back({ *p.storage, p.dir });
+        return list;
+    }
+
+    std::optional<StorageProviderInfo> Launcher::FindProvider(std::string const& location) const
+    {
+        for (StorageProviderInfo const& p : StorageProviders())
+            if (p.provider.id == location)
+                return p;
+        return std::nullopt;
+    }
+
+    // The server's databases on a plugin's database server; empty for the built-in files or a plugin that is gone.
+    EnvList Launcher::RemoteEnv(StorageChoice const& choice) const
+    {
+        std::optional<StorageProviderInfo> const p = choice.Remote() ? FindProvider(choice.location) : std::nullopt;
+        if (!p)
+            return {};
+        return RemoteDatabaseOverrides(p->provider, choice.remote, p->dir / "server" / Packages::Manager::Platform());
+    }
+
+    // settings > storage: the form shows the storage in use.
+    void Launcher::LoadStorageForm()
+    {
+        _storageForm->Load(CurrentStorage());
+        _stCurrent = _settings.location;
+        _stChanged = false;
+        _stApplying = false;
+        _stStatus = Tr("storage.status.current", _storageForm->LocationTitle(_settings.location),
+            Tr(_settings.dataCache ? "storage.status.cache" : "storage.status.client"));
+        for (char const* v : { "st_current", "st_changed", "st_status", "st_busy" })
+            _model.DirtyVariable(v);
+    }
+
+    // Moves the server to the storage of the form: its check says what is missing there. Nothing missing, the
+    // settings change at once; otherwise the wizard shows what will be done and does it.
+    void Launcher::ApplyStorage()
+    {
+        if (_stBusy || !_stChanged)
+            return;
         if (_server->IsRunning())
         {
             Message(Tr("msg.storage_server_running"));
             return;
         }
-        if (!_client.valid)
+        StorageChoice const to = _storageForm->Choice();
+        if (!to.cache && !_client.valid)
         {
             Message(Tr("msg.client_data_needs_client"));
             return;
         }
-
-        EnvList env;
-        bool db = false;
-        if (storage == "mysql")
+        if (to.Remote() && (to.remote.host.empty() || to.remote.user.empty() || to.remote.prefix.empty()))
         {
-            if (MySqlPluginDir().empty())
-            {
-                Message(Tr("msg.mysql_no_plugin"));
-                return;
-            }
-            _settings.mysqlHost = _mysqlHost;
-            _settings.mysqlPort = _mysqlPort;
-            _settings.mysqlUser = _mysqlUser;
-            _settings.mysqlPassword = _mysqlPass;
-            _settings.mysqlPrefix = _mysqlPrefix;
-            if (_settings.mysqlHost.empty() || _settings.mysqlUser.empty() || _settings.mysqlPrefix.empty())
-            {
-                Message(Tr("msg.mysql_incomplete"));
-                return;
-            }
+            Message(Tr("msg.remote_incomplete"));
+            return;
+        }
+        // checked again: the place may have changed since the form looked
+        _stApplying = true;
+        _storageForm->Check();
+        _stStatus = Tr("storage.status.checking");
+        _model.DirtyVariable("st_status");
+    }
+
+    void Launcher::FinishApplyStorage(StorageState const& state)
+    {
+        _stApplying = false;
+        StorageChoice const to = _storageForm->Choice();
+        if (!state.reached)
+        {
+            _stStatus = Tr("storage.status.unreachable");
+            _model.DirtyVariable("st_status");
+            Message(state.error);
+            return;
+        }
+        StoragePlan const plan = PlanStorage(state, to.cache, ConfPath("DataDir", "."));
+        if (plan.Empty())
+        {
+            _settings.location = to.location;
+            _settings.dataCache = to.cache;
+            if (to.Remote())
+                _settings.remote = to.remote;
             _settings.Save();
-            env = MySqlEnv();
-            // the databases are created there, or brought up to date when they exist
-            db = true;
+            AddEvent(Tr("event.storage_switched", _storageForm->LocationTitle(to.location)));
+            Message(Tr("msg.storage_switched"));
+            LoadStorageForm();
+            RefreshData();
+            RefreshNews();
+            return;
         }
-        else
+        if (!_client.valid && (plan.db || plan.unpack))
         {
-            // back from MySQL to databases that were never made here
-            std::error_code ec;
-            for (DatabaseFile const& f : FindDatabases(ServerConfig(), Root()))
-                if (f.name == "world" && !f.path.empty() && !fs::exists(f.path, ec))
-                    db = true;
+            Message(Tr("msg.client_data_needs_client"));
+            return;
         }
+        _stStatus = Tr("storage.status.wizard");
+        _model.DirtyVariable("st_status");
         ShowWindow();
-        _wizard->SwitchStorage(_client.dir, storage, db, env);
+        _wizard->SwitchStorage(_client.dir, to, _storageForm->LocationTitle(to.location), plan, !state.databases, _settings.realmName);
     }
 
-    // Folder of the installed plugin that gives the server a MySQL backend, empty when there is none.
-    fs::path Launcher::MySqlPluginDir() const
+    // Follows the storage form: its check, what differs from the storage in use, an apply that waits for the check.
+    void Launcher::StorageTick()
     {
-        for (PluginManifest const& p : ReadPlugins(_exeDir / "plugins"))
-            if (std::find(p.provides.begin(), p.provides.end(), "database:mysql") != p.provides.end())
-                return p.dir;
-        return {};
-    }
-
-    EnvList Launcher::MySqlEnv() const
-    {
-        MySqlServer const server{ _settings.mysqlHost, _settings.mysqlPort, _settings.mysqlUser, _settings.mysqlPassword, _settings.mysqlPrefix };
-#ifdef _WIN32
-        char const* const program = "mysql.exe";
-#else
-        char const* const program = "mysql";
-#endif
-        return MySqlDatabaseOverrides(server, MySqlPluginDir() / "server" / Packages::Manager::Platform() / program);
+        if (!_storageForm)
+            return;
+        bool const checked = _storageForm->Tick();
+        bool const changed = !_storageForm->Choice().Same(CurrentStorage());
+        bool const busy = _storageForm->Checking() || _wizard->IsInstalling();
+        if (changed != _stChanged || busy != _stBusy)
+        {
+            _stChanged = changed;
+            _stBusy = busy;
+            _model.DirtyVariable("st_changed");
+            _model.DirtyVariable("st_busy");
+        }
+        if (checked && _stApplying && _storageForm->Result())
+            FinishApplyStorage(*_storageForm->Result());
     }
 
     // Client locale the server reads its data in: the one the game starts in, else the client's own setting.
@@ -497,15 +566,19 @@ namespace
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
         _wizard = std::make_unique<Wizard>(Wizard::Host{ _exe, _exeDir, [this] { return Root(); }, [this] { return _server->IsRunning(); },
             [this] { return _settings.sqlStamp; },
-            [this] { return _settings.storage; },
+            [this] { return CurrentStorage(); },
+            [this] { return StorageProviders(); },
+            [this](StorageChoice const& c) { return RemoteEnv(c); },
             [this] { return ServerLocale(); },
-            [this] { return _settings.storage == "mysql" ? MySqlEnv() : EnvList(); },
             [this](InstallOptions const& o)
             {
                 _settings.dataRoot = o.root;
                 _settings.serverConfig.clear();
                 _settings.clientPath = o.client;
-                _settings.storage = o.storage;
+                _settings.location = o.location;
+                _settings.dataCache = o.cache;
+                if (o.location != "local")
+                    _settings.remote = o.remote;
                 if (o.db)
                 {
                     _settings.sqlStamp = Installer::SqlStamp(o.setupDir);
@@ -515,10 +588,17 @@ namespace
                 _settings.Save();
                 RefreshClient();
                 LoadSettingsModel();
+                if (_page == "settings" && _setGroup == "storage")
+                    LoadStorageForm();
                 RefreshData();
+                RefreshNews();
                 AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
             [this] { Play(); }, [] { UiBackend::Wake(); } });
+        // the storage form checks the server folder's built-in databases for "local"
+        _storageForm = std::make_unique<StorageForm>("st_", StorageForm::Host{ _exe, [this] { return StorageProviders(); },
+            [this](StorageChoice const& c) { return c.Remote() ? RemoteEnv(c) : LocalDatabaseOverrides(Root()); },
+            [] { UiBackend::Wake(); } });
 
         if (!UiBackend::Initialize("LonelyIce", 960, 680, _settings.uiScale / 100.f))
         {
@@ -699,8 +779,10 @@ namespace
             return false;
         BindModel(c);
         _wizard->Bind(c);
+        _storageForm->Bind(c, false);       // the wizard's storage form registered the row type
         _model = c.GetModelHandle();
         _wizard->SetModel(_model);
+        _storageForm->SetModel(_model);
 
         return LoadDocument();
     }
@@ -749,6 +831,10 @@ namespace
         RefreshAbout();
         RefreshNews();
         _wizard->Relocalize();
+        _storageForm->Relocalize();
+        if (_page == "settings" && _setGroup == "storage")
+            _stStatus = Tr("storage.status.current", _storageForm->LocationTitle(_settings.location),
+                Tr(_settings.dataCache ? "storage.status.cache" : "storage.status.client"));
         if (!_plBusy)
             _plStatus = IndexStatus();
         if (_server->GetState() != ServerState::Ready)
@@ -868,6 +954,7 @@ namespace
             s.RegisterMember("update", &PluginView::update);
             s.RegisterMember("icon", &PluginView::icon);
             s.RegisterMember("letter", &PluginView::letter);
+            s.RegisterMember("settings", &PluginView::settings);
             s.RegisterMember("installed", &PluginView::installed);
             s.RegisterMember("enabled", &PluginView::enabled);
         }
@@ -983,15 +1070,10 @@ namespace
         c.Bind("data_sum", &_dataSum);
         c.Bind("storage_title", &_storageTitle);
         c.Bind("storage_detail", &_storageDetail);
-        c.Bind("storage_action", &_storageAction);
-        c.Bind("storage_mode", &_storageMode);
-        c.Bind("mysql_available", &_mysqlAvailable);
-        c.Bind("mysql_host", &_mysqlHost);
-        c.Bind("mysql_port", &_mysqlPort);
-        c.Bind("mysql_user", &_mysqlUser);
-        c.Bind("mysql_pass", &_mysqlPass);
-        c.Bind("mysql_prefix", &_mysqlPrefix);
-        c.Bind("mysql_detail", &_mysqlDetail);
+        c.Bind("st_current", &_stCurrent);
+        c.Bind("st_status", &_stStatus);
+        c.Bind("st_changed", &_stChanged);
+        c.Bind("st_busy", &_stBusy);
 
         auto on = [&](char const* name, std::function<void()> fn)
         {
@@ -1014,7 +1096,12 @@ namespace
         on("send_command", [this] { SendConsoleCommand(); });
         onArg("run_command", [this](Rml::Variant const& v) { RunCommand(v.Get<Rml::String>()); });
         onArg("open_tab", [this](Rml::Variant const& v) { OpenTab(v.Get<Rml::String>()); });
-        onArg("open_page", [this](Rml::Variant const& v) { OpenPage(v.Get<Rml::String>()); });
+        // open_page(page) or open_page(page, section)
+        c.BindEventCallback("open_page", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
+        {
+            if (!args.empty())
+                OpenPage(args[0].Get<Rml::String>(), args.size() > 1 ? args[1].Get<Rml::String>() : std::string());
+        });
         onArg("news_action", [this](Rml::Variant const& v)
         {
             std::string const a = v.Get<Rml::String>();
@@ -1077,6 +1164,8 @@ namespace
             BuildSettingsFields();
             if (_setGroup == "about")
                 RefreshAbout();
+            if (_setGroup == "storage")
+                LoadStorageForm();
         });
         onArg("set_preset_pick", [this](Rml::Variant const& v)
         {
@@ -1087,8 +1176,8 @@ namespace
         });
         on("set_save", [this] { SaveSettings(); });
         on("data_check", [this] { RefreshData(); });
-        on("storage_switch", [this] { SwitchStorage(_settings.storage == "client" ? "unpacked" : "client"); });
-        on("storage_mysql", [this] { SwitchStorage("mysql"); });
+        on("st_apply", [this] { ApplyStorage(); });
+        on("st_revert", [this] { if (!_stBusy) LoadStorageForm(); });
         on("pl_check", [this] { CheckPackageIndex(); });
         on("pl_update_all", [this] { PluginAction("update_all", -1); });
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
@@ -1191,6 +1280,7 @@ namespace
     {
         RunUiScript();
         _wizard->Tick();
+        StorageTick();
 
         for (std::string const& line : _server->TakeLines())
         {
@@ -1618,6 +1708,8 @@ namespace
                 _setGroup = section;
                 BuildSettingsFields();
             }
+            if (_setGroup == "storage")
+                LoadStorageForm();
             RefreshAbout();
         }
         else if (page == "plugins")
@@ -1666,7 +1758,7 @@ namespace
             DirStats const s = Scan(newest);
             _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", Platform::PathToUtf8(newest.filename()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
         }
-        else if (!NeedsSetup() && _settings.storage != "mysql")
+        else if (!NeedsSetup() && _settings.location == "local")
             _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
         _model.DirtyVariable("news");
     }
@@ -1766,9 +1858,15 @@ namespace
             Message(Tr("msg.no_config", Platform::PathToUtf8(config)));
             return;
         }
-        if (_settings.storage == "client" && !_client.valid)
+        if (_settings.ReadsClient() && !_client.valid)
         {
             Message(Tr("msg.client_data_needs_client"));
+            return;
+        }
+        std::optional<StorageProviderInfo> const provider = _settings.location != "local" ? FindProvider(_settings.location) : std::nullopt;
+        if (_settings.location != "local" && !provider)
+        {
+            Message(Tr("msg.storage_no_plugin", _settings.location));
             return;
         }
         AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
@@ -1781,19 +1879,14 @@ namespace
             env.emplace_back("LONELYICE_LOCALE", ServerLocale());
         }
         // game data: read from the client, or unpacked with the DBC files in the world database
-        if (_settings.storage == "client")
+        if (_settings.ReadsClient())
             env.emplace_back("LONELYICE_DATA", "client");
         else
             env.emplace_back(EnvName("DBC.FromDatabase"), "1");
-        if (_settings.storage == "mysql")
+        if (provider)
         {
-            if (MySqlPluginDir().empty())
-            {
-                Message(Tr("msg.mysql_no_plugin"));
-                return;
-            }
-            EnvList const mysql = MySqlEnv();
-            env.insert(env.end(), mysql.begin(), mysql.end());
+            EnvList const remote = RemoteEnv(CurrentStorage());
+            env.insert(env.end(), remote.begin(), remote.end());
         }
         if (!_server->Start(Platform::PathToUtf8(_exe), Platform::PathToUtf8(config), Platform::PathToUtf8(Root()), env))
             Message(Tr("msg.start_failed", _server->GetFailReason()));
@@ -2099,7 +2192,8 @@ namespace
         _settingsModel.Load(ServerConfig(), ReadPlugins(_exeDir / "plugins"), _settings, locales);
         for (std::string const& e : _settingsModel.Errors())
             AddEvent(Tr("event.plugin_settings_bad", e));
-        if (_setGroup != "about" && std::none_of(_settingsModel.Groups().begin(), _settingsModel.Groups().end(), [&](SetGroup const& g) { return g.id == _setGroup; }))
+        if (_setGroup != "about" && _setGroup != "storage"
+            && std::none_of(_settingsModel.Groups().begin(), _settingsModel.Groups().end(), [&](SetGroup const& g) { return g.id == _setGroup; }))
             _setGroup = "rates";
         _setPreset = 0;
         BuildSettingsFields();
@@ -2109,8 +2203,11 @@ namespace
     {
         static std::map<std::string, std::string> const applyText = { { "now", "apply.now" }, { "rel", "apply.reload" }, { "rst", "apply.restart" } };
 
-        // Side list: world groups, plugin groups, then the launcher and "about"; a heading on the first of each.
+        // Side list: the storage, world groups, plugin groups, then the launcher and "about"; a heading on the first of each.
         _setGroups.clear();
+        _setGroups.push_back({ "storage", Tr("set.group.storage"), 0, Tr("set.section.data") });
+        if (_setGroup == "storage")
+            _setHint = Tr("storage.hint");
         for (int pass = 0; pass < 3; ++pass)
         {
             static char const* const sections[] = { "set.section.world", "set.section.plugins", "set.section.launcher" };
@@ -2274,6 +2371,13 @@ namespace
             if (fs::exists(l.manifest.dir / "icon.png", ec))
                 v.icon = UiPath(l.manifest.dir / "icon.png");
             v.letter = Initial(v.name);
+            // the gear: a storage plugin is set up on the storage page, others in their own settings group
+            std::string const group = "plugin:" + l.manifest.id;
+            auto const& values = _settingsModel.Values();
+            if (l.manifest.storage && l.enabled)
+                v.settings = "storage";
+            else if (std::any_of(values.begin(), values.end(), [&](SetValue const& sv) { return sv.def->group == group; }))
+                v.settings = group;
             installed.insert(l.manifest.id);
             if (_plView == "installed" || (_plView == "updates" && !v.update.empty()))
                 _plRows.push_back(std::move(v));
@@ -2549,8 +2653,11 @@ namespace
         uint64_t total = 0;
         std::vector<std::string> missing;
 
-        bool const onMySql = _settings.storage == "mysql";
-        std::string const mysqlAt = _settings.mysqlHost + ":" + _settings.mysqlPort;
+        std::optional<StorageProviderInfo> const provider = _settings.location != "local" ? FindProvider(_settings.location) : std::nullopt;
+        bool const onServer = _settings.location != "local";
+        std::string const port = _settings.remote.port.empty() && provider ? provider->provider.port : _settings.remote.port;
+        std::string const serverAt = _settings.remote.host + ":" + port;
+        std::string const serverName = provider ? provider->provider.name : _settings.location;
 
         // data.db.<name> / data.db.<name>.detail for the known databases
         for (DatabaseFile const& db : FindDatabases(ServerConfig(), Root()))
@@ -2560,9 +2667,9 @@ namespace
             bool const known = Lang::Has(key);
             std::string title = known ? Tr(key) : db.name;
             std::string detail = known ? Tr(key + ".detail") : std::string();
-            if (onMySql)
+            if (onServer)
             {
-                _dataRows.push_back({ title, Tr("data.on_mysql", _settings.mysqlPrefix + db.name, mysqlAt), "ok", "" });
+                _dataRows.push_back({ title, Tr("data.on_server", _settings.remote.prefix + db.name, serverAt), "ok", "" });
                 continue;
             }
             if (db.path.empty())
@@ -2579,7 +2686,7 @@ namespace
         }
 
         fs::path data = ConfPath("DataDir", ".");
-        bool const fromClient = _settings.storage == "client";
+        bool const fromClient = _settings.ReadsClient();
         if (fromClient)
         {
             // DBC and cameras stay in the client; terrain tiles are built into data/maps as grids load.
@@ -2615,31 +2722,10 @@ namespace
                 ok ? "ok" : (p.required ? "bad" : "warn"), ok ? FormatBytes(s.bytes) : Tr("data.none") });
         }
 
-        _storageMode = _settings.storage;
-        if (onMySql)
-        {
-            _storageTitle = Tr("data.storage.mysql", mysqlAt);
-            _storageDetail = Tr("data.storage.mysql.detail");
-            _storageAction = Tr("data.storage.to_builtin");
-        }
-        else
-        {
-            _storageTitle = Tr(fromClient ? "data.storage.client" : "data.storage.unpacked");
-            _storageDetail = Tr(fromClient ? "data.storage.client.detail" : "data.storage.unpacked.detail");
-            _storageAction = Tr(fromClient ? "data.storage.to_unpacked" : "data.storage.to_client");
-        }
-
-        // The MySQL block: offered once the MySQL plugin is installed.
-        _mysqlAvailable = !MySqlPluginDir().empty();
-        _mysqlHost = _settings.mysqlHost;
-        _mysqlPort = _settings.mysqlPort;
-        _mysqlUser = _settings.mysqlUser;
-        _mysqlPass = _settings.mysqlPassword;
-        _mysqlPrefix = _settings.mysqlPrefix;
-        _mysqlDetail = Tr("data.mysql.detail");
-        for (char const* v : { "storage_title", "storage_detail", "storage_action", "storage_mode", "mysql_available", "mysql_host",
-                 "mysql_port", "mysql_user", "mysql_pass", "mysql_prefix", "mysql_detail" })
-            _model.DirtyVariable(v);
+        _storageTitle = onServer ? Tr("data.storage.server", serverName, serverAt) : Tr("data.storage.local");
+        _storageDetail = Tr(fromClient ? "data.storage.client.detail" : "data.storage.cache.detail");
+        _model.DirtyVariable("storage_title");
+        _model.DirtyVariable("storage_detail");
 
         if (missing.empty())
             _dataSum = Tr("data.all_present", FormatBytes(total));
@@ -2661,8 +2747,8 @@ namespace
         if (_backupBusy)
             return;
         std::vector<DatabaseFile> dbs = FindDatabases(ServerConfig(), Root());
-        // On MySQL the files of the config are not the server's databases.
-        if (_settings.storage == "mysql" || std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
+        // On a database server the files of the config are not the server's databases.
+        if (_settings.location != "local" || std::none_of(dbs.begin(), dbs.end(), [](DatabaseFile const& d) { return !d.path.empty(); }))
         {
             Message(Tr("msg.backup_files_only"));
             return;
@@ -2683,7 +2769,7 @@ namespace
 
     void Launcher::CheckScheduledBackup()
     {
-        if (_settings.backupTime.size() != 5 || _backupBusy || _settings.storage == "mysql")
+        if (_settings.backupTime.size() != 5 || _backupBusy || _settings.location != "local")
             return;
         std::string today = Now("%Y-%m-%d");
         if (_settings.lastBackupDay == today || Now("%H:%M") < _settings.backupTime)

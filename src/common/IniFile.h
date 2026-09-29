@@ -19,6 +19,8 @@ namespace LonelyIce
         std::optional<std::string> Get(std::string const& section, std::string const& key) const;
         std::string Get(std::string const& section, std::string const& key, std::string const& def) const;
         void Set(std::string const& section, std::string const& key, std::string const& value);
+        void Remove(std::string const& section, std::string const& key);
+        void RemoveSection(std::string const& section);
 
     private:
         std::vector<std::string> _lines;

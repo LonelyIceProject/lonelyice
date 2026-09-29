@@ -1,13 +1,23 @@
 # Server game data
 
 The server needs data from the game client: the DBC tables (spells, maps, areas, ...), terrain tiles
-(`maps/*.map`), cinematic cameras, and optionally collision (`vmaps`) and paths (`mmaps`). LonelyIce can take it
-in two ways, or keep everything on MySQL; `[server] storage` in `lonelyice.ini` says which, and Maintenance →
-Server data switches it.
+(`maps/*.map`), cinematic cameras, and optionally collision (`vmaps`) and paths (`mmaps`). Where it keeps its
+databases and how it gets the game data are two settings in `lonelyice.ini` (`[server] location`, `dataCache`),
+chosen in the wizard's "Data" step and in Settings → Storage.
 
-## `client`: read from the client (default)
+## Location
 
-Nothing is unpacked. `LONELYICE_DATA=client` makes the server (`src/storage/ClientData`):
+- `local` (default): the databases are SQLite files in `<server folder>/db`.
+- the `id` of a plugin's storage (`docs/plugin-format.md`, `storage`), e.g. `mysql` with mod-lonelyice-mysql: the
+  databases are on a database server, reached with `[remote]` host, port, user, password and prefix. The launcher
+  passes `<id>:host;port;user;password;<prefix><name>` for every `*DatabaseInfo` (auth, characters, world,
+  playerbots) and the plugin's config values as environment overrides. The launcher's backups work on the built-in
+  files only and are off there.
+
+## Disk cache
+
+Off (the default, only with `local`), nothing is unpacked. `LONELYICE_DATA=client` makes the server
+(`src/storage/ClientData`):
 
 - register an SQLite extension with one read-only virtual table per DBC file the core loads (`dbc_spell`,
   `dbc_map`, ...), served straight from the client's MPQ archives (`DbcTables`). The core runs with
@@ -21,24 +31,23 @@ The locale read is `LONELYICE_LOCALE` (the launch language, else `SET locale` in
 When mmaps are generated, all tiles are built first (`LonelyIce --tool tiles`), since the generator reads them
 all.
 
-## `unpacked`
-
-Everything is unpacked once and the server no longer needs the client: maps and cameras into `<DataDir>`
+On, everything is unpacked once and the server no longer needs the client: maps and cameras into `<DataDir>`
 (`LonelyIce --tool maps <client> <data> 5`), the DBC files into real `dbc_*` tables of the world database
 (`LonelyIce --server --dbc fill`, through the core's database interfaces). The server runs with
-`DBC.FromDatabase = 1`. Going back to `client` drops those tables and files (`--server --dbc drop`).
+`DBC.FromDatabase = 1`. Turning it off drops those tables and files (`--server --dbc drop`). A database server has
+no virtual tables, so the cache is always on there.
 
 A real `dbc_*` table takes precedence over the virtual one of the same name.
 
-## `mysql`
+## Checking and switching
 
-With a plugin that provides `database:mysql` (mod-lonelyice-mysql) the databases can live on a MySQL 8 server.
-The launcher keeps the server in `[mysql]` of `lonelyice.ini` (host, port, user, password, prefix) and passes
-`mysql:host;port;user;password;<prefix><name>` for every `*DatabaseInfo` (auth, characters, world,
-playerbots) plus `MySQLExecutable` (the plugin's `mysql` program) as environment overrides. Switching deploys the
-databases there (missing ones are created, existing ones updated) and unpacks as above, the DBC tables going into
-the MySQL world database; MySQL has no virtual tables. The launcher's backups work on the built-in files only and
-are off on MySQL.
+`LonelyIce --server --storage-check -c <any config>` opens the databases the environment names, with the plugins'
+backends loaded, and reports `@@LI check db <auth|characters|world> ok|missing|empty|error <message>`,
+`@@LI check dbc <unpacked> <total>` and `@@LI check done`. It needs no server folder: the launcher runs it with a
+config of its own whenever a storage is picked (after the connection fields stop changing) and again on Apply.
+When the chosen storage lacks something (databases, the cache, or holds a cache no longer wanted), the wizard
+shows what it will do (and asks for the player's account when the databases are new) and does it; otherwise the
+setting changes at once.
 
 ## Table layout
 

@@ -1,6 +1,7 @@
 #ifndef LONELYICE_INSTALLER_H
 #define LONELYICE_INSTALLER_H
 
+#include "LauncherSettings.h"
 #include "Platform.h"
 #include <atomic>
 #include <cstdint>
@@ -20,13 +21,15 @@ namespace LonelyIce
         std::filesystem::path root;         // server data: configs, db, data, logs, backups
         std::filesystem::path client;       // WoW 3.3.5a folder
 
-        // Where the server reads the game data: "client" (the client's archives, nothing unpacked) or "unpacked"
-        // (maps and cameras extracted into data/, DBC files in dbc_* tables of the world database).
-        std::string storage = "client";
+        // Where the databases are (LauncherSettings::location) and whether the game data is unpacked (maps and
+        // cameras into data/, DBC files into dbc_* tables of the world database) or read from the client's archives.
+        std::string location = "local";
+        bool cache = false;
+        RemoteDatabase remote;              // a remote location's connection (kept by the launcher afterwards)
         std::string locale;                 // client locale the server data is read in, empty = the client's first
-        Platform::Env serverEnv;            // added to every server child (storage "mysql": the connection strings)
+        Platform::Env serverEnv;            // added to every server child (a remote location: the connection strings)
 
-        // unpack: switch to "unpacked"; pack: switch back to "client" (drops what unpack made)
+        // unpack: fill the data cache; pack: drop it (back to reading the client)
         bool db = true, unpack = false, pack = false, vmaps = true, mmaps = true, client_prep = true;
         int threads = 4;
 

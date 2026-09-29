@@ -3,6 +3,7 @@
 
 #include "GameClient.h"
 #include "Installer.h"
+#include "StorageForm.h"
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Types.h>
 #include <filesystem>
@@ -19,7 +20,9 @@ namespace Rml
 
 namespace LonelyIce
 {
-    // First-run wizard: client, server folder, components, world and account, client preparation, install, done.
+    // First-run wizard: client, server folder, data (storage and components), world and account, client preparation,
+    // install, done. Moving the server's data to another storage uses the same install page after a page that says
+    // what will be done.
     class Wizard
     {
     public:
@@ -29,9 +32,10 @@ namespace LonelyIce
             std::function<std::filesystem::path()> currentRoot;
             std::function<bool()> serverRunning;
             std::function<std::string()> sqlStamp;                  // stamp of the last database deploy
-            std::function<std::string()> storage;                   // where the server reads game data now (InstallOptions::storage)
+            std::function<StorageChoice()> storage;                 // the storage the server uses now
+            std::function<std::vector<StorageProviderInfo>()> providers;    // plugins' storages
+            std::function<Platform::Env(StorageChoice const&)> remoteEnv;   // connection of a plugin's storage
             std::function<std::string()> serverLocale;              // client locale of the server data, empty = the client's first
-            std::function<Platform::Env()> serverEnv;               // for the server children (MySQL connection strings)
             std::function<void(InstallOptions const&)> installed;   // install finished successfully
             std::function<void()> play;
             std::function<void()> wake;
@@ -41,12 +45,13 @@ namespace LonelyIce
         ~Wizard();
 
         void Bind(Rml::DataModelConstructor& c);
-        void SetModel(Rml::DataModelHandle model) { _model = model; }
+        void SetModel(Rml::DataModelHandle model);
 
         void Open(std::filesystem::path const& client);
-        // Switches where the server reads its game data ("client" or "unpacked"): straight to the install page.
-        // "mysql" deploys the databases there first (db), as does any switch that finds no databases yet.
-        void SwitchStorage(std::filesystem::path const& client, std::string const& storage, bool db, Platform::Env const& serverEnv);
+        // Moves the server's data to the storage "to" (title: its name for the page): the page lists the plan's
+        // steps (and asks for the player's account when newDatabases), then the install page runs them.
+        void SwitchStorage(std::filesystem::path const& client, StorageChoice const& to, std::string const& title, StoragePlan const& plan,
+            bool newDatabases, std::string const& realmName);
         bool IsOpen() const { return _open; }
         bool IsInstalling() const { return _installer.IsRunning(); }
         void Tick();
@@ -55,7 +60,8 @@ namespace LonelyIce
 
         struct CheckRow { Rml::String cls, text, detail; };
         struct PlaceRow { Rml::String id, title, path, free, detail; };
-        struct CompRow { Rml::String id, title, desc, size, note; bool on = false, locked = false; };
+        // required: installed without asking when missing (on = will be installed); the others are the player's choice
+        struct CompRow { Rml::String id, title, desc, size, note; bool on = false, locked = false, required = false; double gb = 0; };
         struct StepRow { Rml::String name, cls; };
         struct InstRow { Rml::String title, note, state; int pct = 0; };
 
@@ -75,9 +81,13 @@ namespace LonelyIce
         void Error(std::string text);
         void Dirty();
         void BrowseFolder(bool forClient);
+        bool HasComp(char const* id) const;
+        void BuildTransfer();
+        void StartSwitch();
 
         Host _host;
         Installer _installer;
+        StorageForm _form;
         Rml::DataModelHandle _model;
         ClientInfo _client;
 
@@ -96,9 +106,12 @@ namespace LonelyIce
         Rml::String _place = "client";
         std::vector<PlaceRow> _places;
         std::filesystem::path _customPlace;
-        // 2 components
+        // 2 data: the storage form (wzs_*) and the components
         std::vector<CompRow> _comps;
         Rml::String _threads, _coresNote, _total;
+        std::optional<StorageChoice> _compsFor;         // the form the components were built for
+        bool _compsChecked = false;                     // ... with the storage's check done
+        bool _waitCheck = false;                        // Next waits for the storage check
         // 3 world and account
         Rml::String _realm = "LonelyIce", _rate = "2", _bots = "100", _login, _pass, _gm = "3";
         // 4 client preparation
@@ -111,7 +124,14 @@ namespace LonelyIce
         std::vector<CheckRow> _done;
         InstallOptions _options;
         bool _reported = false;
-        bool _switching = false;                // the install page runs a storage switch, not the wizard's choices
+        // 7 (switching only): what moving to another storage does
+        bool _switching = false;                // the pages run a storage switch, not the wizard's choices
+        StorageChoice _switchTo;
+        StoragePlan _switchPlan;
+        std::vector<CheckRow> _transfer;
+        std::string _switchTitle;
+        Rml::String _transferTitle, _transferNote;
+        bool _needAccount = false;
 
         std::mutex _pickLock;
         std::string _picked;                    // folder from the dialog, UTF-8

@@ -311,9 +311,21 @@ input.check:checked { background-color: #b3441f; border-color: #6e1a10; box-shad
 .d-detail { font-size: 12dp; color: #5e4f3a; }
 .d-size { font-family: "PT Mono"; font-size: 13dp; color: #3a2a1a; }
 .drow.storage { padding: 8dp 4dp; margin-bottom: 4dp; border-bottom: 1dp #6e5a3366; }
-.mysql { padding: 4dp 4dp 10dp 4dp; margin-bottom: 4dp; border-bottom: 1dp #6e5a3366; }
-.mysql .form-row { margin-top: 6dp; }
 .form-row .f.short, .form-row .f.short input.field { width: 70dp; }
+
+/* storage choice (wizard and settings) */
+.remote { margin: -2dp 0dp 8dp 36dp; }
+.stcheck { display: flex; flex-direction: row; align-items: center; gap: 10dp; padding: 5dp 10dp; margin-bottom: 6dp;
+    border-left: 4dp #8a7550; background-color: #ffffff40; font-size: 13dp; color: #3a2a1a; }
+.stcheck.ok { border-left-color: #4f8a3a; }
+.stcheck.warn { border-left-color: #d99a22; }
+.stcheck.bad { border-left-color: #b3441f; color: #7a1f10; }
+.stcheck.run { border-left-color: #3e6b8a; }
+.wh2 { font-family: "Forum"; font-size: 17dp; color: #3a1a0c; margin: 8dp 0dp 4dp; }
+.opt.have { opacity: 0.7; }
+/* the first decorator is drawn on top */
+.btn.gear { width: 26dp; height: 24dp; padding: 0dp; decorator: image(gear.tga contain center center), linear-gradient(to bottom, #3b4049, #1d2025); }
+.btn.gear:hover { decorator: image(gear.tga contain center center), linear-gradient(to bottom, #474d57, #23262c); }
 
 /* console */
 #log {

@@ -1,7 +1,9 @@
 #ifndef LONELYICE_CONFIGENV_H
 #define LONELYICE_CONFIGENV_H
 
+#include "LauncherSettings.h"
 #include "Platform.h"
+#include "Plugins.h"
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -18,14 +20,11 @@ namespace LonelyIce
 
     EnvList ModuleConfigOverrides(std::filesystem::path const& configFile, std::filesystem::path const& workDir);
 
-    struct MySqlServer
-    {
-        std::string host, port, user, password, prefix;
-    };
-
-    // Every database of the server (auth, characters, world, playerbots) on a MySQL server as <prefix><name>,
-    // as *DatabaseInfo overrides; mysqlProgram is the mysql client the core applies sql files with.
-    EnvList MySqlDatabaseOverrides(MySqlServer const& server, std::filesystem::path const& mysqlProgram);
+    // Every database of the server (auth, characters, world, playerbots) as <prefix><name> on the provider's database
+    // server, as *DatabaseInfo overrides, plus the config values the provider needs; binDir: its server/<platform> folder.
+    EnvList RemoteDatabaseOverrides(StorageProvider const& provider, RemoteDatabase const& db, std::filesystem::path const& binDir);
+    // The same for the SQLite files in <root>/db, with absolute paths.
+    EnvList LocalDatabaseOverrides(std::filesystem::path const& root);
 }
 
 #endif

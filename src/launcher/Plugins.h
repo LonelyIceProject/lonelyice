@@ -20,6 +20,17 @@ namespace LonelyIce
         std::optional<std::string> def;         // "default"; else the value in the .conf.dist
     };
 
+    // A place for the server's databases that a plugin adds (plugin.json "storage", docs/plugin-format.md): a
+    // database server reached with host, port, user and password, the databases named <prefix><auth|world|...>.
+    struct StorageProvider
+    {
+        std::string id;                         // the core's connection string scheme: "<id>:host;port;user;password;database"
+        std::string name;                       // in the launcher's language
+        std::string port;                       // default port
+        // config values the server needs with it ({bin}: the plugin's server/<platform> folder, {exe}: ".exe" on Windows)
+        std::vector<std::pair<std::string, std::string>> config;
+    };
+
     // What the launcher reads from a plugin's plugin.json (the server loads the plugins itself).
     struct PluginManifest
     {
@@ -33,6 +44,7 @@ namespace LonelyIce
         std::filesystem::path patches;              // patch recipes (DBC rows, named ids, SQL), empty: none
         bool serverLibrary = false;                 // has server code (must be loaded to count as enabled)
         std::vector<std::string> provides;          // capabilities, e.g. "database:mysql" (a database backend)
+        std::optional<StorageProvider> storage;     // a place for the databases, offered in the wizard and the settings
     };
 
     // A plugin's settings group; empty fields when it has none or the file is broken (error set).

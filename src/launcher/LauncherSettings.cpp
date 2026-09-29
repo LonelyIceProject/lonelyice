@@ -44,14 +44,25 @@ void LonelyIce::LauncherSettings::Load()
     lastBackupDay = ini.Get("backup", "lastDay", "");
     realmName = ini.Get("server", "realmName", "");
     sqlStamp = ini.Get("server", "sqlStamp", "");
-    storage = ini.Get("server", "storage", "client");
-    if (storage != "client" && storage != "unpacked" && storage != "mysql")
-        storage = "client";
-    mysqlHost = ini.Get("mysql", "host", mysqlHost);
-    mysqlPort = ini.Get("mysql", "port", mysqlPort);
-    mysqlUser = ini.Get("mysql", "user", mysqlUser);
-    mysqlPassword = ini.Get("mysql", "password", "");
-    mysqlPrefix = ini.Get("mysql", "prefix", mysqlPrefix);
+    if (std::optional<std::string> old = ini.Get("server", "storage"))
+    {
+        // storage = client | unpacked | mysql, with [mysql] for the last (the first storage settings)
+        location = *old == "mysql" ? "mysql" : "local";
+        dataCache = *old != "client";
+        remote = { ini.Get("mysql", "host", remote.host), ini.Get("mysql", "port", ""), ini.Get("mysql", "user", remote.user),
+            ini.Get("mysql", "password", ""), ini.Get("mysql", "prefix", remote.prefix) };
+    }
+    else
+    {
+        location = ini.Get("server", "location", "local");
+        dataCache = ReadBool(ini, "server", "dataCache", false);
+        remote = { ini.Get("remote", "host", remote.host), ini.Get("remote", "port", ""), ini.Get("remote", "user", remote.user),
+            ini.Get("remote", "password", ""), ini.Get("remote", "prefix", remote.prefix) };
+    }
+    if (location.empty())
+        location = "local";
+    if (location != "local")
+        dataCache = true;
     pendingRealmName = ini.Get("server", "pendingRealmName", "");
     packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
     packageIndexOff = ini.Get("packages", "disabled", "");
@@ -71,12 +82,15 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("server", "root", Platform::PathToUtf8(dataRoot));
     ini.Set("server", "realmName", realmName);
     ini.Set("server", "sqlStamp", sqlStamp);
-    ini.Set("server", "storage", storage);
-    ini.Set("mysql", "host", mysqlHost);
-    ini.Set("mysql", "port", mysqlPort);
-    ini.Set("mysql", "user", mysqlUser);
-    ini.Set("mysql", "password", mysqlPassword);
-    ini.Set("mysql", "prefix", mysqlPrefix);
+    ini.Remove("server", "storage");
+    ini.RemoveSection("mysql");
+    ini.Set("server", "location", location);
+    ini.Set("server", "dataCache", flag(dataCache));
+    ini.Set("remote", "host", remote.host);
+    ini.Set("remote", "port", remote.port);
+    ini.Set("remote", "user", remote.user);
+    ini.Set("remote", "password", remote.password);
+    ini.Set("remote", "prefix", remote.prefix);
     ini.Set("server", "pendingRealmName", pendingRealmName);
     ini.Set("launcher", "autoStart", flag(autoStart));
     ini.Set("launcher", "stopWithGame", flag(stopWithGame));

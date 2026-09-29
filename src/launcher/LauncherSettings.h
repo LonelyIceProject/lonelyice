@@ -6,6 +6,14 @@
 
 namespace LonelyIce
 {
+    // A database server holding the server's databases as <prefix>auth, <prefix>characters, <prefix>world, ...
+    struct RemoteDatabase
+    {
+        std::string host = "127.0.0.1", port, user = "acore", password, prefix = "acore_";
+
+        bool operator==(RemoteDatabase const&) const = default;
+    };
+
     // lonelyice.ini next to the exe (UTF-8).
     struct LauncherSettings
     {
@@ -27,9 +35,13 @@ namespace LonelyIce
         int backupKeep = 7;
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled backup
         std::string sqlStamp;            // setup/sql.pak the databases were last deployed from
-        std::string storage = "client"; // where the server reads game data: client (its archives), unpacked, mysql
-        // storage = mysql: the server's databases on a MySQL server (the MySQL plugin), named <prefix><auth|world|...>
-        std::string mysqlHost = "127.0.0.1", mysqlPort = "3306", mysqlUser = "acore", mysqlPassword, mysqlPrefix = "acore_";
+        // Where the databases are: "local" (SQLite files in <dataRoot>/db) or the id of a plugin's storage (a database
+        // server, see StorageProvider), reached with remote.
+        std::string location = "local";
+        // The client's game data unpacked (the DBC files into the world database, maps and cameras into data/):
+        // faster, takes space. Off, the server reads it from the client's archives; always on with a remote location.
+        bool dataCache = false;
+        RemoteDatabase remote;
         std::string realmName;           // last known, for the settings tab while the server is down
         std::string pendingRealmName;    // applied when the server comes up
         std::string packageIndex = DefaultPackageIndex;   // plugin package indexes, ";"-separated URLs, files or folders
@@ -37,6 +49,9 @@ namespace LonelyIce
 
         static constexpr char const* DefaultPackageIndex = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
         static constexpr char const* DefaultRunner = "wine";
+
+        // The client's game data stays in its archives (local location without the cache).
+        bool ReadsClient() const { return location == "local" && !dataCache; }
 
         void Load();
         void Save() const;

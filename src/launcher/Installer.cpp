@@ -586,7 +586,7 @@ bool Installer::RunMmaps()
 {
     fs::path data = _o.root / "data";
     // The generator reads every terrain tile: reading the client, they are built first.
-    float const tiles = _o.storage == "client" ? 0.1f : 0.f;
+    float const tiles = _o.cache ? 0.f : 0.1f;
     if (tiles > 0.f && !RunTiles("mmaps", tiles))
         return false;
 

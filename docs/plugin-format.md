@@ -95,7 +95,33 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
 | `patches` | Patch recipe file: DBC rows with named ids, SQL, client files (see 7). |
 | `client` | `addons`: client addon folders (see 7). |
-| `provides` | Capabilities the launcher looks for: `database:mysql` for a plugin whose library registers the MySQL database backend (`RegisterBackendDriver`), which makes MySQL a choice under Maintenance → Server data (see `docs/server-data.md`). |
+| `provides` | Capabilities the plugin gives, e.g. `database:mysql` for a library that registers the MySQL database backend (`RegisterBackendDriver`). Informational; the launcher offers a storage through `storage`. |
+| `storage` | A place for the server's databases that the plugin adds (a database server, see below). |
+
+### `storage`
+
+A plugin whose library registers a database backend can offer it as a storage. The wizard and Settings → Storage
+then list it next to the built-in files (SQLite), with fields for the server, port, user, password and database
+prefix:
+
+```json
+"storage": {
+  "id": "mysql",
+  "name": { "en": "MySQL server", "ru": "Сервер MySQL" },
+  "port": 3306,
+  "config": { "MySQLExecutable": "{bin}/mysql{exe}" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | The backend's connection string scheme. Every database is passed as `<id>:host;port;user;password;<prefix><name>` (`auth`, `characters`, `world`, `playerbots`). |
+| `name` | Localized name of the storage. |
+| `port` | Default port. |
+| `config` | Config values the server needs with this storage, passed as `AC_*` overrides. `{bin}` is the plugin's `server/<platform>` folder, `{exe}` is `.exe` on Windows and empty elsewhere. |
+
+The launcher checks a storage by running the core against it (`LonelyIce --server --storage-check`), so the
+backend has to be registered while the scripts load (see 3).
 
 ## 3. Server library
 

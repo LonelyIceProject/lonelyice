@@ -160,3 +160,35 @@ void IniFile::Set(std::string const& section, std::string const& key, std::strin
         _lines.push_back(line);
     }
 }
+
+void IniFile::Remove(std::string const& section, std::string const& key)
+{
+    bool in = false;
+    for (std::size_t i = 0; i < _lines.size(); ++i)
+    {
+        std::string const s = SectionOf(_lines[i]);
+        if (!s.empty())
+        {
+            in = SameName(s, section);
+            continue;
+        }
+        std::string const t = Trim(_lines[i]);
+        std::size_t const eq = t.find('=');
+        if (in && !t.empty() && t[0] != ';' && t[0] != '#' && eq != std::string::npos && SameName(Trim(t.substr(0, eq)), key))
+            _lines.erase(_lines.begin() + std::ptrdiff_t(i--));
+    }
+}
+
+// The section's header and every line up to the next section.
+void IniFile::RemoveSection(std::string const& section)
+{
+    bool in = false;
+    for (std::size_t i = 0; i < _lines.size(); ++i)
+    {
+        std::string const s = SectionOf(_lines[i]);
+        if (!s.empty())
+            in = SameName(s, section);
+        if (in)
+            _lines.erase(_lines.begin() + std::ptrdiff_t(i--));
+    }
+}
