@@ -21,6 +21,7 @@
 #include "ModulesScriptLoader.h"
 #include "OpenSSLCrypto.h"
 #include "OutdoorPvPMgr.h"
+#include "PluginMgr.h"
 #include "ProcessPriority.h"
 #include "RealmList.h"
 #include "Resolver.h"
@@ -544,10 +545,16 @@ int ServerMain(int argc, char** argv)
 
     SetProcessPriority("server.worldserver", sConfigMgr->GetOption<int32>(CONFIG_PROCESSOR_AFFINITY, 0), sConfigMgr->GetOption<bool>(CONFIG_HIGH_PRIORITY, true));
 
+    // Plugins register their configs and SQL folders, so they load before module configs and databases.
+    sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"));
     sConfigMgr->LoadModulesConfigs();
 
     sScriptMgr->SetScriptLoader(AddScripts);
-    sScriptMgr->SetModulesLoader(AddModulesScripts);
+    sScriptMgr->SetModulesLoader([]()
+    {
+        AddModulesScripts();
+        sPluginMgr->AddScripts();
+    });
 
     std::shared_ptr<void> sScriptMgrHandle(nullptr, [](void*) { sScriptMgr->Unload(); });
 
@@ -581,7 +588,15 @@ int ServerMain(int argc, char** argv)
     sMetric->Initialize(realm.Name, *ioContext, []() { METRIC_VALUE("online_players", sWorldSessionMgr->GetPlayerCount()); });
     std::shared_ptr<void> sMetricHandle(nullptr, [](void*) { sMetric->Unload(); });
 
-    Acore::Module::SetEnableModulesList(AC_MODULES_LIST);
+    static std::string enabledModules = []
+    {
+        std::string list = AC_MODULES_LIST;
+        for (PluginInfo const& plugin : sPluginMgr->GetPlugins())
+            if (plugin.loaded)
+                list += (list.empty() ? "" : ",") + plugin.id;
+        return list;
+    }();
+    Acore::Module::SetEnableModulesList(enabledModules);
 
     sSecretMgr->Initialize();
 

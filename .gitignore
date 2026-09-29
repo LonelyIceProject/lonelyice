@@ -1,0 +1,22 @@
+# Build output and IDE files
+build/
+out/
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Python
+__pycache__/
+*.pyc
+
+# Local notes, plans and agent files
+docs/local/
+.claude/
+.agents/
+CLAUDE.md
+AGENTS.md
+
+
+# UI dependencies built by tools/build-ui-deps.ps1
+deps/

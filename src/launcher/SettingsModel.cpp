@@ -105,8 +105,8 @@ SettingsModel::SettingsModel()
         M("bots", pb, "Боты ходят на поля боя", "AiPlayerbot.RandomBotJoinBG", 'b', "rst", "1"),
         M("bots", pb, "Гильдии ботов", "AiPlayerbot.AllowGuildBots", 'b', "rst", "1"),
 
-        M("mods", "mod_custom_tactics.conf", "Тактики ботов", "Tactics.Enable", 'b', "rst", "1"),
-        M("mods", "mod_custom_citizens.conf", "Жители городов", "Citizens.Enable", 'b', "rst", "1"),
+        M("mods", "mod_lonelyice_tactics.conf", "Тактики ботов", "Tactics.Enable", 'b', "rst", "1"),
+        M("mods", "mod_lonelyice_citizens.conf", "Жители городов", "Citizens.Enable", 'b', "rst", "1"),
         M("mods", "mod_ahbot.conf", "Аукцион: бот продаёт", "AuctionHouseBot.EnableSeller", 'b', "rst", "0"),
         M("mods", "mod_ahbot.conf", "Аукцион: бот покупает", "AuctionHouseBot.EnableBuyer", 'b', "rst", "0"),
         M("mods", "mod_aoe_loot.conf", "Сбор добычи по площади", "AOELoot.Enable", 'b', "rst", "1"),
@@ -166,6 +166,9 @@ void SettingsModel::Load(fs::path const& worldConf, LauncherSettings const& ls, 
             case SetSource::World:
             case SetSource::Module:
             {
+                // Settings of a module that is not installed (no config file) are not shown.
+                if (d.source == SetSource::Module && !conf(d).IsLoaded())
+                    continue;
                 v = conf(d).Get(d.key).value_or(d.def);
                 if (d.type == 'b' && d.conv == SetConv::None)
                     v = IsTrue(v) ? "1" : "0";

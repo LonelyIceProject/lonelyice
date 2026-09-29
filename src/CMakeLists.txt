@@ -1,7 +1,8 @@
 # LonelyIce: launcher UI + auth + world in one exe (Windows only).
 # UI deps (static SDL3, FreeType, RmlUi) are built by tools/build-ui-deps.ps1 into LONELYICE_DEPS.
+# The core (LONELYICE_CORE_DIR) is added by the top-level CMakeLists.txt; its targets are linked here.
 
-set(LONELYICE_DEPS "${CMAKE_SOURCE_DIR}/../deps" CACHE PATH "Folder with sdl3/, freetype/, rmlui/ and src/rmlui (backends)")
+set(LONELYICE_DEPS "${CMAKE_SOURCE_DIR}/deps" CACHE PATH "Folder with sdl3/, freetype/, rmlui/ and src/rmlui (backends)")
 set(LONELYICE_RMLUI_BACKENDS "${LONELYICE_DEPS}/src/rmlui/Backends")
 
 list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui")
@@ -13,14 +14,14 @@ if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}
   return()
 endif()
 
-set(AUTH_APP_DIR "${CMAKE_SOURCE_DIR}/src/server/apps/authserver")
-set(WORLD_APP_DIR "${CMAKE_SOURCE_DIR}/src/server/apps/worldserver")
+set(AUTH_APP_DIR "${LONELYICE_CORE_DIR}/src/server/apps/authserver")
+set(WORLD_APP_DIR "${LONELYICE_CORE_DIR}/src/server/apps/worldserver")
 
 file(GLOB_RECURSE LONELYICE_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
-set(TOOLS_DIR "${CMAKE_SOURCE_DIR}/src/tools")
+set(TOOLS_DIR "${LONELYICE_CORE_DIR}/src/tools")
 set(MMAPS_SOURCES
   "${TOOLS_DIR}/mmaps_generator/Config.cpp"
   "${TOOLS_DIR}/mmaps_generator/IntermediateValues.cpp"
@@ -121,11 +122,12 @@ endif()
 
 install(TARGETS lonelyice DESTINATION "${CMAKE_INSTALL_PREFIX}")
 
-# Release folder: the exe, the DLLs it needs (taken from the install folder) and setup/*.pak with SQL and default configs.
+# Release folder: LonelyIce.exe, the core libraries and plain worldserver/authserver, the plugins, the DLLs they need
+# (taken from the build or install folder) and setup/*.pak with the core SQL and default configs.
 #   cmake --build build --config RelWithDebInfo --target lonelyice_release
 set(LONELYICE_RELEASE_DIR "${CMAKE_BINARY_DIR}/lonelyice-release" CACHE PATH "Where lonelyice_release puts the release")
 file(CONFIGURE OUTPUT "${GEN_DIR}/copy-dlls.cmake" @ONLY CONTENT
-"foreach(dll libcrypto-3-x64.dll libssl-3-x64.dll legacy.dll libmysql.dll lua51.dll)
+"foreach(dll common.dll shared.dll database.dll game.dll libcrypto-3-x64.dll libssl-3-x64.dll legacy.dll)
   set(found OFF)
   foreach(dir \"\${BIN_DIR}\" \"@CMAKE_INSTALL_PREFIX@\")
     if (NOT found AND dir AND EXISTS \"\${dir}/\${dll}\")
@@ -138,11 +140,22 @@ file(CONFIGURE OUTPUT "${GEN_DIR}/copy-dlls.cmake" @ONLY CONTENT
   endif()
 endforeach()
 ")
+file(CONFIGURE OUTPUT "${GEN_DIR}/copy-extras.cmake" @ONLY CONTENT
+"foreach(exe worldserver.exe authserver.exe)
+  if (EXISTS \"\${SRC}/\${exe}\")
+    file(COPY \"\${SRC}/\${exe}\" DESTINATION \"\${DST}\")
+  endif()
+endforeach()
+if (EXISTS \"\${SRC}/plugins\")
+  file(COPY \"\${SRC}/plugins\" DESTINATION \"\${DST}\")
+endif()
+")
 add_custom_target(lonelyice_release
   COMMAND ${CMAKE_COMMAND} -E make_directory "${LONELYICE_RELEASE_DIR}/setup"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:lonelyice>" "${LONELYICE_RELEASE_DIR}"
   COMMAND ${CMAKE_COMMAND} -DBIN_DIR=$<TARGET_FILE_DIR:lonelyice> -P "${GEN_DIR}/copy-dlls.cmake"
-  COMMAND "${LONELYICE_RELEASE_DIR}/LonelyIce.exe" --pack "${CMAKE_SOURCE_DIR}" "${LONELYICE_RELEASE_DIR}/setup"
+  COMMAND ${CMAKE_COMMAND} -DSRC=$<TARGET_FILE_DIR:lonelyice> -DDST=${LONELYICE_RELEASE_DIR} -P "${GEN_DIR}/copy-extras.cmake"
+  COMMAND "${LONELYICE_RELEASE_DIR}/LonelyIce.exe" --pack "${LONELYICE_CORE_DIR}" "${LONELYICE_RELEASE_DIR}/setup"
   DEPENDS lonelyice
   VERBATIM)
 set_target_properties(lonelyice_release PROPERTIES FOLDER "server")

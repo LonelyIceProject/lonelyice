@@ -1,0 +1,24 @@
+[submodule "external/azerothcore"]
+	path = external/azerothcore
+	url = https://github.com/LonelyIceProject/azerothcore-wotlk.git
+	branch = main
+[submodule "plugins/mod-playerbots"]
+	path = plugins/mod-playerbots
+	url = https://github.com/LonelyIceProject/mod-playerbots.git
+	branch = main
+[submodule "plugins/mod-lonelyice-tactics"]
+	path = plugins/mod-lonelyice-tactics
+	url = https://github.com/LonelyIceProject/mod-lonelyice-tactics.git
+	branch = main
+[submodule "plugins/mod-lonelyice-citizens"]
+	path = plugins/mod-lonelyice-citizens
+	url = https://github.com/LonelyIceProject/mod-lonelyice-citizens.git
+	branch = main
+[submodule "plugins/mod-lonelyice-waystones"]
+	path = plugins/mod-lonelyice-waystones
+	url = https://github.com/LonelyIceProject/mod-lonelyice-waystones.git
+	branch = main
+[submodule "plugins/mod-lonelyice-qol"]
+	path = plugins/mod-lonelyice-qol
+	url = https://github.com/LonelyIceProject/mod-lonelyice-qol.git
+	branch = main

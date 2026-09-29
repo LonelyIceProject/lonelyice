@@ -1,0 +1,7 @@
+* text=auto
+*.png binary
+*.ico binary
+*.ttf binary
+*.tga binary
+*.rgba binary
+

@@ -3,6 +3,7 @@
 #include "ConfigEnv.h"
 #include "GameClient.h"
 #include "Pak.h"
+#include "Plugins.h"
 #include "TextUtil.h"
 #include <algorithm>
 #include <fstream>
@@ -345,6 +346,19 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
     if (!read)
         return false;
 
+    // Plugin configs (the server falls back to the .dist in the plugin folder, but LonelyIce edits them).
+    for (PluginManifest const& plugin : ReadPlugins(o.exe.parent_path() / "plugins"))
+    {
+        if (plugin.configDist.empty() || !fs::exists(plugin.configDist, ec))
+            continue;
+        fs::path conf = configs / "modules" / ConfigFileName(plugin);
+        if (!fs::exists(conf, ec))
+        {
+            fs::copy_file(plugin.configDist, conf, ec);
+            created.push_back(conf);
+        }
+    }
+
     for (fs::path const& conf : created)
     {
         ConfFile f;
@@ -423,6 +437,7 @@ bool Installer::RunDatabases()
 
     std::vector<std::pair<std::wstring, std::wstring>> env = {
         { L"AC_DISABLE_INTERACTIVE", L"1" },
+        { L"AC_PLUGINS_DIR", (_o.exe.parent_path() / "plugins").wstring() },
         { Utf8ToWide(EnvName("Updates.EnableDatabases")), L"7" },
         { Utf8ToWide(EnvName("Playerbots.Updates.EnableDatabases")), L"1" },
         { L"LONELYICE_REALMNAME", Utf8ToWide(_o.realmName) } };
@@ -598,6 +613,18 @@ bool Installer::RunClient()
     {
         GameClient::ClearWdb(_o.client);
         Log("Кэш клиента очищен");
+    }
+    // Client addons of the installed plugins.
+    std::error_code ec;
+    for (PluginManifest const& plugin : ReadPlugins(_o.exe.parent_path() / "plugins"))
+    {
+        for (fs::path const& addon : plugin.addons)
+        {
+            fs::path dst = _o.client / "Interface" / "AddOns" / addon.filename();
+            fs::create_directories(dst, ec);
+            fs::copy(addon, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+            Log(ec ? "Аддон " + addon.filename().string() + " не скопирован: " + ec.message() : "Аддон " + addon.filename().string());
+        }
     }
     if (_o.accountName && !_o.login.empty())
     {

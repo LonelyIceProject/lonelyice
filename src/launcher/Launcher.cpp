@@ -1218,6 +1218,7 @@ namespace
         }
         AppendLog("-- запуск: " + WideToUtf8(config.wstring()), "me");
         EnvList env = ModuleConfigOverrides(config, Root());
+        env.emplace_back(L"AC_PLUGINS_DIR", (_exeDir / "plugins").wstring());
         if (!_server->Start(WideToUtf8(_exe.wstring()), WideToUtf8(config.wstring()), WideToUtf8(Root().wstring()), env))
             Message("Не удалось запустить сервер: " + _server->GetFailReason());
         RefreshServerView();
@@ -1519,6 +1520,9 @@ namespace
         _setGroups.clear();
         for (SetGroup const& g : _settingsModel.Groups())
         {
+            auto const& vals = _settingsModel.Values();
+            if (std::none_of(vals.begin(), vals.end(), [&](SetValue const& v) { return v.def->group == g.id; }))
+                continue;
             _setGroups.push_back({ g.id, g.name, _settingsModel.ChangedCount(g.id) });
             if (g.id == _setGroup)
                 _setHint = g.hint;
