@@ -105,7 +105,7 @@ client.no_locales = In Data\ wurden keine Sprachen gefunden.
 client.rl_foreign = {0}: fremde Adresse.
 client.rl_foreign_fix = {0}: fremde Adresse, der Launcher korrigiert sie beim Spielstart.
 client.rl_some_foreign = Die Startsprache ist hervorgehoben; fremde Adresse in anderen Sprachen: {0}.
-client.rl_ok = Die Startsprache ist hervorgehoben; überall 127.0.0.1.
+client.rl_ok = Die Startsprache ist hervorgehoben; überall {0}.
 
 # Neuigkeiten im Überblick
 news.setup = Serverdaten sind noch nicht vorbereitet

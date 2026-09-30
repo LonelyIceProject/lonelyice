@@ -40,7 +40,6 @@ namespace
 {
     constexpr int MaxLogLines = 600;
     constexpr int RestartExitCode = 2;      // the core's RESTART_EXIT_CODE
-    constexpr char RealmHost[] = "127.0.0.1";
 
     struct Opt { Rml::String id, label; };
     struct LocaleChip { Rml::String name, cls; bool launch = false; };
@@ -290,6 +289,7 @@ namespace
         fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
+        std::string LoginPort() const;
 
         fs::path _exe, _exeDir;
         LauncherSettings _settings;
@@ -564,6 +564,14 @@ namespace
         f.Load(ServerConfig());
         fs::path p = fs::u8path(f.Get(key).value_or(def));
         return p.is_absolute() ? p : Root() / p;
+    }
+
+    // RealmServerPort of the server config: the port the game's realmlist needs.
+    std::string Launcher::LoginPort() const
+    {
+        ConfFile f;
+        f.Load(ServerConfig());
+        return f.Get("RealmServerPort").value_or("3724");
     }
 
     int Launcher::Run(int argc, char** argv)
@@ -1643,11 +1651,12 @@ namespace
             }
 
             std::string launch = LaunchLocale();
+            std::string const port = LoginPort();
             int foreign = 0;
             bool launchOk = true;
             for (ClientLocale const& loc : _client.locales)
             {
-                std::string cls = loc.realmlist == RealmHost ? "ok" : loc.realmlist.empty() ? "bad" : "warn";
+                std::string cls = GameClient::IsLocalRealmlist(loc.realmlist, port) ? "ok" : loc.realmlist.empty() ? "bad" : "warn";
                 if (cls != "ok")
                 {
                     ++foreign;
@@ -1666,7 +1675,7 @@ namespace
             else if (foreign)
                 _rlNote = Tr("client.rl_some_foreign", foreign);
             else
-                _rlNote = Tr("client.rl_ok");
+                _rlNote = Tr("client.rl_ok", GameClient::LocalRealmlist(port));
         }
         RefreshServerView();
         RefreshTray();
@@ -2027,9 +2036,10 @@ namespace
         if (!_client.valid)
             return;
 
+        std::string const port = LoginPort();
         std::vector<std::string> todo;
         for (ClientLocale const& loc : _client.locales)
-            if (loc.realmlist != RealmHost && (locales.empty() || std::find(locales.begin(), locales.end(), loc.name) != locales.end()))
+            if (!GameClient::IsLocalRealmlist(loc.realmlist, port) && (locales.empty() || std::find(locales.begin(), locales.end(), loc.name) != locales.end()))
                 todo.push_back(loc.name);
         if (todo.empty())
         {
@@ -2039,7 +2049,8 @@ namespace
         }
 
         std::string error;
-        if (!GameClient::WriteRealmlist(_client, RealmHost, todo, error))
+        std::string const host = GameClient::LocalRealmlist(port);
+        if (!GameClient::WriteRealmlist(_client, host, todo, error))
         {
             Message(error);
             return;
@@ -2047,7 +2058,7 @@ namespace
         std::string list;
         for (std::string const& l : todo)
             list += (list.empty() ? "" : ", ") + l;
-        AddEvent("realmlist 127.0.0.1: " + list);
+        AddEvent("realmlist " + host + ": " + list);
         RefreshClient();
     }
 

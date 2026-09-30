@@ -105,7 +105,7 @@ client.no_locales = Aucune langue trouvée dans Data\.
 client.rl_foreign = {0} : adresse étrangère.
 client.rl_foreign_fix = {0} : adresse étrangère, le lanceur la corrige au démarrage du jeu.
 client.rl_some_foreign = La langue de lancement est en surbrillance ; adresse étrangère dans d'autres langues : {0}.
-client.rl_ok = La langue de lancement est en surbrillance ; 127.0.0.1 partout.
+client.rl_ok = La langue de lancement est en surbrillance ; {0} partout.
 
 # actualités sur l'aperçu
 news.setup = Les données du serveur ne sont pas encore prêtes

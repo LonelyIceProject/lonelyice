@@ -105,7 +105,7 @@ client.no_locales = No locales found in Data\.
 client.rl_foreign = {0}: foreign address.
 client.rl_foreign_fix = {0}: foreign address, the launcher fixes it when the game starts.
 client.rl_some_foreign = The launch language is highlighted; foreign address in other locales: {0}.
-client.rl_ok = The launch language is highlighted; 127.0.0.1 everywhere.
+client.rl_ok = The launch language is highlighted; {0} everywhere.
 
 # news on the overview
 news.setup = Server data is not prepared yet

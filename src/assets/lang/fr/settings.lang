@@ -47,9 +47,11 @@ set.diff.ignore_raid.hint = Permet de partir en raid avec un groupe de 5 bots
 set.diff.quests_ignore_raid = Quêtes de raid dans un groupe normal
 
 set.perf.bind_local = Cet ordinateur uniquement
-set.perf.bind_local.hint = Désactiver pour se connecter depuis le réseau local
+set.perf.bind_local.hint = Désactivé : les ordinateurs du réseau local peuvent aussi jouer : le royaume reçoit l'adresse LAN de cet ordinateur, cet ordinateur garde 127.0.0.1. Autorisez les ports de connexion et du monde dans le pare-feu ; les autres ordinateurs utilisent set realmlist <adresse de cet ordinateur>.
 set.perf.realm_port = Port de connexion
+set.perf.realm_port.hint = Le jeu trouve le serveur de connexion par sa realmlist : avec un autre port que 3724, elle doit indiquer 127.0.0.1:<port>, que le lanceur écrit si « Vérifier realmlist avant le lancement » est activé ; les autres ordinateurs ont besoin de <adresse>:<port>.
 set.perf.world_port = Port du monde
+set.perf.world_port.hint = Écrit dans la liste des royaumes de la base de connexion au prochain démarrage.
 set.perf.soap = SOAP pour les outils
 set.perf.soap_port = Port SOAP
 set.perf.map_threads = Threads de mise à jour des cartes

@@ -78,7 +78,7 @@ LonelyIce changes these files in the game folder:
 
 | Path | When |
 |---|---|
-| `Data/<locale>/realmlist.wtf` | Set to `127.0.0.1` by the wizard and before each game start (`[client] writeRealmlist`). The first overwrite keeps `realmlist.wtf.bak`. |
+| `Data/<locale>/realmlist.wtf` | Set to `127.0.0.1` (`127.0.0.1:<port>` with a `RealmServerPort` other than 3724) by the wizard and before each game start (`[client] writeRealmlist`). The first overwrite keeps `realmlist.wtf.bak`. |
 | `WTF/Config.wtf` | `SET locale` before each start (`[client] locale`), `SET realmList` when present, `SET accountName` by the wizard. |
 | `Cache/WDB/` | Deleted before each start (`[client] clearWdb`) and by the wizard. |
 | `Data/<locale>/patch-<locale>-4.MPQ` | The plugins' client patch, built by the server at start when plugins have patches, removed when none has. An archive of that name LonelyIce did not write is never deleted: before LonelyIce writes its own, it moves that one to the first free name of `patch-<locale>-4.MPQ.bak`, `.bak2`, `.bak3`, …; with nothing to write it is left alone. |

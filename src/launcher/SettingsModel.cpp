@@ -96,8 +96,8 @@ SettingsModel::SettingsModel()
         W("diff", "set.diff.quests_ignore_raid", "Quests.IgnoreRaid", 'b', "rel", "0"),
 
         W("perf", "set.perf.bind_local", "BindIP", 'b', "rst", "0.0.0.0", "set.perf.bind_local.hint"),
-        W("perf", "set.perf.realm_port", "RealmServerPort", 'n', "rst", "3724"),
-        W("perf", "set.perf.world_port", "WorldServerPort", 'n', "rst", "8085"),
+        W("perf", "set.perf.realm_port", "RealmServerPort", 'n', "rst", "3724", "set.perf.realm_port.hint"),
+        W("perf", "set.perf.world_port", "WorldServerPort", 'n', "rst", "8085", "set.perf.world_port.hint"),
         W("perf", "set.perf.soap", "SOAP.Enabled", 'b', "rst", "0"),
         W("perf", "set.perf.soap_port", "SOAP.Port", 'n', "rst", "7878"),
         W("perf", "set.perf.map_threads", "MapUpdate.Threads", 'n', "rst", "1", "set.perf.map_threads.hint"),

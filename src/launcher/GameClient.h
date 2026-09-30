@@ -32,6 +32,11 @@ namespace LonelyIce
         // or the default Wine prefix.
         std::filesystem::path Detect(std::filesystem::path const& saved, std::filesystem::path const& exeDir);
         ClientInfo Inspect(std::filesystem::path const& dir);
+        // The realmlist of a login server on this computer: "127.0.0.1", with ":<port>" when the port is not the
+        // client's default 3724 (the 3.3.5a client takes "host:port").
+        std::string LocalRealmlist(std::string const& port);
+        // Whether a realmlist value reaches the login server on this computer at that port (127.0.0.1 or localhost).
+        bool IsLocalRealmlist(std::string const& value, std::string const& port);
         // Writes "set realmlist <host>" for the given locales (all when empty); the first overwrite keeps a realmlist.wtf.bak.
         bool WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error);
         std::string ReadConfigLocale(std::filesystem::path const& dir);   // SET locale from WTF\Config.wtf

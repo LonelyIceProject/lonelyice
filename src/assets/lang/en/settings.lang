@@ -47,9 +47,11 @@ set.diff.ignore_raid.hint = Lets you raid with a group of 5 bots
 set.diff.quests_ignore_raid = Raid quests in a normal group
 
 set.perf.bind_local = This computer only
-set.perf.bind_local.hint = Turn off to connect from the local network
+set.perf.bind_local.hint = Off: computers in the local network can play too: the realm gets this computer's LAN address, this computer keeps 127.0.0.1. Allow the login and world ports in the firewall; the other computers use set realmlist <this computer's address>.
 set.perf.realm_port = Login port
+set.perf.realm_port.hint = The game finds the login server through its realmlist: with a port other than 3724 it has to read 127.0.0.1:<port>, which the launcher writes when “Check realmlist before launch” is on; other computers need <address>:<port>.
 set.perf.world_port = World port
+set.perf.world_port.hint = Written into the realm list of the login database on the next start.
 set.perf.soap = SOAP for tools
 set.perf.soap_port = SOAP port
 set.perf.map_threads = Map update threads

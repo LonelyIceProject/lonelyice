@@ -105,7 +105,7 @@ client.no_locales = No se encontraron idiomas en Data\.
 client.rl_foreign = {0}: dirección externa.
 client.rl_foreign_fix = {0}: dirección externa, el lanzador la corrige al iniciar el juego.
 client.rl_some_foreign = El idioma de inicio está resaltado; dirección externa en otros idiomas: {0}.
-client.rl_ok = El idioma de inicio está resaltado; 127.0.0.1 en todos.
+client.rl_ok = El idioma de inicio está resaltado; {0} en todos.
 
 # noticias en el resumen
 news.setup = Los datos del servidor aún no están preparados

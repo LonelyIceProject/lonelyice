@@ -47,9 +47,11 @@ set.diff.ignore_raid.hint = Permite ir de banda con un grupo de 5 bots
 set.diff.quests_ignore_raid = Misiones de banda en un grupo normal
 
 set.perf.bind_local = Solo este equipo
-set.perf.bind_local.hint = Desactívalo para conectarte desde la red local
+set.perf.bind_local.hint = Desactivado: también pueden jugar los equipos de la red local: el reino recibe la dirección LAN de este equipo y este equipo sigue usando 127.0.0.1. Permite los puertos de inicio de sesión y del mundo en el cortafuegos; los otros equipos usan set realmlist <dirección de este equipo>.
 set.perf.realm_port = Puerto de inicio de sesión
+set.perf.realm_port.hint = El juego encuentra el servidor de inicio de sesión por su realmlist: con un puerto distinto de 3724 debe decir 127.0.0.1:<puerto>, que el lanzador escribe si «Comprobar realmlist antes de iniciar» está activado; otros equipos necesitan <dirección>:<puerto>.
 set.perf.world_port = Puerto del mundo
+set.perf.world_port.hint = Se escribe en la lista de reinos de la base de datos de inicio de sesión en el próximo inicio.
 set.perf.soap = SOAP para herramientas
 set.perf.soap_port = Puerto SOAP
 set.perf.map_threads = Hilos de actualización de mapas

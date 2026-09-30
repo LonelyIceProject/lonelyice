@@ -219,6 +219,33 @@ bool LonelyIce::GameClient::SetConfigValue(fs::path const& dir, std::string cons
     return SetConfigWtf(dir, key, value, true);
 }
 
+namespace
+{
+    constexpr char DefaultLoginPort[] = "3724";
+
+    std::string PortOrDefault(std::string port)
+    {
+        port.erase(0, port.find_first_not_of(" \t\""));
+        port.erase(port.find_last_not_of(" \t\"") + 1);
+        return port.empty() ? DefaultLoginPort : port;
+    }
+}
+
+std::string LonelyIce::GameClient::LocalRealmlist(std::string const& port)
+{
+    std::string const p = PortOrDefault(port);
+    return p == DefaultLoginPort ? "127.0.0.1" : "127.0.0.1:" + p;
+}
+
+bool LonelyIce::GameClient::IsLocalRealmlist(std::string const& value, std::string const& port)
+{
+    std::size_t const colon = value.find(':');
+    std::string host = value.substr(0, colon);
+    std::transform(host.begin(), host.end(), host.begin(), ::tolower);
+    std::string const valuePort = colon == std::string::npos ? DefaultLoginPort : value.substr(colon + 1);
+    return (host == "127.0.0.1" || host == "localhost") && valuePort == PortOrDefault(port);
+}
+
 bool LonelyIce::GameClient::WriteRealmlist(ClientInfo const& info, std::string const& host, std::vector<std::string> const& locales, std::string& error)
 {
     for (ClientLocale const& loc : info.locales)

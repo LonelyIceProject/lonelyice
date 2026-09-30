@@ -53,6 +53,10 @@
 #include <atomic>
 #include <map>
 #include <set>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/host_name.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <csignal>
 #include <cstdio>
@@ -663,6 +667,75 @@ namespace
         DatabaseLibrary::End();
     }
 
+    // 10/8, 172.16/12, 192.168/16: addresses of a local network (not a VPN's 100.64/10, not link-local 169.254/16).
+    bool IsPrivate(boost::asio::ip::address const& a)
+    {
+        if (!a.is_v4())
+            return false;
+        auto const b = a.to_v4().to_bytes();
+        return b[0] == 10 || (b[0] == 172 && (b[1] & 0xF0) == 16) || (b[0] == 192 && b[1] == 168);
+    }
+
+    // This computer's address in the local network: the one the system sends from by default (a UDP "connect" sends
+    // nothing) when it is a private address, else the first private IPv4 address of the host name, else the default
+    // one; empty when there is none.
+    std::string LanAddress()
+    {
+        boost::asio::io_context io;
+        boost::system::error_code ec;
+        boost::asio::ip::address routed;
+        boost::asio::ip::udp::socket probe(io);
+        probe.open(boost::asio::ip::udp::v4(), ec);
+        if (!ec)
+            probe.connect(boost::asio::ip::udp::endpoint(boost::asio::ip::make_address_v4("192.0.2.1"), 9), ec);
+        if (!ec)
+        {
+            boost::asio::ip::address const local = probe.local_endpoint(ec).address();
+            if (!ec && !local.is_loopback() && !local.is_unspecified())
+                routed = local;
+        }
+        if (IsPrivate(routed))
+            return routed.to_string();
+
+        boost::asio::ip::tcp::resolver resolver(io);
+        auto const results = resolver.resolve(boost::asio::ip::tcp::v4(), boost::asio::ip::host_name(ec), "", ec);
+        if (!ec)
+            for (auto const& entry : results)
+                if (IsPrivate(entry.endpoint().address()))
+                    return entry.endpoint().address().to_string();
+        return routed.is_unspecified() ? std::string() : routed.to_string();
+    }
+
+    // The realm's entry in auth.realmlist follows the config on every start: the port is WorldServerPort; with
+    // BindIP on a loopback address (this computer only) the realm is at 127.0.0.1, otherwise clients in the local
+    // network get BindIP, or this computer's LAN address when BindIP is 0.0.0.0 (LONELYICE_REALM_ADDRESS overrides
+    // it), while clients on this computer keep 127.0.0.1 (localAddress, see Realm::GetAddressForClient).
+    void UpdateRealmAddress()
+    {
+        uint32 const port = uint32(sConfigMgr->GetOption<int32>("WorldServerPort", 8085));
+        std::string const bind = sConfigMgr->GetOption<std::string>("BindIP", "0.0.0.0");
+        boost::system::error_code ec;
+        boost::asio::ip::address const bindAddress = boost::asio::ip::make_address(bind, ec);
+
+        std::string address = "127.0.0.1";
+        if (ec || !bindAddress.is_loopback())
+        {
+            address = Env("LONELYICE_REALM_ADDRESS");
+            if (address.empty())
+                address = !ec && !bindAddress.is_unspecified() ? bind : LanAddress();
+            if (address.empty())
+            {
+                LOG_WARN("server.worldserver", "No address in the local network found; the realm stays at 127.0.0.1");
+                address = "127.0.0.1";
+            }
+        }
+
+        LoginDatabase.EscapeString(address);
+        LoginDatabase.DirectExecute("UPDATE realmlist SET address = '{}', localAddress = '127.0.0.1', localSubnetMask = '255.0.0.0', "
+            "port = {} WHERE id = {}", address, port, realm.Id.Realm);
+        LOG_INFO("server.worldserver", "Realm address {}:{} (127.0.0.1 for clients on this computer)", address, port);
+    }
+
     bool LoadRealmInfo(Acore::Asio::IoContext& ioContext)
     {
         QueryResult result = LoginDatabase.Query("SELECT id, name, address, localAddress, localSubnetMask, port, icon, flag, timezone, allowedSecurityLevel, population, gamebuild FROM realmlist WHERE id = {}", realm.Id.Realm);
@@ -947,6 +1020,7 @@ int ServerMain(int argc, char** argv)
     }
 
     LoginDatabase.DirectExecute("UPDATE realmlist SET flag = (flag & ~{}) | {} WHERE id = '{}'", REALM_FLAG_OFFLINE, REALM_FLAG_VERSION_MISMATCH, realm.Id.Realm);
+    UpdateRealmAddress();
 
     if (!LoadRealmInfo(*ioContext))
     {

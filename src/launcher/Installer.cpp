@@ -247,6 +247,13 @@ std::string Installer::SqlStamp(fs::path const& setupDir)
     return std::to_string(size) + "-" + std::to_string(time);
 }
 
+std::string Installer::LoginPort(fs::path const& root)
+{
+    ConfFile f;
+    f.Load(root / "configs" / "worldserver.conf");
+    return f.Get("RealmServerPort").value_or("3724");
+}
+
 bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
 {
     fs::path configs = o.root / "configs";
@@ -625,12 +632,13 @@ bool Installer::RunClient()
     std::string error;
     if (_o.realmlist)
     {
-        if (!GameClient::WriteRealmlist(info, "127.0.0.1", {}, error))
+        std::string const host = GameClient::LocalRealmlist(LoginPort(_o.root));
+        if (!GameClient::WriteRealmlist(info, host, {}, error))
         {
             Fail("client", error);
             return false;
         }
-        Log("realmlist.wtf: 127.0.0.1");
+        Log("realmlist.wtf: " + host);
     }
     Progress("client", 0.4f);
     if (_o.clearWdb)

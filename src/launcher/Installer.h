@@ -74,6 +74,8 @@ namespace LonelyIce
         static bool PrepareConfigs(InstallOptions const& o, std::string& error);
         // Size and time of setup/sql.pak: tells whether a newer release brought database updates.
         static std::string SqlStamp(std::filesystem::path const& setupDir);
+        // RealmServerPort of <root>/configs/worldserver.conf ("3724" when not set).
+        static std::string LoginPort(std::filesystem::path const& root);
 
     private:
         void Run();

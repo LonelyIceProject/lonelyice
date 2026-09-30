@@ -47,9 +47,11 @@ set.diff.ignore_raid.hint = Ermöglicht Schlachtzüge mit einer Gruppe aus 5 Bot
 set.diff.quests_ignore_raid = Schlachtzug-Quests in einer normalen Gruppe
 
 set.perf.bind_local = Nur dieser Computer
-set.perf.bind_local.hint = Ausschalten, um aus dem lokalen Netzwerk zu verbinden
+set.perf.bind_local.hint = Aus: auch Computer im lokalen Netzwerk können spielen: der Realm bekommt die LAN-Adresse dieses Computers, dieser Computer behält 127.0.0.1. Login- und Welt-Port in der Firewall freigeben; die anderen Computer nutzen set realmlist <Adresse dieses Computers>.
 set.perf.realm_port = Login-Port
+set.perf.realm_port.hint = Das Spiel findet den Login-Server über seine Realmlist: mit einem anderen Port als 3724 muss dort 127.0.0.1:<Port> stehen, was der Launcher bei eingeschaltetem „realmlist vor dem Start prüfen“ schreibt; andere Computer brauchen <Adresse>:<Port>.
 set.perf.world_port = Welt-Port
+set.perf.world_port.hint = Wird beim nächsten Start in die Realmliste der Login-Datenbank geschrieben.
 set.perf.soap = SOAP für Werkzeuge
 set.perf.soap_port = SOAP-Port
 set.perf.map_threads = Threads für Kartenaktualisierung
