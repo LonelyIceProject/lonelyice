@@ -23,7 +23,8 @@ dataCache=0
 - `[section]` and `key=value` lines; lines starting with `;` or `#` are comments. Section and key names ignore
   case. Values are taken as written (after trimming spaces); quotes are not removed.
 - UTF-8 (a file in UTF-16 with a byte order mark is read as well). Paths are UTF-8.
-- Flags are on only when the value is exactly `1`; anything else is off.
+- Flags accept `1`/`0`, `true`/`false`, `yes`/`no` and `on`/`off` in any case; any other value (or none) keeps
+  the flag's default. The launcher writes `1` and `0`.
 - Saving replaces the lines of the keys the launcher knows and keeps everything else (comments, unknown keys).
   Every known key is written, with its current value, on every save: edit the file while the launcher is closed,
   or a running launcher overwrites the change the next time it saves.

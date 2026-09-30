@@ -2,14 +2,22 @@
 #include "IniFile.h"
 #include "Platform.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <string_view>
 
 namespace
 {
+    // 1/0, true/false, yes/no, on/off in any case; anything else keeps the default.
     bool ReadBool(LonelyIce::IniFile const& ini, char const* section, char const* key, bool def)
     {
-        return ini.Get(section, key, def ? "1" : "0") == "1";
+        std::string v = ini.Get(section, key, "");
+        std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (v == "1" || v == "true" || v == "yes" || v == "on")
+            return true;
+        if (v == "0" || v == "false" || v == "no" || v == "off")
+            return false;
+        return def;
     }
 
     int ReadInt(LonelyIce::IniFile const& ini, char const* section, char const* key, int def)
