@@ -96,8 +96,12 @@ Connection strings (`LoginDatabaseInfo`, `WorldDatabaseInfo`, `CharacterDatabase
 | `host;port_or_socket;user;password;database[;ssl]`, or with `mysql:` | MySQL; needs a plugin that registers the MySQL backend. |
 | `pgsql:host;port;user;password;database[;ssl]` | PostgreSQL; no driver exists yet. |
 
-The shipped `.conf.dist` files keep AzerothCore's MySQL defaults; change them to `sqlite:` strings for a server
-without a MySQL plugin. authserver and worldserver use the same auth file.
+The shipped `.conf.dist` files (worldserver, authserver, dbimport) default to SQLite files relative to the working
+directory: `sqlite:db/auth.sqlite`, `sqlite:db/world.sqlite`, `sqlite:db/characters.sqlite`, created on the first
+start with `Updates.AutoSetup = 1`; their comments show the MySQL form, which needs a backend plugin. authserver
+and worldserver use the same auth file. mod-playerbots' `playerbots.conf.dist` defaults to
+`sqlite:db/playerbots.sqlite;attach=characters=db/characters.sqlite` (the alias must be the characters database's
+logical name, `characters` with the defaults).
 
 New settings in `worldserver.conf` and `authserver.conf`:
 
@@ -142,7 +146,11 @@ set with `SET @x = ...`, `CREATE TABLE ... LIKE`, `ALTER TABLE`, `DELETE t FROM 
 For the core's own files and for modules in `modules/`, a file that cannot be translated gets a replacement of the
 same name in `data/sql/overrides/<backend>/` (`sqlite`), in the source tree or in the module's folder; the updater
 logs `Using override ... for ...`. Plugins do not use overrides: their SQL must translate as written
-([Plugin format](/docs/plugin-format), section 5).
+([Plugin format](/docs/plugin-format), section 5). The one exception is a plugin that updates a database of its own
+through `ModuleDBUpdater` with its plugin folder as the source: playerbots does, and keeps
+`data/sql/overrides/sqlite/2025_04_26_00.sql` for an upstream update that creates an index through
+`INFORMATION_SCHEMA` and `PREPARE`. The auth, characters and world SQL of every plugin still has to translate as
+written.
 
 ### Statements in code
 
