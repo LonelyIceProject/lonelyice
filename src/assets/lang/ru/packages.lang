@@ -88,6 +88,8 @@ patch.recipe.field_forbidden = {0}: поле {1} задать нельзя
 
 # packages/PluginPatches.cpp
 patch.plugin.removed = {0}: патчи плагина удалены
+patch.plugin.disabled = {0}: плагин выключен, его патчи убраны (именованные id сохранены)
+patch.plugin.ids_released = {0}: именованные id освобождены
 patch.plugin.no_id_table = {0}: нет таблицы {1} для выдачи id
 patch.plugin.no_server_table = {0}: нет серверной таблицы {1}
 patch.plugin.format_mismatch = {0}: формат ядра не совпадает с файлом

@@ -88,6 +88,8 @@ patch.recipe.field_forbidden = {0}: field {1} cannot be set
 
 # packages/PluginPatches.cpp
 patch.plugin.removed = {0}: plugin patches removed
+patch.plugin.disabled = {0}: plugin disabled, its patches removed (its named ids are kept)
+patch.plugin.ids_released = {0}: named ids released
 patch.plugin.no_id_table = {0}: no table {1} to assign ids from
 patch.plugin.no_server_table = {0}: no server table {1}
 patch.plugin.format_mismatch = {0}: the core format does not match the file

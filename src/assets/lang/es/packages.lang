@@ -88,6 +88,8 @@ patch.recipe.field_forbidden = {0}: el campo {1} no se puede establecer
 
 # packages/PluginPatches.cpp
 patch.plugin.removed = {0}: parches del plugin eliminados
+patch.plugin.disabled = {0}: plugin desactivado, sus parches eliminados (sus ids con nombre se conservan)
+patch.plugin.ids_released = {0}: ids con nombre liberados
 patch.plugin.no_id_table = {0}: no hay tabla {1} de la que asignar id
 patch.plugin.no_server_table = {0}: no hay tabla de servidor {1}
 patch.plugin.format_mismatch = {0}: el formato del núcleo no coincide con el archivo

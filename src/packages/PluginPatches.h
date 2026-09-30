@@ -29,8 +29,9 @@ namespace LonelyIce::PluginPatches
     };
 
     // Brings the databases (and the client) in line with the installed plugins: plugins that are gone are
-    // uninstalled, new or changed recipes are (re)installed. Call after the databases are updated and before
-    // the world loads its DBC stores.
+    // uninstalled, new or changed recipes are (re)installed. A disabled plugin (pluginsDir/.disabled) keeps its
+    // named ids for when it is enabled again; a removed one's ids are released. Call after the databases are
+    // updated and before the world loads its DBC stores.
     Result Apply(Options const& options);
 }
 

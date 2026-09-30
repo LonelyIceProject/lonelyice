@@ -279,8 +279,8 @@ lock when the process ends, however it ends. While the lock is held:
 
 `list`, `available` and `pack` work while the server runs.
 
-Removing or disabling a plugin does not undo its SQL updates: its tables and rows stay in the databases. Only its
-patch recipes are undone on the next start (see below).
+Removing or disabling a plugin does not undo its SQL updates: its tables and rows stay in the databases. Its patch
+recipes are undone on the next start (see below); a disabled plugin keeps its named ids, a removed one loses them.
 
 ## On the next server start
 
@@ -304,8 +304,9 @@ The server (`LonelyIce --server`, started by the launcher) runs these steps in o
 4. **Patch recipes** ([Plugin format](/docs/plugin-format), section 7).
    - Each plugin's stamp in the world table `plugin_patches` covers the recipe text, the plugin version and the
      installer version. A plugin whose stamp changed is uninstalled and installed again with the same named ids.
-   - Plugins no longer in `plugins/` (removed or disabled) have their `uninstall` SQL run and their named ids
-     released.
+   - Plugins no longer in `plugins/` have their `uninstall` SQL run. A disabled plugin (in `plugins/.disabled/`)
+     keeps its named ids in `plugin_ids`, so enabling it again gives it the same ids; a removed plugin's ids are
+     released, also when it was removed while disabled.
    - A plugin with a server library that did not load is left out.
    - A failure is logged as `Plugin patches failed: …`, and the server still starts. `--apply` and `--deploy` report
      it as failed.

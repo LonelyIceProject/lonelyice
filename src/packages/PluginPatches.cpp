@@ -185,16 +185,36 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
         res.changed = true;
     };
 
-    // Plugins that are gone: their rows, SQL and ids go.
+    // Disabled plugins (plugins/.disabled) keep their named ids, so enabling one again gives it the same ids.
+    std::set<std::string> disabled;
+    for (PluginManifest const& p : ReadPlugins(o.pluginsDir / ".disabled"))
+        if (!present.count(p.id))
+            disabled.insert(p.id);
+
+    // Plugins that are gone: their rows and SQL go; the ids too when the plugin was removed.
     std::vector<std::string> gone;
     for (auto const& [plugin, state] : installed)
         if (!present.count(plugin))
             gone.push_back(plugin);
     for (std::string const& plugin : gone)
     {
-        uninstall(plugin, true);
-        res.log.push_back(Tr("patch.plugin.removed", plugin));
+        bool const keepIds = disabled.count(plugin) > 0;
+        uninstall(plugin, !keepIds);
+        res.log.push_back(Tr(keepIds ? "patch.plugin.disabled" : "patch.plugin.removed", plugin));
     }
+
+    // Ids of plugins removed while they were disabled (their patches were already undone).
+    std::set<std::string> owners;
+    for (auto const& [qualified, id] : ids)
+        owners.insert(qualified.substr(0, qualified.find('/')));
+    for (std::string const& plugin : owners)
+        if (!present.count(plugin) && !disabled.count(plugin))
+        {
+            WorldDatabase.DirectExecute("DELETE FROM `plugin_ids` WHERE `plugin` = '" + Escaped(plugin) + "'");
+            std::erase_if(ids, [&](auto const& e) { return e.first.rfind(plugin + "/", 0) == 0; });
+            res.changed = true;
+            res.log.push_back(Tr("patch.plugin.ids_released", plugin));
+        }
 
     // Stock tables of the server, read once.
     std::map<std::string, DbcRecipes::Table> stock;

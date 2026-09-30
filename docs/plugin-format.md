@@ -304,8 +304,9 @@ data declaratively; the plugin never ships game data and never runs code on the 
 **Named ids.** A plugin does not pick ids for the rows it adds: two plugins could pick the same one. It declares a
 name (`ids`) with its table and, optionally, the stock row the new row starts as a copy of. The installer gives the name
 the next free id of the table (above the stock rows, the ids already given out and the fixed ids of all recipes) when
-the plugin is installed or enabled, and takes it back when the plugin is removed or disabled. The ids live in the
-world database, table `plugin_ids (plugin, name, dbc, id)`; while a plugin stays installed its ids never change.
+the plugin is first installed, and takes it back only when the plugin is removed. Disabling a plugin removes its
+rows but keeps its ids, so enabling it again gives it the same ones. The ids live in the world database, table
+`plugin_ids (plugin, name, dbc, id)`; while a plugin stays installed (enabled or disabled) its ids never change.
 
 * A row `"id": "@name"` is the plugin's named row (`"@other.plugin/name"` for another plugin's); it is added when
   missing (`"mode": "upsert"`). A row with a number changes a stock row (`"mode": "update"`, the default) or adds one
