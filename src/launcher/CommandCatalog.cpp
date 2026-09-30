@@ -25,7 +25,7 @@ std::vector<CmdGroup> const& LonelyIce::CommandCatalog()
             { "cmd.srv.shutdown_cancel", "", "server shutdown cancel", {} },
         } },
         { "chr", "cmd.group.chr", {
-            { "cmd.chr.teleport", "cmd.chr.teleport.desc", "tele name {p} {loc}", { { "loc", 's', "Dalaran", tele } } },
+            { "cmd.chr.teleport", "cmd.chr.teleport.desc", "teleport name {p} {loc}", { { "loc", 's', "Dalaran", tele } } },
             { "cmd.chr.level", "cmd.chr.level.desc", "character level {p} {lvl}", { { "lvl", 'n', "80" } } },
             { "cmd.chr.revive", "cmd.chr.revive.desc", "revive {p}", {} },
             { "cmd.chr.unstuck", "cmd.chr.unstuck.desc", "unstuck {p} {where}",
