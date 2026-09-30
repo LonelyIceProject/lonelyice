@@ -31,6 +31,7 @@
 #include "Platform.h"
 #include "PluginMgr.h"
 #include "PluginPatches.h"
+#include "ServerLock.h"
 #include "ProcessPriority.h"
 #include "RealmList.h"
 #include "Resolver.h"
@@ -844,7 +845,9 @@ int ServerMain(int argc, char** argv)
     SetProcessPriority("server.worldserver", sConfigMgr->GetOption<int32>(CONFIG_PROCESSOR_AFFINITY, 0), sConfigMgr->GetOption<bool>(CONFIG_HIGH_PRIORITY, true));
 
     // Plugins register their configs, SQL folders and database backends, so they load before module configs and
-    // databases. World and auth run in this process: plugins made for either load.
+    // databases. World and auth run in this process: plugins made for either load. While the lock is held,
+    // LonelyIce --pkg refuses to change the plugins folder.
+    LonelyIce::Packages::ServerLock const pluginsLock(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"));
     sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"), { "worldserver", "authserver" });
     sConfigMgr->LoadModulesConfigs();
 

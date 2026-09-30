@@ -42,7 +42,7 @@ namespace LonelyIce::Packages
     {
         PluginManifest manifest;
         bool enabled = true;
-        std::vector<std::string> conflicts;
+        std::vector<std::string> conflicts;     // from its plugin.json
     };
 
     // What installing or updating will do.
@@ -83,19 +83,26 @@ namespace LonelyIce::Packages
         std::vector<Local> Installed() const;
 
         // Newest compatible versions of the requested plugins (id -> range, "*" for any) and everything they
-        // need; installed plugins stay unless update is set or a range needs another version.
+        // need; installed plugins stay unless update is set or a range needs another version. Searches the
+        // combinations of versions (backtracking), so a choice that turns out not to fit is taken back with the
+        // ranges it brought. A disabled plugin never counts as present: needing one is an error ("enable it first").
         Plan Resolve(std::map<std::string, std::string> const& requests, bool update) const;
-        // All installed plugins that have a newer compatible version.
+        // All enabled installed plugins that have a newer compatible version.
         Plan ResolveUpdates() const;
 
-        // Downloads, checks and unpacks the packages of a plan.
+        // Downloads, checks and unpacks all packages of a plan into plugins/.staging first; only then are the old
+        // folders moved aside (plugins/.backup) and the new ones moved in. Any failure puts the old folders back.
         bool Install(Plan const& plan, std::string& error, std::function<void(std::string const&)> const& log = {},
             Http::Progress const& progress = {});
 
         // Plugins that need id (directly or not) among the enabled ones.
         std::vector<std::string> Dependents(std::string const& id) const;
         bool Remove(std::string const& id, std::string& error);
+        // Enabling checks the plugin's own dependencies (installed, enabled, in range) and conflicts.
         bool SetEnabled(std::string const& id, bool enabled, std::string& error);
+
+        // Whether a server process runs on this plugins folder (ServerLock); Install, Remove and SetEnabled refuse then.
+        bool ServerRunning() const;
 
         // Packs a plugin folder into <out>/<id>-<version>.zip; prints the index entry into entry (JSON).
         static bool Pack(std::filesystem::path const& pluginDir, std::filesystem::path const& outDir, std::string& entry, std::string& error);

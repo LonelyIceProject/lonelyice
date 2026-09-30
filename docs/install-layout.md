@@ -30,8 +30,10 @@ The launcher adds to the program folder:
 | `plugins/<id>/` | Enabled plugins; the server loads this folder (`AC_PLUGINS_DIR`). |
 | `plugins/.disabled/<id>/` | Disabled plugins; the server does not look there. |
 | `plugins/.cache/icons/` | Catalog icons, `<id>-<version>.png`. |
-| `plugins/.cache/sql.stamp` | Hash of the loaded plugins' SQL files and the database connections at the last server start; a different hash makes the next start apply the plugins' SQL. |
+| `plugins/.cache/sql.stamp` | Hash of the contents of the loaded plugins' SQL files (for `auth`, `characters`, `world`) and the core database connections at the last server start; a different hash makes the next start apply the plugins' SQL. |
+| `plugins/.cache/server.lock` | Held open (locked) by the server process while it runs; `--pkg` refuses to change plugins while it is locked. The file itself stays. |
 | `plugins/.staging/` | Packages being unpacked during an install; removed when it finishes. |
+| `plugins/.backup/<time>/` | The old plugin folders while an install replaces them; removed when it finishes or is rolled back. Left behind only if the process died in the middle: the old folders are in it. |
 
 With the server folder "Next to LonelyIce.exe", its contents below are in the program folder too.
 

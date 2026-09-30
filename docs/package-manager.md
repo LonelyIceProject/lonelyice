@@ -83,45 +83,50 @@ The launcher accepts any version string. The LonelyIce catalog accepts only `x.y
 
 ## Version ranges
 
-`depends` values, and `install <id>@<range>`, are ranges. The launcher's resolver and the server's plugin loader use
-the same function (`PluginMgr::Satisfies` in the core):
+`depends` values, and `install <id>@<range>`, are ranges. They mean what they mean in npm's semver. The launcher's
+resolver and the server's plugin loader use the same code (`Acore::VersionRange` in the core, which
+`PluginMgr::Satisfies` calls):
 
-- A range is split at whitespace into terms, and a version must satisfy every term. An empty range or `*` matches
+- A range is a list of comparators separated by spaces and/or commas, and a version must satisfy every one of them:
+  `>=1.0.0 <2.0.0`, `>=1.0.0,<2.0.0` and `>=1.0.0, <2.0.0` are the same range. An empty range, `*` or `x` matches
   everything.
-- Each term is an optional operator followed by a version. The operator is the leading run of the characters
-  `<`, `>`, `=`, `^`, `~`.
-- In the term's version, a part that is `x`, `*` or empty is a wildcard, and missing parts are wildcards too.
-  Comparisons with `<`, `>`, `^` and `~` treat a wildcard as 0.
+- A comparator is an optional operator (`=`, `<`, `<=`, `>`, `>=`, `~`, `^`; `~>` is read as `~`) and a version. An
+  operator followed by a space takes the next word as its version (`>= 1.2.0`).
+- The version has one to three numeric parts (`1`, `1.2`, `1.2.3`), may start with `v`, and may end in `+build`
+  metadata, which is ignored. `x`, `X` or `*` stands for a part and every part after it (`1.x`, `1.2.*`).
+- The version being checked is read as before: the leading digits of its first three parts, missing parts 0
+  ([Version comparison](#version-comparison)).
 
-| Term | Matches |
+| Comparator | Matches |
 |---|---|
-| `*` | any version |
-| `1.2.3` (or `=1.2.3`) | exactly 1.2.3 |
-| `1.2`, `1.2.x`, `1.2.*` | 1.2.anything |
-| `1`, `1.x` | 1.anything |
+| `*`, `x` | any version |
+| `1.2.3`, `=1.2.3` | exactly 1.2.3 |
+| `1.2`, `1.2.x`, `=1.2` | `>=1.2.0 <1.3.0` |
+| `1`, `1.x` | `>=1.0.0 <2.0.0` |
 | `>=1.2.0`, `>=1.2` | 1.2.0 and newer |
-| `>1.2.0`, `>1.2` | newer than 1.2.0 (1.2.1 matches) |
+| `>1.2.0` | newer than 1.2.0 |
+| `>1.2` | `>=1.3.0` (newer than every 1.2.x) |
 | `<2.0.0`, `<2` | older than 2.0.0 |
-| `<=1.2.0`, `<=1.2` | 1.2.0 and older (1.2.1 does not match) |
-| `^1.2.3` | at least 1.2.3, major 1 |
-| `^1.2` | at least 1.2.0, major 1 |
-| `^0.3.1` | at least 0.3.1, major 0 and minor 3 |
-| `^0.0.3` | at least 0.0.3, major 0 and minor 0 (0.0.9 matches) |
-| `~1.2.3` | at least 1.2.3, major 1 and minor 2 |
-| `~1.2` | 1.2.anything |
-| `~1` | 1.0.anything (not 1.x) |
-| `>=1.2.0 <2.0.0` | both terms: 1.2.0 up to, not including, 2.0.0 |
+| `<=1.2.0` | 1.2.0 and older |
+| `<=1.2` | `<1.3.0` (every 1.2.x included) |
+| `~1.2.3` | `>=1.2.3 <1.3.0` |
+| `~1.2` | `>=1.2.0 <1.3.0` |
+| `~1` | `>=1.0.0 <2.0.0` |
+| `^1.2.3` | `>=1.2.3 <2.0.0` |
+| `^1.2` | `>=1.2.0 <2.0.0` |
+| `^0.2.3` | `>=0.2.3 <0.3.0` |
+| `^0.0.3` | `>=0.0.3 <0.0.4` |
+| `^0.2`, `^0.0` | `>=0.2.0 <0.3.0`, `>=0.0.0 <0.1.0` |
+| `^1`, `^0` | `>=1.0.0 <2.0.0`, `>=0.0.0 <1.0.0` |
+| `>*`, `<*` | nothing |
 
-Not supported:
-
-| Syntax | What happens |
-|---|---|
-| `||` | Read as a term that never matches. |
-| Hyphen ranges (`1.0.0 - 2.0.0`) | The `-` is read as a term that never matches. |
-| Commas (`>=1.0.0,<2.0.0`) | Read as a single term. Everything after the comma is lost, so this means `>=1.0.0`. |
-| Operators other than the six above (`=`, `==`, `=>`, `~>`) | Treated like no operator: exact or wildcard match. |
-
-Separate terms with spaces.
+Anything else is an error, never a partial reading: alternatives (`||`), hyphen ranges (`1.0.0 - 2.0.0`),
+pre-release versions (`1.2.3-beta`), other operators (`==`, `=>`, `!=`), a fourth part, a number after a wildcard
+(`1.x.3`). The package manager then stops with `the version range "<range>" for <id> (<who>) cannot be read at
+"<part>": …`: for a request before resolving; for a `depends` of a catalog entry or an installed plugin when
+resolving fails on it (such an entry can never be chosen, so an older one that fits is taken instead); on `enable`;
+and on `pack`. The server skips a plugin with such a range in `depends`
+(`cannot read the version range …`).
 
 ## Resolving an install or an update
 
@@ -132,36 +137,49 @@ installed plugins are the folders in `plugins/` and `plugins/.disabled/` whose `
 |---|---|---|
 | `--pkg install <id>[@<range>]...` | each id with its range, default `*` | off |
 | `--pkg update <id>...` | each id with `*` | on |
-| `--pkg update`, **Update all** | every installed plugin that has a newer version in any catalog, with `*` | on |
+| `--pkg update`, **Update all** | every *enabled* installed plugin that has a newer version in any catalog, with `*` | on |
 | **Install** on a catalog row | the id with `*` | off |
 | **Update** on an installed row | the id with `*` | on |
 
-1. **Constraints.** Each requested id gets its range, recorded as "requested". Each *enabled* installed plugin that
-   is not requested adds its own `depends` ranges, so an install or update never leaves an enabled plugin out of
-   range.
-2. **Choice.** The resolver repeats over the wanted ids until nothing changes, for at most 32 rounds:
-   - An installed version is kept when it satisfies every range collected for its id, unless the id is requested
-     with the update flag on.
-   - Otherwise the resolver takes the newest catalog version that satisfies every collected range. That can be
-     older than the installed one (`install x@1.0.0` downgrades), in which case the step shows `from -> to`. The
-     chosen version's `depends` are added as ranges, and those ids become wanted.
-   - When no version fits, resolving stops with `no suitable version of <id>: needs <range> (<who>), …`.
-3. **Conflicts.** For each chosen package, every id in its `conflicts` is checked against the installed plugins
-   (enabled or disabled) and the other chosen packages. A match stops with `<id> conflicts with <other>`. Only the
-   chosen package's own list is checked, because the launcher does not read `conflicts` of installed plugins. The
-   server checks both sides when it starts ([Plugin API](/docs/plugin-api#loading)).
-4. **Order.** Chosen packages become steps with dependencies first. A package already installed in the chosen
-   version gets no step. With no steps, the result is "nothing to install" (`--pkg`) or "all installed" (launcher).
+The resolver searches for a set of choices, one per id it has to decide, that satisfies every range in play. It
+works depth first and takes a choice back when it leads to a dead end (backtracking), so a version that turns out
+not to fit is replaced together with the ranges it brought:
 
-The resolver has these limits:
+1. **Ranges in play** always come from the current choices only:
+   - each requested id's range, recorded as "requested";
+   - the `depends` of every *enabled* installed plugin that stays: not touched by the request, or kept in its
+     installed version;
+   - the `depends` of every chosen catalog package. An installed plugin that is replaced brings its new version's
+     ranges, no longer the old ones.
+2. **Ids to decide** are the requested ids and, repeatedly, the dependencies of what has been decided. They are
+   decided in id order.
+3. **Candidates** for an id, tried in this order, each only if it satisfies every range in play for that id:
+   - without the update flag for that id: the installed version (kept), then the catalog versions from the newest
+     down. A catalog version can be older than the installed one (`install x@1.0.0` downgrades, the step shows
+     `from -> to`);
+   - with the update flag (`update`, **Update**): the catalog versions newer than the installed one from the
+     newest, then the installed version, then older catalog versions.
+   Catalog entries with the installed version are the installed copy and are not offered again. When versions are
+   equal, the entry read first comes first.
+4. **Disabled plugins never satisfy anything.** The server does not load them. If an id to decide is a disabled
+   plugin (requested or needed), that branch fails with `<id> is disabled: enable it first (needed by: …)`; run
+   `enable` first (which checks the plugin's own dependencies, see below).
+5. **Conflicts** are checked on a complete set of choices, in both directions, among what will be enabled
+   afterwards (the enabled installed plugins and the chosen packages):
+   - a chosen package that lists an enabled plugin or another chosen package in its `conflicts`:
+     `<id> conflicts with <other>`;
+   - an enabled installed plugin that stays and lists a chosen package in its `conflicts` (read from its
+     `plugin.json`): `<id> cannot be installed: the installed plugin <other> conflicts with it`.
+   A conflict is a dead end like any other, so another version is tried.
+6. **Failure.** When no set of choices works, the error of the deepest dead end is shown, usually
+   `no suitable version of <id>: needs <range> (<who>), …` or one of the above. The search stops after 20,000 steps
+   with `the dependencies could not be resolved: too many version combinations`.
+7. **Order.** Chosen catalog packages become steps with dependencies first. A plugin kept in its installed version
+   gets no step. With no steps, the result is "nothing to install" (`--pkg`) or "all installed" (launcher).
 
-- **Disabled plugins count as installed.** A disabled plugin that fits a range satisfies the resolver, but the
-  server does not load disabled plugins, so a plugin that needs it is skipped at start. `install` of a disabled
-  plugin that fits does nothing. Use `enable` instead.
-- **No backtracking.** If the resolver picks a version and later replaces it, the ranges that version added still
-  apply for the rest of the run.
-- **Update detection.** `update` without ids requests only plugins that have a strictly newer version (see
-  [Version comparison](#version-comparison)). A rebuilt package with the same version is never offered.
+Only ids in play are decided: an installed plugin that nothing in the request touches stays as it is, even if its
+own dependencies are already broken. `update` without ids requests only enabled plugins that have a strictly newer
+version (see [Version comparison](#version-comparison)); a rebuilt package with the same version is never offered.
 
 ## Platforms and core ABI
 
@@ -192,33 +210,48 @@ the launcher's language, then `en`, then any language.
 
 ## Download and verification
 
-The steps run in order, dependencies first. For each step, the package manager:
+An install runs in two phases. Nothing installed changes until every package of the plan has been downloaded,
+checked and unpacked.
+
+Before anything, the install is refused while a server runs on the plugins folder (see
+[Enable, disable, remove](#enable-disable-remove)). `plugins/.staging` is emptied. Then, for each step in order,
+dependencies first, the package manager:
 
 1. Downloads `url` (http(s) or local, as for catalogs).
 2. Checks `size` if the entry has a non-zero one: the download must have exactly that many bytes.
-3. Checks `sha256` if the entry has one: the SHA-256 of the download, in lowercase hex, must equal it. An uppercase
-   value never matches.
-
-A failed check stops the install with `<id>: the package is damaged (size or sha256 mismatch)`. If the entry has
-neither field, nothing is checked.
-
-## Unpacking and installing
-
-For each downloaded step:
-
-1. `plugins/.staging/<id>` is emptied, and the zip is unpacked into it.
+3. Checks `sha256` if the entry has one: the SHA-256 of the download in hex must equal it; upper and lower case are
+   the same.
+4. Unpacks the zip into `plugins/.staging/<id>`.
    - The zip must have `plugin.json` at its root, or in one top folder of any name. With a top folder, entries
      outside it are ignored.
    - An entry with an absolute path, a `:` or a `..` part stops the install with
      `invalid path in the package: <name>`.
    - A zip without `plugin.json` stops with `the package has no plugin.json`.
-2. The unpacked `plugin.json` must have the entry's `id` and `version`. Otherwise the install stops with
+5. Checks that the unpacked `plugin.json` has the entry's `id` and `version`. Otherwise the install stops with
    `<id>: the package's plugin.json does not match the index`.
-3. The installed copy of the plugin, enabled or disabled, is deleted. If that fails:
-   `<id>: could not remove the old version, is the server running? (…)`.
-4. The staged folder is moved to `plugins/<id>`. An update of a disabled plugin is therefore enabled.
 
-After the last step, `plugins/.staging` is deleted. Files outside the plugin folder are never touched: the plugin's
+A failed check stops the install with `<id>: the package is damaged (size or sha256 mismatch)`. If the entry has
+neither field, nothing is checked. Any failure in this phase deletes `plugins/.staging` and leaves the plugins as
+they were.
+
+## Installing
+
+When every package is staged, the package manager replaces the folders, step by step:
+
+1. Everything that is in the way is moved (renamed) into `plugins/.backup/<time>/`: the installed copy of the
+   plugin, enabled or disabled, and whatever else is at `plugins/<id>`. If that fails:
+   `<id>: could not move the old version aside, is the server running? (…)`.
+2. The staged folder is moved to `plugins/<id>`. If that fails: `<id>: could not install (…)`.
+
+Every move is recorded. When one fails, all moves made so far, of this step and the earlier ones, are undone in
+reverse order: the new folders go back to `.staging`, the old ones back where they were, and the error ends with
+"Nothing was changed: the previous versions are back in place." If a move cannot be undone, the error lists the
+folders to move by hand (`<from> > <to>`), and `plugins/.backup/<time>` is kept. After the last step, the
+backups and `plugins/.staging` are deleted and the installed and updated plugins are listed. Moves are renames
+inside the plugins folder, so they do not copy anything; on Windows a folder with a loaded library cannot be
+renamed, which makes a running server fail step 1 before anything changed.
+
+The new version is always enabled (`plugins/<id>`). Files outside the plugin folder are never touched: the plugin's
 `configs/modules/<name>.conf` stays through updates and removal.
 
 ## Enable, disable, remove
@@ -226,14 +259,25 @@ After the last step, `plugins/.staging` is deleted. Files outside the plugin fol
 | Action | Effect | Refused when |
 |---|---|---|
 | `disable <id>` | Moves `plugins/<folder>` to `plugins/.disabled/<folder>`. The server does not look into `.disabled`. | An enabled plugin needs it, directly or through others. |
-| `enable <id>` | Moves it back. | Never. The plugin's own dependencies are not checked. |
+| `enable <id>` | Moves it back. | One of its dependencies is not installed, is disabled or is out of range; a range of its `depends` cannot be read; it conflicts with an enabled plugin, or an enabled plugin conflicts with it. |
 | `remove <id>` | Deletes the plugin folder, enabled or disabled. | An enabled plugin needs it, directly or through others. |
 
-A refusal names the dependents: `<id> is required by: …` (`--pkg`) or `<name> is needed by: ….` (launcher).
+A refusal names the dependents: `<id> is required by: …` (`--pkg`) or `<name> is needed by: ….` (launcher). A
+refused `enable` names everything that is missing:
+`<id> cannot be enabled, it needs: <dep> <range> (not installed), <dep> (disabled), <dep> <range> (installed: <version>)`,
+or `<id> conflicts with <other>`. Enable the dependencies first, dependencies of dependencies before them.
 
-The Plugins page refuses every change while the server runs ("Stop the server: plugins change while it is off.").
-`--pkg` does not check whether the server runs. On Windows, a loaded plugin library is locked, and the change then
-fails with "…, is the server running?".
+**While the server runs** nothing changes. The server process (`LonelyIce --server`, also `--apply` and
+`--deploy`) holds `plugins/.cache/server.lock` open and locked for as long as it runs; the operating system drops the
+lock when the process ends, however it ends. While the lock is held:
+
+- `--pkg install`, `update`, `remove`, `enable`, `disable` and `apply` stop at once with
+  `the server is running on this plugins folder (<folder>): stop it first`;
+- the package manager's install, remove, enable and disable refuse with the same message, so the launcher does too;
+- the Plugins page refuses every change while its own server runs, before that
+  ("Stop the server: plugins change while it is off.").
+
+`list`, `available` and `pack` work while the server runs.
 
 Removing or disabling a plugin does not undo its SQL updates: its tables and rows stay in the databases. Only its
 patch recipes are undone on the next start (see below).
@@ -288,17 +332,18 @@ Installed plugins show `icon.png` from their own folder.
 
 ## Failures and recovery
 
-An install has no transaction. Each step is complete on its own, and earlier steps are not rolled back.
+An install is all or nothing (see [Installing](#installing)).
 
 | Failure | State afterwards |
 |---|---|
 | A catalog cannot be read | That catalog is skipped. |
-| Resolution error (no suitable version, conflict) | Nothing changed. |
-| Download, size or sha256 check, unpacking or manifest check of a step | The steps before it are installed. This plugin's installed copy is unchanged. `plugins/.staging/<id>` may be left behind and is emptied on the next install. |
-| Deleting the old copy fails | The old copy may be partly deleted. Stop the server and install again. |
-| Moving the staged folder fails | The old copy is already gone. Install again. |
+| Resolution error (bad range, no suitable version, disabled dependency, conflict) | Nothing changed. |
+| The server runs on the plugins folder | Nothing changed. |
+| Download, size or sha256 check, unpacking or manifest check of any step | Nothing changed; `plugins/.staging` is deleted. |
+| Moving an old folder aside or the staged folder in | Everything is moved back; nothing changed. |
+| Moving back fails as well | The error lists the folders to move by hand; the old ones are in `plugins/.backup/<time>`. |
+| The process dies while folders are moved | Some plugins may be new, the others old; the old folders of replaced ones stay in `plugins/.backup/<time>`. Install again. |
 | Remove, enable or disable fails | The folder stays where it was, or partly deleted for a remove. |
 
-After you fix the cause, run the same install or update again. Steps that were already done have no step the second
-time, because the installed version already matches. On the Plugins page a failure sets the status to failed and
-adds the error to the events. `--pkg` prints `error: <message>` and exits with code 1.
+After you fix the cause, run the same install or update again. On the Plugins page a failure sets the status to
+failed and adds the error to the events. `--pkg` prints `error: <message>` and exits with code 1.

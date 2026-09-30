@@ -4,12 +4,13 @@
 //   LonelyIce --pkg install <id>[@<range>]...      with their dependencies
 //   LonelyIce --pkg update [<id>...]               everything when no id is given
 //   LonelyIce --pkg remove <id>
-//   LonelyIce --pkg enable <id> | disable <id>
+//   LonelyIce --pkg enable <id> | disable <id>      enable checks the plugin's dependencies and conflicts
 //   LonelyIce --pkg apply -c <worldserver.conf> [--client <game folder>]
 //                                                      install / remove the plugins' patches in the databases
 //                                                      (and the client) now instead of on the next server start
 //   LonelyIce --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
 // Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: lonelyice.ini).
+// Commands that change plugins refuse while a server runs on the plugins folder (Packages::ServerLock).
 
 #include "Lang.h"
 #include "LauncherSettings.h"
@@ -102,6 +103,11 @@ int PkgMain(int argc, char** argv)
     std::vector<std::string> const rest(args.begin() + 1, args.end());
     Packages::Manager pm(pluginsDir);
     std::string error;
+
+    // A running server holds its plugins' libraries and its own view of them: nothing changes under it.
+    bool const changes = cmd == "install" || cmd == "update" || cmd == "remove" || cmd == "enable" || cmd == "disable" || cmd == "apply";
+    if (changes && pm.ServerRunning())
+        return Fail(Tr("pkg.error.server_running", Platform::PathToUtf8(pluginsDir)));
 
     if (cmd == "list")
     {

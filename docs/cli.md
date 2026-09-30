@@ -119,12 +119,12 @@ LonelyIce --pkg <command> [<arguments>] [--plugins <dir>] [--index <catalogs>]
 |---|---|
 | `list` | Installed plugins: id, version, name; disabled ones are marked. |
 | `available [--locale <lang>]` | Packages of the catalogs for this core and platform; installed ones show the installed version. With `--locale`, only packages whose `locales` name that language (or `*`). |
-| `install <id>[@<range>]...` | Installs the plugins with their dependencies. `<range>` as in `depends` (`>=1.2.0`, `^1.2`, `1.2.x`, `*`; default `*`). |
-| `update [<id>...]` | Updates the given plugins, or every plugin that has a newer compatible version. |
+| `install <id>[@<range>]...` | Installs the plugins with their dependencies, all or nothing. `<range>` as in `depends` (`>=1.2.0`, `^1.2`, `>=1.0.0,<2.0.0`, `1.2.x`, `*`; default `*`; quote it when it has spaces or `<`/`>`). Refused when a plugin needed is disabled. |
+| `update [<id>...]` | Updates the given plugins, or every enabled plugin that has a newer compatible version. |
 | `remove <id>` | Deletes the plugin folder. Refused while an enabled plugin needs it. |
-| `enable <id>`, `disable <id>` | Moves the plugin between `plugins/<id>` and `plugins/.disabled/<id>`. Disabling is refused while an enabled plugin needs it. |
+| `enable <id>`, `disable <id>` | Moves the plugin between `plugins/<id>` and `plugins/.disabled/<id>`. Disabling is refused while an enabled plugin needs it; enabling is refused while one of the plugin's dependencies is missing, disabled or out of range, or a conflict with an enabled plugin exists. |
 | `apply -c <worldserver.conf> [--client <game folder>]` | Applies the plugins' SQL and patches to the databases (and the client archives with `--client`) now instead of on the next server start: runs `--server --apply` in this process with `AC_PLUGINS_DIR` set to the plugins folder. Relative paths of the config are resolved against the current directory. |
-| `pack <plugin folder> [<out dir>]` | Writes `<out dir>/<id>-<version>.zip` (default: the current directory), copies the plugin's `icon.png` next to it and prints the catalog entry ([Plugin format](/docs/plugin-format), section 8). |
+| `pack <plugin folder> [<out dir>]` | Writes `<out dir>/<id>-<version>.zip` (default: the current directory), copies the plugin's `icon.png` next to it and prints the package's entry for a catalog's `index.json` ([Plugin format](/docs/plugin-format), section 8); it does not write or change an `index.json`. Refused for unknown `locales` codes and for `depends` ranges that cannot be read. |
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -135,8 +135,9 @@ LonelyIce --pkg <command> [<arguments>] [--plugins <dir>] [--index <catalogs>]
 | `--locale <lang>` | | Language filter for `available`. |
 
 `list`, `remove`, `enable`, `disable`, `apply` and `pack` do not read the catalogs; the other commands do, and report a
-catalog that cannot be read and go on with the others. The command line does not check whether the server is
-running: stop it first, the running server holds the plugin libraries open. Changes to the databases and the
+catalog that cannot be read and go on with the others. `install`, `update`, `remove`, `enable`, `disable` and
+`apply` refuse while a server runs on the plugins folder (it holds `plugins/.cache/server.lock` locked):
+`error: the server is running on this plugins folder (<folder>): stop it first`. Changes to the databases and the
 client follow on the next server start (or `apply`). Exit code 0 on success, 1 on an error (printed as
 `error: <message>`) or without a command (usage).
 

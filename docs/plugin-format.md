@@ -89,8 +89,8 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `locales` | Languages the plugin's texts are translated into (see below); `["*"]` for a plugin without texts. |
 | `core.abi` | Binary interface the library was built against (see 4). Required when `server` is present. |
 | `platforms` | Platforms the package has server builds for (`windows-x64`, `linux-x64`, `linux-arm64`, `macos-x64`, `macos-arm64`), one subfolder of `server/` each. Omitted: the plugin has no server library and runs everywhere. |
-| `depends` | Plugin id → version range (`>=1.2.0`, `^1.2`, `1.2.x`, `*`). Loaded before this plugin. |
-| `conflicts` | Plugin ids that must not be installed together with this one. |
+| `depends` | Plugin id → version range, as in npm's semver: comparators separated by spaces and/or commas, all of which must hold (`>=1.2.0`, `^1.2`, `~1.2.3`, `1.2.x`, `>=1.0.0 <2.0.0`, `>=1.0.0,<2.0.0`, `*`; [Package manager](/docs/package-manager#version-ranges)). Loaded before this plugin. A range that cannot be read is an error, never read in part. |
+| `conflicts` | Plugin ids that must not be enabled together with this one. Checked in both directions: installing, enabling or loading either of the two is refused while the other is enabled. |
 | `server.library` | Library base name. The loader looks in `server/<platform>/` of the running system and adds the platform's form: `name.dll` on Windows, `libname.so` on Linux, `libname.dylib` on macOS. A plugin without a build for the running platform is skipped with a message. |
 | `server.apps` | Programs that load the plugin: `worldserver`, `authserver`, `dbimport` (default `["worldserver"]`). The LonelyIce server process runs world and auth and loads plugins made for either. A database backend lists all three. |
 | `databases` | Update folders per core database (`auth`, `characters`, `world`) and databases the plugin owns (see 5). |
@@ -355,15 +355,18 @@ A catalog that cannot be read is skipped; the others still work. Package and ico
   "packages": [
     { "id": "lonelyice.tactics", "version": "1.3.0", "name": { "en": "Bot tactics", "ru": "Тактики ботов" },
       "core": "lonelyice-ac-2", "platforms": [ "windows-x64", "linux-x64" ], "locales": [ "en", "ru" ],
-      "depends": { "playerbots": ">=1.0.0" },
+      "depends": { "playerbots": ">=1.0.0" }, "conflicts": [],
       "icon": "lonelyice.tactics-1.3.0.png", "page": "https://lonelyice.example/packages/lonelyice.tactics",
       "url": "lonelyice.tactics-1.3.0.zip", "sha256": "…", "size": 1234567 }
   ]
 }
 ```
 
-`--pkg pack` also copies the plugin's `icon.png` next to the zip and adds `icon` to the entry; the launcher caches
-catalog icons in `plugins/.cache/icons`. `locales` is copied from the manifest. `page` is the package's page on the
+The entry `--pkg pack` prints carries every field of the index format that the manifest knows: `id`, `version`,
+`name`, `description`, `core` (the manifest's `core.abi`), `platforms`, `locales`, `depends`, `conflicts`, and `url`,
+`sha256`, `size` of the zip. `--pkg pack` also copies the plugin's `icon.png` next to the zip and adds `icon` to the
+entry; the launcher caches catalog icons in `plugins/.cache/icons`. Only `page` is left out, since only a catalog
+knows it. It refuses unknown `locales` codes and `depends` ranges that cannot be read. `page` is the package's page on the
 catalog's site, if it has one (resolved against the index like `url`); the launcher links it from the package (an
 installed plugin that no catalog lists links its `homepage`). Its Plugins page filters the catalog by language
 (`locales`), as does `--pkg available --locale <code>`.
@@ -373,10 +376,12 @@ language (`en`, `de`, `es`, `fr`, `ru`), then `en`, then any.
 
 Packages for another core ABI or without a build for this platform are not offered; client-only plugins (no
 `core`, no `platforms`) work with any server. Installing resolves the dependency tree (newest versions that satisfy
-every range, installed plugins kept when they fit, conflicts refused), downloads, checks size and sha256, and
-unpacks into `plugins/<id>`. A disabled plugin is moved to `plugins/.disabled/<id>`, where the core does not look.
-Removing or disabling a plugin that others need is refused. Changing plugins needs the server stopped; the databases
-and the client follow on its next start.
+every range, installed plugins kept when they fit, conflicts refused in both directions, a disabled plugin never
+counting as present), downloads, checks size and sha256 of every package, and only then replaces the folders in
+`plugins/<id>`, putting the old ones back on any failure. A disabled plugin is moved to `plugins/.disabled/<id>`,
+where the core does not look. Removing or disabling a plugin that others need is refused, and so is enabling one
+whose dependencies are not enabled. Changing plugins needs the server stopped (the package manager refuses while
+it runs); the databases and the client follow on its next start.
 
 ```
 LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |

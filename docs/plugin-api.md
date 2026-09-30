@@ -187,10 +187,14 @@ unloading or reloading.
 | `loaded`, `error` | Result of loading. |
 | `handle`, `onLoad`, `addScripts` | The library handle and entry points. |
 
-Ranges for `Satisfies` (and `depends`): terms separated by spaces, all of which must hold. `>=`, `>`, `<=`, `<`
-compare; `^1.2` is at least 1.2 with the same major version (the same minor too when the major is 0); `~1.2.3` is
-at least 1.2.3 with the same major and minor; a bare version must match in the parts it gives (`1.2`, `1.2.x`:
-any patch of 1.2); `*` matches anything. Missing parts count as 0 in comparisons.
+Ranges for `Satisfies` (and `depends`) mean what they mean in npm's semver: comparators separated by spaces and/or
+commas, all of which must hold (`>=1.0.0 <2.0.0` or `>=1.0.0,<2.0.0`). `^1.2.3` is `>=1.2.3 <2.0.0`, `^0.2.3` is
+`>=0.2.3 <0.3.0`, `^0.0.3` is `>=0.0.3 <0.0.4`; `~1.2.3` and `~1.2` stay below 1.3.0, `~1` below 2.0.0; a partial
+version covers what it leaves out (`1.2`, `1.2.x`: `>=1.2.0 <1.3.0`; `<=1.2`: `<1.3.0`; `>1.2`: `>=1.3.0`); `*`
+matches anything. The table is in [Package manager](/docs/package-manager#version-ranges). A range that cannot be
+read (`||`, hyphen ranges, pre-release versions, unknown operators) never matches; the core's
+`Acore::VersionRange::IsValid(range, &badTerm)` (`VersionRange.h`) tells whether a range can be read and where it
+cannot, and the loader skips a plugin whose `depends` has such a range.
 
 ## Plugin code
 
