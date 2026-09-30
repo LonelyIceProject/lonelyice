@@ -325,8 +325,9 @@ world database, table `plugin_ids (plugin, name, dbc, id)`; while a plugin stays
   slot gets its own locale) are written there, so the server's extracted DBC files stay stock;
 * to the client: for every locale installed in the client it takes the tables from the player's own stock archives,
   applies all recipes in dependency order, adds `files` and writes one archive, `Data/<locale>/patch-<locale>-4.MPQ`,
-  marked as LonelyIce's (an archive of that name LonelyIce did not write is kept as `.bak`). Without recipes the
-  archive is removed.
+  marked as LonelyIce's. An archive of that name LonelyIce did not write is never deleted or overwritten: it is moved
+  to the first free backup name (`.bak`, `.bak2`, …) before LonelyIce writes its own. Without recipes LonelyIce's
+  archive is removed and someone else's is left alone.
 
 A stamp (recipe text, plugin version, installer version) is stored per plugin in `plugin_patches`; unchanged plugins
 are skipped, changed ones are uninstalled and installed again with the same ids.

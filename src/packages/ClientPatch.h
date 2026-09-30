@@ -23,7 +23,8 @@ namespace LonelyIce::ClientPatch
     // Builds Data/<locale>/patch-<locale>-4.MPQ for every locale of the client from the recipes (in load order)
     // and the ids given out for them. DBC tables come from the player's own stock archives. An archive that is
     // up to date is left alone; without recipes it is removed. An archive with that name that LonelyIce did not
-    // write is kept as .bak.
+    // write is never deleted: it is moved to the first free backup name (.bak, .bak2, ...) before ours is written,
+    // and left where it is when there is nothing to write.
     Result Apply(std::filesystem::path const& clientDir, std::vector<DbcRecipes::Recipe> const& recipes, DbcRecipes::IdMap const& ids);
 
     // Moves the archives LonelyIce wrote out of the client's sight while it lives, so tools that read client data

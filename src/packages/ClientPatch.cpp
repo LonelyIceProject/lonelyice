@@ -180,23 +180,12 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
         bool exists = fs::exists(target, ec);
         if (exists)
             marker = Archive(target).Read(MarkerName);
-        if (exists && !marker)
-        {
-            fs::path bak = target;
-            bak += ".bak";
-            if (!fs::exists(bak, ec))
-            {
-                fs::rename(target, bak, ec);
-                res.log.push_back(Tr("patch.client.foreign_backed_up", locale, ArchiveName(locale)));
-            }
-            else
-                fs::remove(target, ec);
-            exists = false;
-        }
+        bool const foreign = exists && !marker;
 
         if (empty)
         {
-            if (exists)
+            // someone else's archive is left where it is when there is nothing to write
+            if (exists && !foreign)
             {
                 fs::remove(target, ec);
                 res.changed = true;
@@ -209,6 +198,31 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
             std::string const m(marker->begin(), marker->end());
             if (m.substr(0, m.find('\n')) == stamp)
                 continue;
+        }
+
+        // An archive of that name LonelyIce did not write is never deleted or overwritten: it moves to the first
+        // free backup name (.bak, .bak2, ...), and when that fails nothing is written.
+        if (foreign)
+        {
+            fs::path bak;
+            for (int n = 1; n < 1000 && bak.empty(); ++n)
+            {
+                fs::path candidate = target;
+                candidate += n == 1 ? std::string(".bak") : ".bak" + std::to_string(n);
+                if (!fs::exists(candidate, ec) && !ec)
+                    bak = candidate;
+            }
+            if (bak.empty())
+                ec = std::make_error_code(std::errc::file_exists);
+            else
+                fs::rename(target, bak, ec);
+            if (ec)
+            {
+                res.ok = false;
+                res.error = Tr("patch.client.foreign_move_failed", locale, ArchiveName(locale), ec.message());
+                return res;
+            }
+            res.log.push_back(Tr("patch.client.foreign_backed_up", locale, ArchiveName(locale), bak.filename().string()));
         }
 
         std::vector<std::unique_ptr<Archive>> opened;

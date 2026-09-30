@@ -312,7 +312,11 @@ The server (`LonelyIce --server`, started by the launcher) runs these steps in o
 5. **Client archive.** When the launcher knows the game folder, it passes it to the server (`LONELYICE_CLIENT`).
    For every client locale, the server rebuilds `Data/<locale>/patch-<locale>-4.MPQ` when its stamp changed. The
    stamp covers the recipes, the plugin versions, the patch files, the named ids and the sizes of the source
-   archives. The archive is removed when no recipe remains.
+   archives. LonelyIce's archive is removed when no recipe remains. An archive of that name that LonelyIce did not
+   write (it has no LonelyIce marker inside) is never deleted or overwritten: before LonelyIce writes its own, it
+   moves that one to the first free name of `patch-<locale>-4.MPQ.bak`, `.bak2`, `.bak3`, … and logs
+   `<locale>: patch-<locale>-4.MPQ was not written by LonelyIce, kept as <name>`. If it cannot be moved, the patch
+   step fails for the client and nothing is written. With no recipes it is left where it is.
 
 Client addons (`client.addons`) are not handled at server start. The launcher copies them into `Interface/AddOns`
 when it starts the game, and removes the addons of plugins that are gone.
