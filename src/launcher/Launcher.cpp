@@ -69,6 +69,7 @@ namespace
         Rml::String id, name, version, desc, note, update;   // update: newer version in the index
         Rml::String icon, letter;                            // icon: absolute path of a PNG; letter: shown without one
         Rml::String settings;                                // settings group the gear opens, empty: none
+        Rml::String page;                                    // its page in the catalog, else its homepage; empty: none
         bool installed = false, enabled = false;
     };
     struct RepoView
@@ -337,6 +338,8 @@ namespace
         std::vector<PluginView> _plRows;
         std::vector<RepoView> _plRepos;
         Rml::String _plView = "installed", _plRepoNew;     // installed, updates, catalog, repos
+        Rml::String _plLocale, _plShownLocale;             // catalog language filter, empty: all
+        std::vector<Opt> _plLocales;
         int _plUpdates = 0;
         bool _plHasOfficial = true;
         std::string _pickedRepo;
@@ -562,6 +565,7 @@ namespace
         _uiLang = Lang::Code();
         for (Lang::Info const& l : Lang::Available())
             _langs.push_back({ l.code, l.name });
+        _plLocale = _plShownLocale = _settings.packageLocale;
 
         _server = std::make_unique<ServerProcess>([] { UiBackend::Wake(); });
         _wizard = std::make_unique<Wizard>(Wizard::Host{ _exe, _exeDir, [this] { return Root(); }, [this] { return _server->IsRunning(); },
@@ -955,6 +959,7 @@ namespace
             s.RegisterMember("icon", &PluginView::icon);
             s.RegisterMember("letter", &PluginView::letter);
             s.RegisterMember("settings", &PluginView::settings);
+            s.RegisterMember("page", &PluginView::page);
             s.RegisterMember("installed", &PluginView::installed);
             s.RegisterMember("enabled", &PluginView::enabled);
         }
@@ -1057,6 +1062,8 @@ namespace
         c.Bind("pl_repos", &_plRepos);
         c.Bind("pl_repo_new", &_plRepoNew);
         c.Bind("pl_has_official", &_plHasOfficial);
+        c.Bind("pl_locale", &_plLocale);
+        c.Bind("pl_locales", &_plLocales);
         c.Bind("set_fields", &_setFields);
         c.Bind("set_group", &_setGroup);
         c.Bind("set_hint", &_setHint);
@@ -1183,6 +1190,12 @@ namespace
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
         onArg("pl_remove", [this](Rml::Variant const& v) { PluginAction("remove", v.Get<int>()); });
         onArg("pl_install", [this](Rml::Variant const& v) { PluginAction("install", v.Get<int>()); });
+        onArg("pl_page", [this](Rml::Variant const& v)
+        {
+            int const i = v.Get<int>();
+            if (i >= 0 && i < int(_plRows.size()) && !_plRows[i].page.empty())
+                SDL_OpenURL(_plRows[i].page.c_str());
+        });
         onArg("pl_view_pick", [this](Rml::Variant const& v)
         {
             _plView = v.Get<Rml::String>();
@@ -1454,6 +1467,13 @@ namespace
             SyncSettingsFields();
         if (_uiLang != Lang::Code())
             Relocalize();
+        if (_plLocale != _plShownLocale)
+        {
+            _plShownLocale = _plLocale;
+            _settings.packageLocale = _plLocale;
+            _settings.Save();
+            RefreshPlugins();
+        }
         RefreshFooter();
     }
 
@@ -2332,8 +2352,27 @@ namespace
 
     // ---- plugins
 
+    // "EN, RU" for a plugin's "locales"; empty when it does not state them.
+    static std::string LocalesNote(std::vector<std::string> const& locales)
+    {
+        if (std::find(locales.begin(), locales.end(), "*") != locales.end())
+            return Tr("pl.note.any_language");
+        std::string out;
+        for (std::string const& l : locales)
+        {
+            std::string code = l;
+            std::transform(code.begin(), code.end(), code.begin(), [](unsigned char c) { return char(std::toupper(c)); });
+            out += (out.empty() ? "" : ", ") + code;
+        }
+        return out;
+    }
+
     void Launcher::RefreshPlugins()
     {
+        _plLocales = { { "", Tr("pl.locale.any") } };
+        for (std::string const& l : PluginLocales())
+            _plLocales.push_back({ l, Tr("locale." + l) });
+        _model.DirtyVariable("pl_locales");
         if (_plBusy)
             return;     // the plugins thread is changing the index or the folder
         _plRows.clear();
@@ -2366,8 +2405,12 @@ namespace
             v.note = l.manifest.id;
             if (!deps.empty())
                 v.note += " · " + Tr("pl.note.needs", deps);
+            if (std::string const langs = LocalesNote(l.manifest.locales); !langs.empty())
+                v.note += " · " + langs;
             if (!l.enabled)
                 v.note += " · " + Tr("pl.note.disabled");
+            auto const known = newest.find(l.manifest.id);
+            v.page = known != newest.end() && !known->second->page.empty() ? known->second->page : l.manifest.homepage;
             if (fs::exists(l.manifest.dir / "icon.png", ec))
                 v.icon = UiPath(l.manifest.dir / "icon.png");
             v.letter = Initial(v.name);
@@ -2386,12 +2429,17 @@ namespace
         {
             if (installed.count(id) || _plView != "catalog")
                 continue;
+            if (!_plLocale.empty() && !HasLocale(p->locales, _plLocale))
+                continue;
             PluginView v;
             v.id = id;
             v.name = p->name;
             v.version = p->version;
             v.desc = p->description;
+            v.page = p->page;
             v.note = id;
+            if (std::string const langs = LocalesNote(p->locales); !langs.empty())
+                v.note += " · " + langs;
             if (_packages->Sources().size() > 1)
                 for (Packages::Source const& s : _packages->Sources())
                     if (s.location == p->source)

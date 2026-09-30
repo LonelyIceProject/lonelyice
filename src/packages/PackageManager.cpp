@@ -247,6 +247,8 @@ bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Pr
                 pkg.url = Http::Resolve(source, Str(p, "url"));
                 if (std::string const icon = Str(p, "icon"); !icon.empty())
                     pkg.icon = Http::Resolve(source, icon);
+                if (std::string const page = Str(p, "page"); !page.empty())
+                    pkg.page = Http::Resolve(source, page);
                 pkg.source = location;
                 pkg.sha256 = Str(p, "sha256");
                 if (p.contains("size") && p["size"].is_integer())
@@ -254,6 +256,10 @@ bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Pr
                 if (p.contains("platforms") && p["platforms"].is_sequence())
                     for (auto const& x : p["platforms"].as_seq())
                         pkg.platforms.push_back(x.get_value<std::string>());
+                if (p.contains("locales") && p["locales"].is_sequence())
+                    for (auto const& x : p["locales"].as_seq())
+                        if (x.is_string())
+                            pkg.locales.push_back(x.get_value<std::string>());
                 if (p.contains("depends") && p["depends"].is_mapping())
                     for (auto const& [k, v] : p["depends"].as_map())
                         pkg.depends[k.get_value<std::string>()] = v.is_string() ? v.get_value<std::string>() : "*";
@@ -563,6 +569,17 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
         error = Tr("pkg.error.manifest_no_id");
         return false;
     }
+    if (root.contains("locales") && root["locales"].is_sequence())
+        for (auto const& l : root["locales"].as_seq())
+        {
+            std::string const locale = l.is_string() ? l.get_value<std::string>() : std::string();
+            auto const& known = PluginLocales();
+            if (locale != "*" && std::find(known.begin(), known.end(), locale) == known.end())
+            {
+                error = Tr("pkg.error.bad_locale", locale);
+                return false;
+            }
+        }
 
     // Files under <id>/, without debug files and link-time leftovers (MSVC; .dSYM bundles and static archives elsewhere).
     std::vector<std::pair<std::string, fs::path>> files;
@@ -616,11 +633,13 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
         e << ", \"description\": " << JsonLocalized(root["description"]);
     if (root.contains("core") && root["core"].is_mapping())
         e << ", \"core\": " << JsonString(Str(root["core"], "abi"));
-    if (root.contains("platforms") && root["platforms"].is_sequence())
+    for (char const* key : { "platforms", "locales" })
     {
-        e << ", \"platforms\": [";
+        if (!root.contains(key) || !root[key].is_sequence())
+            continue;
+        e << ", \"" << key << "\": [";
         bool first = true;
-        for (auto const& p : root["platforms"].as_seq())
+        for (auto const& p : root[key].as_seq())
         {
             e << (first ? " " : ", ") << JsonString(p.get_value<std::string>());
             first = false;

@@ -46,6 +46,7 @@ namespace LonelyIce
         std::string pendingRealmName;    // applied when the server comes up
         std::string packageIndex = DefaultPackageIndex;   // plugin package indexes, ";"-separated URLs, files or folders
         std::string packageIndexOff;     // indexes kept in the list but not read, same format
+        std::string packageLocale;       // catalog filter: only packages with texts in this language, empty: all
 
         static constexpr char const* DefaultPackageIndex = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
         static constexpr char const* DefaultRunner = "wine";

@@ -57,6 +57,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
   "authors": [ "LonelyIceProject" ],
   "license": "GPL-2.0-or-later",
   "homepage": "https://github.com/LonelyIceProject/mod-lonelyice-tactics",
+  "locales": [ "en", "ru" ],
 
   "core": { "abi": "lonelyice-ac-2" },
   "platforms": [ "windows-x64", "linux-x64" ],
@@ -85,6 +86,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `id` | Unique, lowercase, `[a-z0-9.-]`. Reverse-domain style for third parties (`author.feature`). |
 | `version` | Semantic version of the plugin. |
 | `name`, `description` | Localized strings: an object keyed by locale (`en` required) or a plain string. |
+| `locales` | Languages the plugin's texts are translated into (see below); `["*"]` for a plugin without texts. |
 | `core.abi` | Binary interface the library was built against (see 4). Required when `server` is present. |
 | `platforms` | Platforms the package has server builds for (`windows-x64`, `linux-x64`, `linux-arm64`, `macos-x64`, `macos-arm64`), one subfolder of `server/` each. Omitted: the plugin has no server library and runs everywhere. |
 | `depends` | Plugin id → version range (`>=1.2.0`, `^1.2`, `1.2.x`, `*`). Loaded before this plugin. |
@@ -99,6 +101,29 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `provides` | Capabilities the plugin gives, e.g. `database:mysql` for a library that registers the MySQL database backend (`RegisterBackendDriver`). Informational; the launcher offers a storage through `storage`. |
 | `storage` | A place for the server's databases that the plugin adds (a database server, see below). |
 | `source` | For a plugin built from a module's own repository (see 10): `repo` (git URL) and `commit` of the module. |
+
+### `locales`
+
+The languages a player can use the plugin in: what it shows to players (chat and gossip texts, its rows in the
+database's `*_locale` tables, localized strings of its patch recipes, its client addons, its launcher settings) is
+translated into each language listed. A language whose translation covers only a few texts is left out. The
+catalogs and the launcher filter packages by it.
+
+| Code | Language | Game locales |
+|---|---|---|
+| `en` | English | enUS, enGB |
+| `de` | German | deDE |
+| `es` | Spanish | esES, esMX |
+| `fr` | French | frFR |
+| `ko` | Korean | koKR |
+| `ru` | Russian | ruRU |
+| `zh-CN` | Chinese (Simplified) | zhCN |
+| `zh-TW` | Chinese (Traditional) | zhTW |
+
+These are the languages of the game's locales, so the codes are the keys of localized strings too (`"name": { "en":
+…, "ru": … }`). `["*"]` marks a plugin without texts of its own (a database backend, a rule change): it fits every
+language. Without `locales` the languages are unknown, and a filter by language leaves the plugin out. Other codes
+are refused by `--pkg pack` and by the catalog site.
 
 ### `storage`
 
@@ -329,16 +354,19 @@ A catalog that cannot be read is skipped; the others still work. Package and ico
   "name": { "en": "My catalog", "ru": "Мой каталог" },
   "packages": [
     { "id": "lonelyice.tactics", "version": "1.3.0", "name": { "en": "Bot tactics", "ru": "Тактики ботов" },
-      "core": "lonelyice-ac-2", "platforms": [ "windows-x64", "linux-x64" ],
+      "core": "lonelyice-ac-2", "platforms": [ "windows-x64", "linux-x64" ], "locales": [ "en", "ru" ],
       "depends": { "playerbots": ">=1.0.0" },
-      "icon": "lonelyice.tactics-1.3.0.png",
+      "icon": "lonelyice.tactics-1.3.0.png", "page": "https://lonelyice.example/packages/lonelyice.tactics",
       "url": "lonelyice.tactics-1.3.0.zip", "sha256": "…", "size": 1234567 }
   ]
 }
 ```
 
 `--pkg pack` also copies the plugin's `icon.png` next to the zip and adds `icon` to the entry; the launcher caches
-catalog icons in `plugins/.cache/icons`.
+catalog icons in `plugins/.cache/icons`. `locales` is copied from the manifest. `page` is the package's page on the
+catalog's site, if it has one (resolved against the index like `url`); the launcher links it from the package (an
+installed plugin that no catalog lists links its `homepage`). Its Plugins page filters the catalog by language
+(`locales`), as does `--pkg available --locale <code>`.
 
 Localized texts (manifest, settings, index) are objects of language code → text. The launcher shows its own
 language (`en`, `de`, `es`, `fr`, `ru`), then `en`, then any.
@@ -354,7 +382,7 @@ and the client follow on its next start.
 LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |
                     enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |
                     pack <plugin folder> [<out dir>]
-options: --plugins <dir> (default: plugins next to the exe), --index <urls>
+options: --plugins <dir> (default: plugins next to the exe), --index <urls>, --locale <code> (available)
 ```
 ## 9. Static builds
 

@@ -1,6 +1,6 @@
 // Plugin package manager on the command line:
 //   LonelyIce --pkg list                           installed plugins
-//   LonelyIce --pkg available                      packages of the index
+//   LonelyIce --pkg available [--locale <lang>]    packages of the index (with texts in that language)
 //   LonelyIce --pkg install <id>[@<range>]...      with their dependencies
 //   LonelyIce --pkg update [<id>...]               everything when no id is given
 //   LonelyIce --pkg remove <id>
@@ -72,7 +72,7 @@ int PkgMain(int argc, char** argv)
     settings.Load();
 
     fs::path pluginsDir = exeDir / "plugins";
-    std::string index = settings.packageIndex, config, client;
+    std::string index = settings.packageIndex, config, client, locale;
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i)
     {
@@ -87,6 +87,8 @@ int PkgMain(int argc, char** argv)
             config = argv[++i];
         else if (a == "--client" && i + 1 < argc)
             client = argv[++i];
+        else if (a == "--locale" && i + 1 < argc)
+            locale = argv[++i];
         else
             args.push_back(a);
     }
@@ -169,7 +171,8 @@ int PkgMain(int argc, char** argv)
         for (Packages::Local const& l : pm.Installed())
             installed[l.manifest.id] = l.manifest.version;
         for (Packages::Package const& p : pm.Available())
-            Print(installed.count(p.id) ? Tr("pkg.cli.available_installed", p.id, p.version, installed[p.id], p.name)
+            if (locale.empty() || HasLocale(p.locales, locale))
+                Print(installed.count(p.id) ? Tr("pkg.cli.available_installed", p.id, p.version, installed[p.id], p.name)
                 : p.id + " " + p.version + "  " + p.name);
         return 0;
     }

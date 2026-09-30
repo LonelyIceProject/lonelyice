@@ -78,6 +78,7 @@ select.lang selectbox option:hover, select.lang selectbox option:checked { backg
 .side-repo { display: flex; flex-direction: row; align-items: center; gap: 8dp; padding: 4dp 12dp; font-size: 13dp; color: #d8ecf8; }
 .side-repo.off { opacity: 0.55; }
 .side-note { font-size: 11dp; color: #7f98a8; word-break: break-word; }
+select.side-select { width: 172dp; margin: 3dp 12dp 0dp; font-size: 15dp; }
 .btn.wide { margin: 0dp 12dp; }
 .navs { display: flex; flex-direction: column; align-items: flex-start; gap: 3dp; }
 .nav { padding: 0dp 10dp 1dp; border: 1dp #e9c66b59; border-radius: 3dp; font-family: "Forum"; font-size: 15dp; color: #e9c66b; cursor: pointer;

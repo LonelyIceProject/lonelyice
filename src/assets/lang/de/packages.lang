@@ -2,7 +2,7 @@
 
 # tools/PkgMain.cpp: LonelyIce.exe --pkg
 pkg.cli.error = Fehler: {0}
-pkg.cli.usage = verwendung: LonelyIce.exe --pkg list | available | install <id>[@<bereich>]... | update [<id>...] | remove <id> |\n                                enable <id> | disable <id> | apply -c <worldserver.conf> [--client <spieleordner>] |\n                                pack <plugin-ordner> [<ausgabeordner>]\noptionen: --plugins <verzeichnis>, --index <urls durch ; getrennt>
+pkg.cli.usage = verwendung: LonelyIce.exe --pkg list | available | install <id>[@<bereich>]... | update [<id>...] | remove <id> |\n                                enable <id> | disable <id> | apply -c <worldserver.conf> [--client <spieleordner>] |\n                                pack <plugin-ordner> [<ausgabeordner>]\noptionen: --plugins <verzeichnis>, --index <urls durch ; getrennt>, --locale <sprache>
 pkg.cli.list_disabled = {0} {1} (deaktiviert)  {2}
 pkg.cli.available_installed = {0} {1} (installiert: {2})  {3}
 pkg.cli.need_folder = Plugin-Ordner angeben
@@ -48,6 +48,7 @@ pkg.error.not_installed = {0} ist nicht installiert
 pkg.error.move_failed = {0}: konnte nicht verschoben werden, läuft der Server? ({1})
 pkg.error.no_manifest = keine plugin.json
 pkg.error.manifest_no_id = plugin.json enthält keine id oder version
+pkg.error.bad_locale = Unbekannte Sprache „{0}“ in locales (bekannt: en, de, es, fr, ko, ru, zh-CN, zh-TW oder * für ein Plugin ohne Texte)
 pkg.error.create_failed = {0} konnte nicht erstellt werden
 pkg.error.add_failed = {0} konnte nicht hinzugefügt werden
 

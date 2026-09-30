@@ -2,7 +2,7 @@
 
 # tools/PkgMain.cpp: LonelyIce.exe --pkg
 pkg.cli.error = error: {0}
-pkg.cli.usage = usage: LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |\n                           enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |\n                           pack <plugin folder> [<out dir>]\noptions: --plugins <dir>, --index <urls separated by ;>
+pkg.cli.usage = usage: LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |\n                           enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |\n                           pack <plugin folder> [<out dir>]\noptions: --plugins <dir>, --index <urls separated by ;>, --locale <language>
 pkg.cli.list_disabled = {0} {1} (disabled)  {2}
 pkg.cli.available_installed = {0} {1} (installed: {2})  {3}
 pkg.cli.need_folder = specify the plugin folder
@@ -48,6 +48,7 @@ pkg.error.not_installed = {0} is not installed
 pkg.error.move_failed = {0}: could not move, is the server running? ({1})
 pkg.error.no_manifest = no plugin.json
 pkg.error.manifest_no_id = plugin.json has no id or version
+pkg.error.bad_locale = Unknown language "{0}" in locales (known: en, de, es, fr, ko, ru, zh-CN, zh-TW, or * for a plugin without texts)
 pkg.error.create_failed = could not create {0}
 pkg.error.add_failed = could not add {0}
 

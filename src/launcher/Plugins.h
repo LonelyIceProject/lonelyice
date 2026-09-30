@@ -36,6 +36,8 @@ namespace LonelyIce
     {
         std::string id, version, name;              // name in the launcher's language (ru, else en)
         std::string description;
+        std::string homepage;
+        std::vector<std::string> locales;           // languages of its texts (PluginLocales), "*": has none; empty: not stated
         std::vector<std::pair<std::string, std::string>> depends;  // id, version range
         std::filesystem::path dir;
         std::filesystem::path configDist;           // empty: no config
@@ -54,6 +56,11 @@ namespace LonelyIce
         std::vector<PluginSetting> fields;
         std::string error;
     };
+
+    // Languages a plugin can state in "locales" (docs/plugin-format.md, 2): one per language of the game's locales.
+    std::vector<std::string> const& PluginLocales();
+    // Whether a plugin with these "locales" is usable in a language: it lists it or has no texts ("*").
+    bool HasLocale(std::vector<std::string> const& locales, std::string const& locale);
 
     std::vector<PluginManifest> ReadPlugins(std::filesystem::path const& pluginsDir);
     // Load order: dependencies first, by id otherwise (missing dependencies are ignored here).

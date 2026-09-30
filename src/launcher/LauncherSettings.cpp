@@ -66,6 +66,7 @@ void LonelyIce::LauncherSettings::Load()
     pendingRealmName = ini.Get("server", "pendingRealmName", "");
     packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
     packageIndexOff = ini.Get("packages", "disabled", "");
+    packageLocale = ini.Get("packages", "locale", "");
 }
 
 void LonelyIce::LauncherSettings::Save() const
@@ -102,5 +103,6 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("backup", "lastDay", lastBackupDay);
     ini.Set("packages", "index", packageIndex);
     ini.Set("packages", "disabled", packageIndexOff);
+    ini.Set("packages", "locale", packageLocale);
     ini.Save(file);
 }

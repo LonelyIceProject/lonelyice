@@ -18,10 +18,12 @@ namespace LonelyIce::Packages
     {
         std::string id, version, name, description, core;
         std::vector<std::string> platforms;                        // empty: runs everywhere (no server code)
+        std::vector<std::string> locales;                          // as in plugin.json: languages, "*", empty: not stated
         std::map<std::string, std::string> depends;                // id -> version range
         std::vector<std::string> conflicts;
         std::string url, sha256;                                   // url already resolved against the index
         std::string icon;                                          // resolved like url, empty: none
+        std::string page;                                          // the package's page in the catalog, resolved like url
         std::string source;                                        // index it came from
         uint64_t size = 0;
     };

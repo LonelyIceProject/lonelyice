@@ -78,6 +78,17 @@ namespace
     }
 }
 
+std::vector<std::string> const& LonelyIce::PluginLocales()
+{
+    static std::vector<std::string> const locales = { "en", "de", "es", "fr", "ko", "ru", "zh-CN", "zh-TW" };
+    return locales;
+}
+
+bool LonelyIce::HasLocale(std::vector<std::string> const& locales, std::string const& locale)
+{
+    return std::any_of(locales.begin(), locales.end(), [&](std::string const& l) { return l == locale || l == "*"; });
+}
+
 std::vector<LonelyIce::PluginManifest> LonelyIce::ReadPlugins(fs::path const& pluginsDir)
 {
     std::vector<PluginManifest> out;
@@ -95,8 +106,13 @@ std::vector<LonelyIce::PluginManifest> LonelyIce::ReadPlugins(fs::path const& pl
             m.version = Str(root, "version");
             m.name = root.contains("name") ? Localized(root["name"]) : m.id;
             m.description = root.contains("description") ? Localized(root["description"]) : std::string();
+            m.homepage = Str(root, "homepage");
             if (m.id.empty())
                 continue;
+            if (root.contains("locales") && root["locales"].is_sequence())
+                for (auto const& l : root["locales"].as_seq())
+                    if (l.is_string())
+                        m.locales.push_back(l.get_value<std::string>());
             if (root.contains("depends") && root["depends"].is_mapping())
                 for (auto const& [k, v] : root["depends"].as_map())
                     if (k.is_string() && v.is_string())

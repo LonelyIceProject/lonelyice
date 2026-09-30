@@ -267,6 +267,10 @@
                 <div id="pl-view-installed" class="side-item" data-class-active="pl_view == 'installed'" data-event-click="pl_view_pick('installed')">@{pl.view.installed}</div>
                 <div id="pl-view-updates" class="side-item" data-class-active="pl_view == 'updates'" data-event-click="pl_view_pick('updates')">@{pl.view.updates}<span class="count" data-if="pl_updates > 0">{{pl_updates}}</span></div>
                 <div id="pl-view-catalog" class="side-item" data-class-active="pl_view == 'catalog'" data-event-click="pl_view_pick('catalog')">@{pl.view.catalog}</div>
+                <div class="side-sect" data-if="pl_view == 'catalog'">@{pl.locale}</div>
+                <select id="pl-locale" class="lang side-select" data-if="pl_view == 'catalog'" data-value="pl_locale">
+                    <option data-for="o : pl_locales" data-attr-value="o.id">{{o.label}}</option>
+                </select>
                 <div class="side-sect">@{pl.repos}</div>
                 <div class="side-repo" data-for="r : pl_repos" data-class-off="!r.enabled">
                     <div class="dot" data-class-on="r.ok" data-class-warn="!r.enabled || (!r.ok && !r.failed)"></div>
@@ -286,6 +290,7 @@
                                 <div class="cc-desc" data-if="p.desc != ''">{{p.desc}}</div>
                                 <div class="cc-preview">{{p.note}}</div>
                             </div>
+                            <div class="btn small go" data-attr-id="'pl-page-' + p.id" data-if="p.page != ''" data-attr-title="p.page" data-event-click="pl_page(pi)">@{pl.page}</div>
                             <div class="btn small go gear" data-attr-id="'pl-settings-' + p.id" data-if="p.settings != ''" data-attr-title="'@{pl.settings}'" data-event-click="open_page('settings', p.settings)"></div>
                             <div class="btn small go" data-attr-id="'pl-install-' + p.id" data-if="!p.installed || p.update != ''" data-class-disabled="pl_busy" data-event-click="pl_install(pi)">{{p.installed ? '@{pl.update}' : '@{pl.install}'}}</div>
                             <div class="btn small go" data-attr-id="'pl-toggle-' + p.id" data-if="p.installed" data-class-disabled="pl_busy" data-event-click="pl_toggle(pi)">{{p.enabled ? '@{ui.disable}' : '@{ui.enable}'}}</div>
@@ -293,7 +298,8 @@
                         </div>
                         <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'installed'">@{pl.empty.installed}</div>
                         <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'updates'">@{pl.empty.updates}</div>
-                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'catalog'">@{pl.empty.catalog}</div>
+                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'catalog' && pl_locale == ''">@{pl.empty.catalog}</div>
+                        <div class="note pad" data-if="pl_rows.size == 0 && pl_view == 'catalog' && pl_locale != ''">@{pl.empty.catalog_locale}</div>
                     </div>
                     <div class="statusbar">
                         <div class="note grow">{{pl_status}}</div>
