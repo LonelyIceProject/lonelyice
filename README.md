@@ -43,5 +43,26 @@ LonelyIce is free, with no ads and no paid features. If it is useful to you, you
 
 ## License
 
-GNU General Public License v2.0 or later, see [LICENSE](LICENSE). World of Warcraft is a trademark of Blizzard
-Entertainment; LonelyIce contains no game data and works only with a client you own.
+GNU General Public License v2.0 or later, see [LICENSE](LICENSE).
+
+### Blizzard Entertainment
+
+World of Warcraft®, Warcraft®, Wrath of the Lich King® and Blizzard Entertainment® are trademarks or registered
+trademarks of Blizzard Entertainment, Inc. in the U.S. and/or other countries.
+
+The game and everything in it belong to Blizzard Entertainment, Inc.: the game client and its program files, data
+files and archives, maps and terrain, models, textures, art, animations, interface, music, sounds, voices, texts,
+names, lore, characters, creatures, spells, items, quests and every other part of the game. All of it remains
+Blizzard's property wherever it appears, including the data a server extracts from your client on your own computer
+(game tables, maps, collision and navigation data).
+
+LonelyIce is an unofficial, non-commercial fan project. It is not affiliated with, endorsed, sponsored, approved or
+supported by Blizzard Entertainment, Inc. Blizzard's names are used only to say which game client the project works
+with.
+
+This repository contains no files from the game client, and LonelyIce neither distributes nor downloads any. It works
+only with a copy of the game you already own. Keep the data extracted from your client to yourself: it is Blizzard's
+property and is not ours or yours to share.
+
+The license above covers only the code and files of this project and the works it is based on. It grants no rights
+to anything that belongs to Blizzard Entertainment, Inc. All other trademarks belong to their respective owners.
