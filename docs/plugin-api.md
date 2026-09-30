@@ -136,8 +136,12 @@ Opening a library:
   `AcorePlugin_AddScripts`, and must return the core's ABI and platform.
 
 Then the program loads the module configs: for each plugin with a `config`, first the `.conf.dist` from the
-plugin folder, then, if it exists, `modules/<name>.conf` of the config directory (`configs/` of the working
-directory on Windows, the build's `CONF_DIR` elsewhere), whose values override. Options in the `.conf` that the
+plugin folder, then, if it exists, `modules/<name>.conf`, whose values override it key by key. That `modules`
+folder is the one beside the main config file the program loaded (`-c`; LonelyIce passes its absolute path), on
+every system; only when there is no such folder does the core use `modules` of its default config directory
+(`configs/` of the working directory on Windows, the build's `CONF_DIR` elsewhere,
+`ConfigMgr::GetModulesConfigPath()`). The static modules' configs are looked up in the same folder. `reload config`
+reads all of them again. Options in the `.conf` that the
 `.dist` does not declare are reported as unknown. worldserver and `LonelyIce --server` register the plugins'
 scripts in the modules script loader, after the static modules (`sPluginMgr->AddScripts()`), and add every
 loaded plugin's id to the enabled-modules list. Libraries stay loaded until the process exits; there is no
@@ -181,8 +185,8 @@ unloading or reloading.
 | `library` | Path of the library for this platform; empty without server code. |
 | `abi` | `core.abi` of the manifest. |
 | `apps` | `server.apps`. |
-| `configFile`, `configDist` | `<name>.conf` looked up in `modules/`, and the `.conf.dist` in the plugin folder. |
-| `databases` | Core database (`auth`, `characters`, `world`) and update folder. |
+| `configFile`, `configDist` | `<name>.conf` looked up in the modules config folder (beside the main config), and the `.conf.dist` in the plugin folder, loaded first. |
+| `databases` | Core database (`auth`, `characters`, `world`) and update folder. Plugin-owned databases (objects in the manifest) are not read. |
 | `depends`, `conflicts` | From the manifest. |
 | `loaded`, `error` | Result of loading. |
 | `handle`, `onLoad`, `addScripts` | The library handle and entry points. |
@@ -203,7 +207,8 @@ cannot, and the loader skips a plugin whose `depends` has such a range.
 - Databases: only through the core's interfaces: `WorldDatabase`, `CharacterDatabase`, `LoginDatabase`, prepared
   statements, transactions, and `ModuleDatabasePool` for a database the plugin owns. The loader registers update
   folders for `auth`, `characters` and `world` only; a plugin-owned database (an object in `databases`) is
-  opened by the plugin itself. SQL files follow [Plugin format](/docs/plugin-format), section 5.
+  opened, created and updated by the plugin itself (playerbots: `ModuleDBUpdater` in its `DatabaseScript`). SQL
+  files follow [Plugin format](/docs/plugin-format), section 5.
 - Other plugins: declare them in `depends` (they load first) and link against their libraries with `LINK`; check
   an optional one with `sPluginMgr->IsLoaded("<id>")`.
 - Named ids given out for the plugin's patches are read from the world table `plugin_ids`

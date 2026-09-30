@@ -46,8 +46,9 @@ Before a start the launcher makes the one-time changes LonelyIce needs in a conf
 (`[server] configVersion` in [lonelyice.ini](/docs/ini)); later edits of the player stay.
 
 The Settings page writes the server's values straight into `worldserver.conf` and the module and plugin configs,
-keeping comments and the file's own style. What a change needs is part of each field: `now`, `reload` (the
-launcher sends `reload config` to a running server) or `restart` (the launcher restarts it). The realm name lives
+keeping comments and the file's own style. What a change needs is part of each field: `now` (only written; the
+server sees it on its next `reload config` or start), `reload` (the launcher sends `reload config` to a running
+server) or `restart` (the launcher restarts it). The realm name lives
 in the auth database: it is kept as `[server] pendingRealmName` and sent with `@@realmname` once the server is
 ready.
 

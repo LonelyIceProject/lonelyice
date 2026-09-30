@@ -260,8 +260,12 @@ New options: `PluginsDir` (worldserver, authserver, dbimport; default `plugins`,
 Every option can be overridden by an `AC_<KEY>` environment variable, as in AzerothCore
 ([Environment variables](/docs/environment)).
 
-A plugin's config is read from the `.conf.dist` in its folder, then from `modules/<name>.conf` in the config folder
-(`configs/` of the working directory on Windows, the build's `CONF_DIR` elsewhere), whose values win.
+Module configs are read from the `modules` folder beside the main config file the program loaded (`-c`), on every
+system; only when there is no such folder does the core fall back to `modules` in its default config directory
+(`configs/` of the working directory on Windows, the build's `CONF_DIR` elsewhere; `ConfigMgr::GetModulesConfigPath()`).
+Upstream always used the default directory, so a server started with `-c <dir>/worldserver.conf` ignored
+`<dir>/modules`. A plugin's config is read from the `.conf.dist` in its folder first, then from `modules/<name>.conf`
+in that folder, whose values win key by key. `reload config` reads them all again.
 
 The configuration severity policy is AzerothCore's own (`doc/ConfigPolicy.md`, unchanged in the fork). It decides
 how the loader reacts to config problems:
@@ -299,6 +303,9 @@ Logging is AzerothCore's, unchanged (`doc/Logging.md`): `Logger.<name>=<level>,<
 | `database: unlock sync connection when callback throws` | A throwing callback on the synchronous connection no longer leaves it locked. |
 | `dialect: bind empty blob as zero-length blob, not null` | Empty binary parameters stay empty on SQLite. |
 | `fix(CMake): copy plugin files on every build` | A plugin's `plugin.json`, `data`, `sql`, `conf`, `lua` and `client` reach the output without relinking; removed files disappear. |
+| `fix(Core/Config): load module configs beside the main config file` | Module and plugin configs come from `modules` beside the config given with `-c` ([Configuration](#configuration-and-config-policy)). |
+| `fix(Core/Database): default to SQLite connection strings` | worldserver, authserver and dbimport default to `sqlite:db/*.sqlite`, in their `.conf.dist` and in code, so a plain build starts without a MySQL plugin. |
+| `feat(Core/Plugins): read dependency version ranges like npm semver` | `VersionRange.{h,cpp}`: `depends` ranges as npm reads them; a range that cannot be read skips the plugin ([Plugin API](/docs/plugin-api#pluginmgr)). |
 
 ## The fork's own documents
 

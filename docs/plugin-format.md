@@ -93,8 +93,8 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `conflicts` | Plugin ids that must not be enabled together with this one. Checked in both directions: installing, enabling or loading either of the two is refused while the other is enabled. |
 | `server.library` | Library base name. The loader looks in `server/<platform>/` of the running system and adds the platform's form: `name.dll` on Windows, `libname.so` on Linux, `libname.dylib` on macOS. A plugin without a build for the running platform is skipped with a message. |
 | `server.apps` | Programs that load the plugin: `worldserver`, `authserver`, `dbimport` (default `["worldserver"]`). The LonelyIce server process runs world and auth and loads plugins made for either. A database backend lists all three. |
-| `databases` | Update folders per core database (`auth`, `characters`, `world`) and databases the plugin owns (see 5). |
-| `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager. |
+| `databases` | Update folders per core database (`auth`, `characters`, `world`), and databases the plugin owns, which only the plugin's own code creates and updates (see 5). |
+| `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager; `modules/<name>.conf` beside the server's config overrides them key by key (see 3). |
 | `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
 | `patches` | Patch recipe file: DBC rows with named ids, SQL, client files (see 7). |
 | `client` | `addons`: client addon folders (see 7). |
@@ -188,8 +188,11 @@ code; each takes the plugins made for it, `server.apps`):
    Linux and macOS: `dlopen` with `RTLD_NOW | RTLD_GLOBAL`, so a plugin's symbols are visible to the plugins
    that depend on it), compare `AcorePlugin_Abi()` and `AcorePlugin_Platform()` with the core's; a
    mismatch skips the plugin.
-3. Register the plugin's config (`<config dir>/modules/<conf name>`, falling back to the `.dist` in the
-   plugin folder), its SQL folders (5) and its id in the enabled-modules list, then call its load function.
+3. Register the plugin's config, its SQL folders (5) and its id in the enabled-modules list, then call its load
+   function. The config is read after all plugins are loaded: first the `.dist` from the plugin folder, then
+   `modules/<conf name>` (the `config` file name without `.dist`), when it exists, overriding it key by key. That
+   `modules` folder is the one beside the main config file the program was started with (`-c`), or `modules` in
+   the default config directory when there is no such folder.
 4. After the static modules' scripts, call each plugin's scripts function in load order.
 
 Plugins are loaded once per process; there is no hot reload.
@@ -204,9 +207,9 @@ core build it was compiled against. Compatibility is the pair of
 * `AC_PLUGIN_PLATFORM`: operating system, architecture and C++ runtime family, for example `windows-x64`
   (MSVC 14.x, dynamic release CRT), `linux-x64` (GCC/Clang with libstdc++), `macos-arm64` (Apple Clang, libc++).
 
-A package can carry builds for several platforms of one ABI. The package repository keeps one package
-per plugin version and ABI. Everything in one process (core and plugins) is built with the same toolchain
-family for that platform.
+A package can carry builds for several platforms of one ABI. A version number is one package: a rebuild for
+another ABI, or with more platforms, is a new version (the LonelyIce catalog refuses a version number it already
+has). Everything in one process (core and plugins) is built with the same toolchain family for that platform.
 
 ## 5. Databases
 
@@ -214,7 +217,10 @@ Plugins do not know which database engine the core runs on (SQLite, MySQL, later
 
 * SQL files are written once, in the AzerothCore SQL dialect the updater has always read. The core's dialect
   layer translates each statement for the active backend when it applies the file. Backend-specific files
-  and `overrides/` folders are not allowed in plugins.
+  and `overrides/` folders are not allowed in plugins, with one exception: a plugin that updates a database of its
+  own through `ModuleDBUpdater` with its plugin folder as the source may keep `data/sql/overrides/<backend>/` for
+  that database's files (playerbots does, see the [core fork](/docs/core-fork#sql-rules)). Its `auth`,
+  `characters` and `world` SQL still has to translate as written.
 * Plugin code reads and writes data only through the core's database interfaces: `DatabaseWorkerPool`
   (`WorldDatabase`, `CharacterDatabase`, `LoginDatabase`), prepared statements, query results, transactions,
   and `ModuleDatabasePool` for databases the plugin owns. It never includes or calls a driver.
@@ -223,16 +229,22 @@ Plugin SQL follows the AzerothCore updater: files are named `YYYY_MM_DD_NN_descr
 and tracked in the database's `updates` table by name and hash. `databases.world` etc. add the folder to
 the core database's update list (state `MODULE`).
 
-A plugin that owns a database declares it with a connection key and base folder:
+A plugin that owns a database lists it as an object with its connection key and folders:
 
 ```json
 "databases": {
-  "playerbots": { "config": "PlayerbotsDatabaseInfo", "base": "sql/playerbots/base", "updates": "sql/playerbots/updates" }
+  "playerbots": { "config": "PlayerbotsDatabaseInfo", "base": "data/sql/playerbots/base", "updates": "data/sql/playerbots/updates" }
 }
 ```
 
-The server applies plugin SQL itself on start when `Updates.EnableDatabases` allows it, and creates a
-plugin-owned database when `Updates.AutoSetup` is on, exactly as for core databases. LonelyIce runs the
+This form only describes the database: the core's loader (and the launcher) ignore it and register nothing for
+it. The plugin's own code opens the database and creates and updates it, the way a module does. playerbots does it
+in its `DatabaseScript` (`OnModuleDatabasesLoading`): it reads `PlayerbotsDatabaseInfo`, creates a missing
+database, fills it from the base folder and applies its updates through `ModuleDBUpdater`, all under its own switch
+`Playerbots.Updates.EnableDatabases`, on every start.
+
+The server applies the plugins' `auth`, `characters` and `world` SQL itself on start when
+`Updates.EnableDatabases` allows it, exactly as for core databases. LonelyIce runs the
 same step during its install wizard so the first start is fast. Afterwards its updates stay off; when the contents
 of the loaded plugins' SQL files for `auth`, `characters` and `world` or the core database connections differ from
 the last start (a hash kept in `plugins/.cache/sql.stamp`), the server runs the updater over the plugins' folders
@@ -242,9 +254,10 @@ is not part of that hash: the plugin updates it itself when it opens it.
 ## 6. Launcher settings
 
 `settings.json` describes what the launcher shows for the plugin: one group in its Settings tab, named `group`, next to the
-core's groups. Values live in the plugin's config (`configs/modules/<name>.conf`, created from the plugin's `.dist`
-when first saved); a key missing there shows the `.dist` value. The launcher edits values in place, keeping comments.
-A plugin without `config` gets no group.
+core's groups. Values live in the plugin's config, `modules/<name>.conf` beside the server's config
+(`configs/modules/<name>.conf` in a LonelyIce server folder), the same file the core reads; it is created from the
+plugin's `.dist` when a value is first saved. A key missing there shows the `.dist` value. The launcher edits values
+in place, keeping comments. A plugin without `config` gets no group.
 
 ```json
 {
@@ -269,9 +282,21 @@ A plugin without `config` gets no group.
 | `string` | text field |
 | `choice` | drop-down of `options` |
 
-`apply`: `now` (read on every use), `reload` (`.reload config`), `restart` (server restart, the default). The launcher
-uses it to decide what to do after saving. `label`, `hint` and option labels are localized strings; `default` is
-used when neither the config nor the `.dist` has the key.
+`apply` tells the launcher what to do after saving while the server runs:
+
+| `apply` | After saving |
+|---|---|
+| `restart` (default) | The launcher restarts the server (its Save button says so). |
+| `reload` | The launcher sends `reload config`; the core reads the main config and every module and plugin config again and calls the scripts' `OnBeforeConfigLoad(true)` / `OnAfterConfigLoad(true)`. |
+| `now` | Nothing: the file is written and that is all. |
+
+The core's config manager keeps the values it read in memory and reads the files again only on `reload config` or
+a restart, so `sConfigMgr->GetOption` returns the old value of a `now` field until one of them happens (another
+field's `reload`, a `reload config` typed in the console). Use `now` only for a value the plugin reads from its file
+by itself; a value read through the config manager on every use or in `OnAfterConfigLoad` is `reload`, one read
+once at start is `restart`.
+`label`, `hint` and option labels are localized strings; `default` is used when neither the config nor the `.dist`
+has the key.
 
 ## 7. Patches: DBC rows, named ids, client files
 
@@ -389,7 +414,7 @@ whose dependencies are not enabled. Changing plugins needs the server stopped (t
 it runs); the databases and the client follow on its next start.
 
 ```
-LonelyIce.exe --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> |
+LonelyIce.exe --pkg list | available [--locale <code>] | install <id>[@<range>]... | update [<id>...] | remove <id> |
                     enable <id> | disable <id> | apply -c <worldserver.conf> [--client <game folder>] |
                     pack <plugin folder> [<out dir>]
 options: --plugins <dir> (default: plugins next to the exe), --index <urls>, --locale <code> (available)
