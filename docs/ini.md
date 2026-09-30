@@ -102,6 +102,6 @@ makes none.
 
 | Key | Default | Meaning | Set by |
 |---|---|---|---|
-| `index` | `https://lonelyice.com/packages/index.json` | Plugin catalogs in use, separated by `;`: http(s) URLs of an index, index files or folders holding `index.json` ([Plugin format](/docs/plugin-format), section 8). Empty: no catalogs. | Plugins → Package catalogs (add, switch on and off, remove, bring back the LonelyIce catalog) |
+| `index` | `https://lonelyice.org/packages/index.json` | Plugin catalogs in use, separated by `;`: http(s) URLs of an index, index files or folders holding `index.json` ([Plugin format](/docs/plugin-format), section 8). Empty: no catalogs. | Plugins → Package catalogs (add, switch on and off, remove, bring back the LonelyIce catalog) |
 | `disabled` | empty | Catalogs kept in the list but not read, same format. | same |
 | `locale` | empty | Catalog filter: only packages whose `locales` name this language (or `*`). Empty: all. | Plugins → Catalog → Language |

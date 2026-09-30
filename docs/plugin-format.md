@@ -371,7 +371,7 @@ update and removed with the plugin (LonelyIce keeps its list in `Interface/AddOn
 A package is a zip of the plugin folder (at the root of the zip or in one top folder). `LonelyIce.exe --pkg pack
 <plugin folder> [<out dir>]` writes `<id>-<version>.zip` and prints its index entry; you add that entry to the
 catalog's `index.json` yourself (or with your own script). It does not write an `index.json`. The site's guide
-[Hosting your own catalog](https://lonelyice.com/guides/own-catalog) walks through it.
+[Hosting your own catalog](https://lonelyice.org/guides/own-catalog) walks through it.
 
 An index (catalog) lists packages; the launcher's Plugins page and `--pkg` read it. Catalogs are set on the Plugins
 page or in `lonelyice.ini`: `[packages] index` holds the catalogs in use and `disabled` the ones kept but not read,

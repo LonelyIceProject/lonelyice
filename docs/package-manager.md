@@ -10,7 +10,7 @@ package and index formats are in [Plugin format](/docs/plugin-format#8-packages)
 
 A catalog is one `index.json`. The catalogs in use are `[packages] index` in `lonelyice.ini` ([lonelyice.ini](/docs/ini)),
 and `[packages] disabled` holds the ones kept but not read. Both lists are separated by `;`, and spaces and tabs
-around each entry are trimmed. The default is `https://lonelyice.com/packages/index.json`. An old
+around each entry are trimmed. The default is `https://lonelyice.org/packages/index.json`. An old
 `https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json` entry is replaced with it when the
 settings are read. `--pkg --index <catalogs>` replaces the list for one command.
 
