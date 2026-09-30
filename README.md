@@ -34,6 +34,13 @@ data.
 
 See [docs/building.md](docs/building.md). Plugin authors: [docs/plugin-format.md](docs/plugin-format.md).
 
+## Support
+
+LonelyIce is free, with no ads and no paid features. If it is useful to you, you can
+[buy me a coffee](https://buymeacoffee.com/darthgelum): it pays for the server, code signing and development time.
+
+<a href="https://buymeacoffee.com/darthgelum"><img src=".github/buy-me-a-coffee.png" alt="Buy me a coffee" width="303"></a>
+
 ## License
 
 GNU General Public License v2.0 or later, see [LICENSE](LICENSE). World of Warcraft is a trademark of Blizzard
