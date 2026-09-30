@@ -151,8 +151,6 @@ namespace
         return Tr("unit.kb", (b + 1023) >> 10);
     }
 
-    // "2026-09-28 19:12:40" -> "today, 19:12" or the date
-    std::string FormatLogin(std::string const& ts)
     std::string FormatTime(std::time_t t)
     {
         std::tm const tm = Platform::LocalTime(t);
@@ -161,6 +159,8 @@ namespace
         return buf;
     }
 
+    // "2026-09-28 19:12:40" -> "today, 19:12" or the date
+    std::string FormatLogin(std::string const& ts)
     {
         if (ts.size() < 16 || ts.rfind("0000", 0) == 0)
             return "—";
@@ -271,11 +271,11 @@ namespace
         void SaveRepos(std::vector<std::string> const& on, std::vector<std::string> const& off);
         void StartBackup(bool scheduled);
         void CheckScheduledBackup();
+        void BackupAction(std::string const& action, int index);
+        void FinishBackup();
 
         bool NeedsSetup() const;
         void OpenWizard();
-        void BackupAction(std::string const& action, int index);
-        void FinishBackup();
         std::string ServerLocale() const;
         StorageChoice CurrentStorage() const;
         std::vector<StorageProviderInfo> StorageProviders() const;
@@ -317,14 +317,14 @@ namespace
         Rml::String _svcSection = "data";
         std::vector<DataRow> _backupRows, _logRows, _aboutRows;
         Rml::String _backupSum;
+        std::vector<std::string> _backupIds;    // per backup row; empty for an old full copy
+        int _backupConfirm = -1;                // row whose restore waits for a second click
         bool _running = false, _authOn = false, _worldOn = false, _soapEnabled = false, _clientOk = false, _playEnabled = true, _closing = false, _backupBusy = false;
         std::vector<LocaleChip> _locales;
         std::vector<EventRow> _events;
         // accounts
         std::vector<AccRow> _accRows;
         Rml::String _accNote = Tr("acc.start_server"), _accLogin, _accPass, _accLevel = "0";
-        std::vector<std::string> _backupIds;    // per backup row; empty for an old full copy
-        int _backupConfirm = -1;                // row whose restore waits for a second click
         bool _accLoaded = false;
         // commands
         std::vector<GroupView> _cmdGroups;
@@ -372,6 +372,8 @@ namespace
         std::thread _backupThread;
         std::atomic<bool> _backupDone{ false };
         BackupResult _backupResult;
+        std::string _backupOp;                  // create, restore, export
+        bool _backupScheduled = false;
         // client addons and patches, prepared before the game starts
         std::thread _syncThread;
         std::atomic<bool> _syncDone{ false };
@@ -379,8 +381,6 @@ namespace
         ClientPatch::Result _syncResult;
     };
 
-        std::string _backupOp;                  // create, restore, export
-        bool _backupScheduled = false;
     // No config or no world database: the wizard has to run first.
     bool Launcher::NeedsSetup() const
     {
@@ -1019,6 +1019,7 @@ namespace
         c.Bind("svc_section", &_svcSection);
         c.Bind("backup_rows", &_backupRows);
         c.Bind("backup_sum", &_backupSum);
+        c.Bind("backup_confirm", &_backupConfirm);
         c.Bind("log_rows", &_logRows);
         c.Bind("about_rows", &_aboutRows);
         c.Bind("pl_updates", &_plUpdates);
@@ -1076,7 +1077,6 @@ namespace
         c.Bind("pl_repos", &_plRepos);
         c.Bind("pl_repo_new", &_plRepoNew);
         c.Bind("pl_has_official", &_plHasOfficial);
-        c.Bind("backup_confirm", &_backupConfirm);
         c.Bind("pl_locale", &_plLocale);
         c.Bind("pl_locales", &_plLocales);
         c.Bind("set_fields", &_setFields);
@@ -1158,6 +1158,9 @@ namespace
             Platform::OpenInShell(Root() / "backups");
         });
         on("backup_now", [this] { StartBackup(false); });
+        onArg("backup_restore", [this](Rml::Variant const& v) { BackupAction("restore", v.Get<int>()); });
+        onArg("backup_export", [this](Rml::Variant const& v) { BackupAction("export", v.Get<int>()); });
+        on("backup_cancel", [this] { BackupAction("cancel", -1); });
         on("announce", [this]
         {
             if (_state != "ready")
@@ -1215,9 +1218,6 @@ namespace
         {
             _plView = v.Get<Rml::String>();
             RefreshPlugins();
-        onArg("backup_restore", [this](Rml::Variant const& v) { BackupAction("restore", v.Get<int>()); });
-        onArg("backup_export", [this](Rml::Variant const& v) { BackupAction("export", v.Get<int>()); });
-        on("backup_cancel", [this] { BackupAction("cancel", -1); });
             RefreshRepos();
             _model.DirtyVariable("pl_view");
         });
@@ -1811,6 +1811,7 @@ namespace
     void Launcher::RefreshBackups()
     {
         std::error_code ec;
+        fs::path const dir = Root() / "backups";
         _backupRows.clear();
         _backupIds.clear();
         _backupConfirm = -1;
@@ -1876,6 +1877,11 @@ namespace
             Message(Tr("msg.installing"));
             return;
         }
+        if (_backupBusy && _backupOp == "restore")
+        {
+            Message(Tr("msg.backup_restoring"));
+            return;
+        }
         if (NeedsSetup())
         {
             OpenWizard();
@@ -1892,7 +1898,6 @@ namespace
             Message(Tr("msg.client_data_needs_client"));
             return;
         }
-        fs::path const dir = Root() / "backups";
         std::optional<StorageProviderInfo> const provider = _settings.location != "local" ? FindProvider(_settings.location) : std::nullopt;
         if (_settings.location != "local" && !provider)
         {
@@ -1945,11 +1950,6 @@ namespace
         _server->Stop();
         RefreshServerView();
     }
-        if (_backupBusy && _backupOp == "restore")
-        {
-            Message(Tr("msg.backup_restoring"));
-            return;
-        }
 
     void Launcher::Play()
     {
@@ -2817,6 +2817,8 @@ namespace
             return;
         }
         _backupBusy = true;
+        _backupOp = "create";
+        _backupScheduled = scheduled;
         _model.DirtyVariable("backup_busy");
         if (!scheduled)
             Message(Tr("msg.backup_running"));
@@ -2831,6 +2833,7 @@ namespace
         });
     }
 
+    // Daily at a time, or every few hours; a backup finding nothing changed makes none.
     void Launcher::CheckScheduledBackup()
     {
         if (_backupBusy || _settings.location != "local" || _settings.backupSchedule == "off" || _wizard->IsInstalling() || NeedsSetup())
@@ -2853,16 +2856,6 @@ namespace
         _settings.Save();
         StartBackup(true);
     }
-}
-
-int LauncherMain(int argc, char** argv)
-{
-    Launcher launcher;
-    return launcher.Run(argc, argv);
-}
-        _backupOp = "create";
-        _backupScheduled = scheduled;
-    // Daily at a time, or every few hours; a backup finding nothing changed makes none.
 
     // restore / export of a backup row; restore asks for a second click
     void Launcher::BackupAction(std::string const& action, int index)
@@ -2944,3 +2937,10 @@ int LauncherMain(int argc, char** argv)
         RefreshBackups();
         RefreshNews();
     }
+}
+
+int LauncherMain(int argc, char** argv)
+{
+    Launcher launcher;
+    return launcher.Run(argc, argv);
+}
