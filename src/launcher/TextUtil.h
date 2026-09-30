@@ -12,6 +12,10 @@ namespace LonelyIce
     // First character, upper-cased for Latin and Cyrillic ("?" for empty text).
     std::string FirstLetterUpper(std::string const& s);
     std::string EscapeRml(std::string const& s);
+    // Account rules of the wizard and the Accounts tab: login 1-16 Latin letters and digits, password 1-16
+    // characters without spaces.
+    bool ValidAccountName(std::string const& s);
+    bool ValidAccountPassword(std::string const& s);
 }
 
 #endif

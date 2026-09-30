@@ -244,10 +244,11 @@ namespace
         std::string LaunchLocale() const;
         void BrowseClient();
         void SendConsoleCommand();
-        void RunCommand(std::string const& cmd, bool echo = true);
+        void RunCommand(std::string const& cmd, bool echo = true, std::string const& tag = {});
 
         void ApplyAccounts();
         void CreateAccount();
+        void OnCommandResult(CommandResult const& r);
 
         void BuildCommandCards();
         void SyncCommandCards();
@@ -1323,6 +1324,8 @@ namespace
                 cls = "w";
             AppendLog(line, cls);
         }
+        for (CommandResult const& r : _server->TakeResults())
+            OnCommandResult(r);
 
         ServerState now = _server->GetState();
         if (now != _lastState)
@@ -2076,7 +2079,7 @@ namespace
         input->SetValue("");
     }
 
-    void Launcher::RunCommand(std::string const& cmd, bool echo)
+    void Launcher::RunCommand(std::string const& cmd, bool echo, std::string const& tag)
     {
         if (_server->GetState() != ServerState::Ready)
         {
@@ -2085,7 +2088,7 @@ namespace
         }
         if (echo)
             AppendLog("AC> " + cmd, "me");
-        if (!_server->SendCommand(cmd))
+        if (!_server->SendCommand(cmd, tag))
             Message(Tr("msg.cmd_not_sent"));
     }
 
@@ -2096,21 +2099,78 @@ namespace
         if (_server->GetState() != ServerState::Ready)
             return;
         std::string login = _accLogin, pass = _accPass;
-        if (login.empty() || pass.empty() || login.find(' ') != std::string::npos || pass.find(' ') != std::string::npos)
+        if (!ValidAccountName(login))
         {
-            Message(Tr("msg.acc_invalid"));
+            Message(Tr("msg.acc_login_invalid"));
             return;
         }
-        RunCommand("account create " + login + " " + pass, false);
+        if (!ValidAccountPassword(pass))
+        {
+            Message(Tr("msg.acc_pass_invalid"));
+            return;
+        }
+        // the result comes back in OnCommandResult; the rights are set once the account exists
         AppendLog("AC> account create " + login + " ********", "me");
-        if (_accLevel != "0")
-            RunCommand("account set gmlevel " + login + " " + _accLevel + " -1");
-        AddEvent(_accLevel != "0" ? Tr("event.acc_created_gm", login, _accLevel) : Tr("event.acc_created", login));
+        RunCommand("account create " + login + " " + pass, false, "acc_create\t" + login + "\t" + std::string(_accLevel));
         _accPass.clear();
-        _accLogin.clear();
         _model.DirtyVariable("acc_pass");
-        _model.DirtyVariable("acc_login");
-        _accRefreshAt = Platform::TickMs() + 1500;
+    }
+
+    // A console command sent with a tag has finished: "acc_create\t<login>\t<gm level>", "acc_gm\t<login>\t<gm level>".
+    void Launcher::OnCommandResult(CommandResult const& r)
+    {
+        std::vector<std::string> f;
+        for (std::size_t pos = 0;;)
+        {
+            std::size_t const tab = r.tag.find('\t', pos);
+            f.push_back(r.tag.substr(pos, tab == std::string::npos ? std::string::npos : tab - pos));
+            if (tab == std::string::npos)
+                break;
+            pos = tab + 1;
+        }
+        if (f.size() < 3)
+            return;
+        std::string const& login = f[1];
+        std::string const& level = f[2];
+        // what the server answered, for the message
+        std::string why;
+        for (std::string const& line : r.output)
+            if (line.find_first_not_of(" \t") != std::string::npos)
+                why += (why.empty() ? "" : " ") + line;
+        if (why.empty())
+            why = Tr("msg.acc_no_reason");
+
+        if (f[0] == "acc_create")
+        {
+            if (!r.ok)
+            {
+                AddEvent(Tr("event.acc_create_failed", login, why));
+                Message(Tr("event.acc_create_failed", login, why));
+                return;
+            }
+            if (level != "0")
+            {
+                AppendLog("AC> account set gmlevel " + login + " " + level + " -1", "me");
+                RunCommand("account set gmlevel " + login + " " + level + " -1", false, "acc_gm\t" + login + "\t" + level);
+                return;
+            }
+            AddEvent(Tr("event.acc_created", login));
+            Message(Tr("event.acc_created", login));
+        }
+        else if (f[0] == "acc_gm")
+        {
+            std::string const text = r.ok ? Tr("event.acc_created_gm", login, level) : Tr("event.acc_gm_failed", login, level, why);
+            AddEvent(text);
+            Message(text);
+        }
+        else
+            return;
+        if (_accLogin == login)
+        {
+            _accLogin.clear();
+            _model.DirtyVariable("acc_login");
+        }
+        _accRefreshAt = Platform::TickMs() + 500;
     }
 
     // ---- commands

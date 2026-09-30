@@ -68,7 +68,8 @@ waiting, the last 600 shown).
 | `@@LI acc <id>\t<name>\t<gm level>\t<characters>\t<last login>\t<bot>` | One account, answer to `@@accounts`; `<bot>` is 1 for `RNDBOT*` accounts. |
 | `@@LI char <name>\t<account>\t<level>\t<online>` | One character of a non-bot account, answer to `@@accounts`. |
 | `@@LI accend` | End of the account list. |
-| `@@LI done ok`, `@@LI done fail` | A console command finished (its output comes before, as log lines). |
+| `@@LI out <text>` | One line a console command printed (UTF-8). The launcher shows it in the log and keeps it as the command's answer. |
+| `@@LI done ok`, `@@LI done fail` | A console command finished (its output comes before, as `out` lines); `fail` when the command reported an error. Commands run one after another, so each `done` answers the oldest command still waiting; the Accounts tab reads the result of the accounts it creates this way. |
 | `@@LI realmname ok` | Answer to `@@realmname`. |
 | `@@LI deploy ok`, `@@LI deploy failed account` | Result of `--deploy`. |
 | `@@LI apply ok`, `@@LI apply failed` | Result of `--apply`. |
@@ -89,7 +90,7 @@ One line per command, UTF-8.
 | `@@quit` | Stop: save everyone and exit with 0. |
 | `@@accounts` | Report accounts and characters (`acc`, `char`, `accend`). |
 | `@@realmname <name>` | Rename the realm in the auth database (`realmname ok`). |
-| any other line | A console command, as typed in a server console (e.g. `account create <login> <password>`, `reload config`); its output is printed, then `done ok` or `done fail`. |
+| any other line | A console command, as typed in a server console (e.g. `account create <login> <password>`, `reload config`); its output comes as `out` lines, then `done ok` or `done fail`. |
 | end of input | As `@@quit`: the launcher is gone, so the server saves and stops. |
 
 ## States, stop and restart

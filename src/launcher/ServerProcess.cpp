@@ -1,6 +1,8 @@
 #include "ServerProcess.h"
 #include "TextUtil.h"
+#include <algorithm>
 #include <sstream>
+#include <utility>
 
 namespace
 {
@@ -54,6 +56,9 @@ bool LonelyIce::ServerProcess::Start(std::string const& exePath, std::string con
         std::lock_guard<std::mutex> guard(_lock);
         _stats = {};
         _failReason.clear();
+        _pendingTags.clear();
+        _cmdOutput.clear();
+        _results.clear();
     }
     _state = ServerState::Starting;
 
@@ -75,18 +80,42 @@ void LonelyIce::ServerProcess::Kill()
         _child->Kill();
 }
 
-bool LonelyIce::ServerProcess::SendCommand(std::string const& utf8Line)
+bool LonelyIce::ServerProcess::SendCommand(std::string const& utf8Line, std::string const& tag)
 {
     if (!IsRunning())
         return false;
-    return _child->Write(utf8Line + "\n");
+    // The server skips blank lines and answers "@@" lines without "done": only real commands wait for one.
+    std::size_t const first = utf8Line.find_first_not_of(" \t\r");
+    bool const command = first != std::string::npos && utf8Line.compare(first, 2, "@@") != 0;
+    // Called from the UI thread only; the tag goes in first, so the answer cannot come before it.
+    if (command)
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        _pendingTags.push_back(tag);
+    }
+    if (_child->Write(utf8Line + "\n"))
+        return true;
+    if (command)
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        if (!_pendingTags.empty())
+            _pendingTags.pop_back();
+    }
+    return false;
 }
+
 std::vector<std::string> LonelyIce::ServerProcess::TakeLines()
 {
     std::lock_guard<std::mutex> guard(_lock);
     std::vector<std::string> out(std::make_move_iterator(_lines.begin()), std::make_move_iterator(_lines.end()));
     _lines.clear();
     return out;
+}
+
+std::vector<LonelyIce::CommandResult> LonelyIce::ServerProcess::TakeResults()
+{
+    std::lock_guard<std::mutex> guard(_lock);
+    return std::exchange(_results, {});
 }
 
 bool LonelyIce::ServerProcess::TakeAccounts(std::vector<AccountInfo>& accounts, std::vector<CharacterInfo>& characters)
@@ -245,6 +274,30 @@ void LonelyIce::ServerProcess::HandleLine(std::string line)
             _accBuild.clear();
             _charBuild.clear();
             _accFresh = true;
+        }
+        else if (kind == "out")
+        {
+            // a line a console command printed: part of the log, and of the command's result
+            std::string text = line.substr(std::min(line.size(), sizeof(ControlPrefix) - 1 + 4));
+            std::lock_guard<std::mutex> guard(_lock);
+            _cmdOutput.push_back(text);
+            _lines.push_back(std::move(text));
+            while (_lines.size() > MaxBufferedLines)
+                _lines.pop_front();
+        }
+        else if (kind == "done")
+        {
+            std::string s;
+            in >> s;
+            std::lock_guard<std::mutex> guard(_lock);
+            std::vector<std::string> output = std::exchange(_cmdOutput, {});
+            if (!_pendingTags.empty())
+            {
+                std::string tag = std::move(_pendingTags.front());
+                _pendingTags.pop_front();
+                if (!tag.empty())
+                    _results.push_back({ std::move(tag), s == "ok", std::move(output) });
+            }
         }
         else if (kind == "stat")
         {

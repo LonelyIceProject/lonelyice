@@ -98,15 +98,37 @@ namespace
         setvbuf(stderr, nullptr, _IONBF, 0);
     }
 
+    // Console command output: each line as "@@LI out <text>" (UTF-8), so the launcher can tell a command's answer from
+    // the log. The chat handler prints text and line ends in separate pieces.
+    std::string _commandLine;
+
+    void FlushCommandLine()
+    {
+        while (!_commandLine.empty() && (_commandLine.back() == '\r' || _commandLine.back() == '\n'))
+            _commandLine.pop_back();
+        fprintf(stdout, "@@LI out %s\n", _commandLine.c_str());
+        fflush(stdout);
+        _commandLine.clear();
+    }
+
     void PrintCommandOutput(void* /*arg*/, std::string_view text)
     {
         std::lock_guard<std::mutex> guard(_outLock);
-        std::string s(text);
-        utf8printf(stdout, "%s", s.c_str());
+        for (char c : text)
+        {
+            _commandLine += c;
+            if (c == '\n')
+                FlushCommandLine();
+        }
     }
 
     void CommandFinished(void* /*arg*/, bool success)
     {
+        {
+            std::lock_guard<std::mutex> guard(_outLock);
+            if (!_commandLine.empty())
+                FlushCommandLine();
+        }
         Control(success ? "done ok" : "done fail");
     }
 

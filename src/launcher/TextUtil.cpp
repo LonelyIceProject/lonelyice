@@ -1,5 +1,6 @@
 #include "TextUtil.h"
 #include "Platform.h"
+#include <algorithm>
 
 namespace
 {
@@ -123,4 +124,19 @@ std::string LonelyIce::EscapeRml(std::string const& s)
         }
     }
     return out;
+}
+// The wizard's rule, within the core's limits (AccountMgr: login up to 17, password up to 16 characters).
+bool LonelyIce::ValidAccountName(std::string const& s)
+{
+    return !s.empty() && s.size() <= 16 && std::all_of(s.begin(), s.end(), [](char c)
+    {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+    });
+}
+
+// Not empty, up to 16 characters, no spaces (the console command splits at them).
+bool LonelyIce::ValidAccountPassword(std::string const& s)
+{
+    std::u32string const text = Decode(s);
+    return !text.empty() && text.size() <= 16 && text.find_first_of(U" \t\r\n") == std::u32string::npos;
 }

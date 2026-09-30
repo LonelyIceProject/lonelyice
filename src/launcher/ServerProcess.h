@@ -47,6 +47,14 @@ namespace LonelyIce
         bool online = false;
     };
 
+    // A console command sent with a tag, once the server finished it.
+    struct CommandResult
+    {
+        std::string tag;
+        bool ok = false;
+        std::vector<std::string> output;    // what the command printed, UTF-8
+    };
+
     // Runs this same exe with --server as a child process; log comes back through a pipe, commands go in through stdin.
     class ServerProcess
     {
@@ -57,10 +65,13 @@ namespace LonelyIce
         bool Start(std::string const& exePath, std::string const& configPath, std::string const& workDir, EnvList const& env);
         void Stop();                         // graceful: saves everyone
         void Kill();
-        bool SendCommand(std::string const& utf8Line);
+        // A console command or an "@@" control line. A console command sent with a tag comes back from
+        // TakeResults once the server has run it.
+        bool SendCommand(std::string const& utf8Line, std::string const& tag = {});
 
         // Call on the UI thread: drains new log lines and applies control messages.
         std::vector<std::string> TakeLines();
+        std::vector<CommandResult> TakeResults();
 
         // True once per completed "@@accounts" answer.
         bool TakeAccounts(std::vector<AccountInfo>& accounts, std::vector<CharacterInfo>& characters);
@@ -84,6 +95,10 @@ namespace LonelyIce
 
         mutable std::mutex _lock;
         std::deque<std::string> _lines;
+        // Console commands run one after another: each "done" answers the oldest one sent (tag empty: nobody waits).
+        std::deque<std::string> _pendingTags;
+        std::vector<std::string> _cmdOutput;    // "out" lines since the last "done"
+        std::vector<CommandResult> _results;
         ServerStats _stats;
         std::vector<AccountInfo> _accBuild, _accReady;
         std::vector<CharacterInfo> _charBuild, _charReady;
