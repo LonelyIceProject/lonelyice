@@ -36,53 +36,6 @@ std::string LonelyIce::EnvName(std::string const& key)
 
 namespace
 {
-    std::string Trim(std::string s)
-    {
-        s.erase(0, s.find_first_not_of(" \t\r"));
-        s.erase(s.find_last_not_of(" \t\r") + 1);
-        return s;
-    }
-}
-
-LonelyIce::EnvList LonelyIce::ModuleConfigOverrides(fs::path const& configFile, fs::path const& workDir)
-{
-    EnvList env;
-    std::error_code ec;
-    fs::path configDir = configFile.parent_path();
-    if (fs::equivalent(configDir, workDir / "configs", ec))
-        return env;
-
-    for (fs::directory_iterator it(configDir / "modules", ec), end; !ec && it != end; it.increment(ec))
-    {
-        if (it->path().extension() != ".conf")
-            continue;
-
-        std::ifstream in(it->path());
-        std::string line;
-        while (std::getline(in, line))
-        {
-            line = Trim(line);
-            if (line.empty() || line[0] == '#' || line[0] == '[')
-                continue;
-            std::size_t eq = line.find('=');
-            if (eq == std::string::npos)
-                continue;
-
-            std::string key = Trim(line.substr(0, eq));
-            std::string value = Trim(line.substr(eq + 1));
-            std::string clean;
-            for (char c : value)
-                if (c != '"')
-                    clean += c;
-
-            env.emplace_back(EnvName(key), clean);
-        }
-    }
-    return env;
-}
-
-namespace
-{
     constexpr std::pair<char const*, char const*> Databases[] = { { "LoginDatabaseInfo", "auth" }, { "CharacterDatabaseInfo", "characters" },
         { "WorldDatabaseInfo", "world" }, { "PlayerbotsDatabaseInfo", "playerbots" } };
 

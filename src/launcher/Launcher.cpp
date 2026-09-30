@@ -1890,7 +1890,8 @@ namespace
             OpenWizard();
             return;
         }
-        fs::path config = ServerConfig();
+        std::error_code ec;
+        fs::path config = fs::absolute(ServerConfig(), ec);
         if (!fs::exists(config))
         {
             Message(Tr("msg.no_config", Platform::PathToUtf8(config)));
@@ -1908,7 +1909,8 @@ namespace
             return;
         }
         AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
-        EnvList env = ModuleConfigOverrides(config, Root());
+        // the config goes by its absolute path: the core reads the module configs from "modules" beside it
+        EnvList env;
         env.emplace_back("AC_PLUGINS_DIR", Platform::PathToUtf8(_exeDir / "plugins"));
         // the server builds the plugins' client patches while it starts
         if (_client.valid)

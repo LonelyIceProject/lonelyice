@@ -37,8 +37,13 @@ The server reads `worldserver.conf` and `configs/modules/*.conf` itself; the lau
   patches into it while it starts);
 - `LONELYICE_DATA=client` when the game data is read from the client, else `AC_DBC_FROM_DATABASE=1`;
 - with a plugin's database server, the four `AC_*_DATABASE_INFO` connection strings and the storage's `config`
-  values;
-- when the config is not in `<server folder>/configs`, the module configs next to it as `AC_*` values.
+  values.
+
+The config is passed by its absolute path (`-c`); the core reads the module and plugin configs from the `modules`
+folder beside it, wherever the config is.
+
+Before a start the launcher makes the one-time changes LonelyIce needs in a config written by an older version
+(`[server] configVersion` in [lonelyice.ini](/docs/ini)); later edits of the player stay.
 
 The Settings page writes the server's values straight into `worldserver.conf` and the module and plugin configs,
 keeping comments and the file's own style. What a change needs is part of each field: `now`, `reload` (the

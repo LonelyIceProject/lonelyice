@@ -45,7 +45,6 @@ The launcher sets these:
 | `AC_LOGIN_DATABASE_INFO`, `AC_CHARACTER_DATABASE_INFO`, `AC_WORLD_DATABASE_INFO`, `AC_PLAYERBOTS_DATABASE_INFO` | a plugin's storage (`[server] location` not `local`): server start, the wizard's steps, the storage check | `<id>:<host>;<port>;<user>;<password>;<prefix><name>` with `<name>` `auth`, `characters`, `world`, `playerbots` ([lonelyice.ini](/docs/ini), `[remote]`). |
 | the same four | the storage check of the built-in files | `sqlite:<server folder>/db/<name>.sqlite`; playerbots with `;attach=characters=<server folder>/db/characters.sqlite`. |
 | `AC_<KEY>` of the storage's `config` | with a plugin's storage | The values the plugin's manifest lists under `storage.config` ([Plugin format](/docs/plugin-format)), `{bin}` replaced by the plugin's `server/<platform>` folder and `{exe}` by `.exe` on Windows (empty elsewhere). |
-| `AC_<KEY>` of module configs | server start, when the server's config is not in `<server folder>/configs` | Every `key = value` of the `modules/*.conf` next to that config (quotes removed). The core reads module and plugin configs from `configs/modules` of its working directory (the server folder) on Windows, so a config kept elsewhere passes its module settings this way. |
 | `AC_DISABLE_INTERACTIVE` | the wizard's steps and the storage check; the server sets it for itself in every mode | `1`: the core's updater never asks on stdin whether to create a missing database; it creates it. |
 
 The core also reads `AC_CONFIG_POLICY`, the severity policy for config problems (see the core's

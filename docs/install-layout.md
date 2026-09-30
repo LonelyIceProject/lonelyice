@@ -55,7 +55,7 @@ it.
 |---|---|
 | `configs/worldserver.conf` | The server's config. Created from `worldserver.conf.dist` once, with LonelyIce's values: SQLite databases in `db/`, `DataDir = data`, `LogsDir = logs`, `SourceDirectory = sql`, `Updates.EnableDatabases = 0`, `BindIP = 127.0.0.1`, `MapUpdate.Threads` from the CPU count, the rates chosen in the wizard. The wizard does not overwrite an existing one; Settings edits it in place. |
 | `configs/worldserver.conf.dist` | Rewritten from `setup/configs.pak` on every "Databases" step. |
-| `configs/modules/<name>.conf` | Configs of the static modules and of the plugins (copied from the plugin's `.conf.dist` at install, or when Settings first saves a value of a plugin installed later). On Windows the server reads them from `configs/modules` of its working directory, i.e. here; on Linux and macOS the core looks in `<CONF_DIR>/modules` of its build instead. |
+| `configs/modules/<name>.conf` | Configs of the static modules and of the plugins (copied from the plugin's `.conf.dist` at install, or when Settings first saves a value of a plugin installed later). The server reads them from the `modules` folder beside the config it was started with (the launcher passes the config's absolute path), on every system. |
 | `configs/modules/<name>.conf.dist` | The static modules' defaults from `setup/configs.pak`. |
 | `db/auth.sqlite`, `db/characters.sqlite`, `db/world.sqlite` | The databases with the built-in storage (`[server] location = local`). |
 | `db/playerbots.sqlite` | The playerbots plugin's database (it attaches `characters.sqlite`). |
