@@ -50,7 +50,12 @@ void LonelyIce::LauncherSettings::Load()
     uiScale = ReadInt(ini, "launcher", "uiScale", 0);
     uiScale = uiScale ? std::clamp(uiScale, 50, 300) : 0;
     backupTime = ini.Get("backup", "time", "04:00");
-    backupKeep = std::max(1, ReadInt(ini, "backup", "keep", 7));
+    // before schedules: an empty time meant no scheduled backups
+    backupSchedule = ini.Get("backup", "schedule", backupTime.empty() ? "off" : "daily");
+    if (backupTime.empty())
+        backupTime = "04:00";
+    backupDays = std::max(1, ReadInt(ini, "backup", "days", 14));
+    backupBudgetMb = std::max(0, ReadInt(ini, "backup", "budget", 2048));
     lastBackupDay = ini.Get("backup", "lastDay", "");
     realmName = ini.Get("server", "realmName", "");
     sqlStamp = ini.Get("server", "sqlStamp", "");
@@ -60,6 +65,7 @@ void LonelyIce::LauncherSettings::Load()
         location = *old == "mysql" ? "mysql" : "local";
         dataCache = *old != "client";
         remote = { ini.Get("mysql", "host", remote.host), ini.Get("mysql", "port", ""), ini.Get("mysql", "user", remote.user),
+    lastBackupAt = std::atoll(ini.Get("backup", "lastAt", "0").c_str());
             ini.Get("mysql", "password", ""), ini.Get("mysql", "prefix", remote.prefix) };
     }
     else
@@ -109,10 +115,14 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("launcher", "language", language);
     ini.Set("launcher", "uiScale", std::to_string(uiScale));
     ini.Set("backup", "time", backupTime);
-    ini.Set("backup", "keep", std::to_string(backupKeep));
+    ini.Remove("backup", "keep");
+    ini.Set("backup", "days", std::to_string(backupDays));
+    ini.Set("backup", "budget", std::to_string(backupBudgetMb));
     ini.Set("backup", "lastDay", lastBackupDay);
     ini.Set("packages", "index", packageIndex);
     ini.Set("packages", "disabled", packageIndexOff);
     ini.Set("packages", "locale", packageLocale);
     ini.Save(file);
 }
+    ini.Set("backup", "schedule", backupSchedule);
+    ini.Set("backup", "lastAt", std::to_string(lastBackupAt));

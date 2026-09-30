@@ -64,7 +64,9 @@ it.
 | `data/vmaps/` | Collision from the vmaps step. |
 | `data/mmaps/` | Navigation meshes from the mmaps step (optional). |
 | `logs/` | The server's log files (`LogsDir`). |
-| `backups/<YYYY-MM-DD_HHMMSS>/` | The launcher's backups: `auth.sqlite`, `characters.sqlite`, `playerbots.sqlite` (not `world.sqlite`), copied with SQLite's backup interface, so a running server is fine. |
+| `backups/store/` | The launcher's backups of all four databases: packs of changed pages and one small file per backup ([Backups](/docs/backups)). Made while the server runs as well. |
+| `backups/export/<id>/` | Database files of a backup written out by Export. |
+| `backups/<YYYY-MM-DD_HHMMSS>/` | Full copies made by older versions (`auth.sqlite`, `characters.sqlite`, `playerbots.sqlite`); listed, never deleted by the launcher. |
 | `sql/` | The SQL from `setup/sql.pak`, only while the "Databases" step runs; removed afterwards. |
 | `data/Buildings/`, `data/mmaps-config.yaml` | Temporary files of the vmaps and mmaps steps. |
 
@@ -89,7 +91,8 @@ The storage check writes `LonelyIce/storage-check.conf` in the system's temporar
 | Path | Effect |
 |---|---|
 | `logs/*` | Nothing but the logs. |
-| old folders in `backups/` | Nothing but those backups. |
+| `backups/export/`, `backups/<YYYY-MM-DD_HHMMSS>/` | Nothing but those copies. |
+| `backups/store/` | All backups; the next one starts over with every page. Remove single backups by lowering `[backup] budget` or `days` instead. |
 | `sql/`, `data/Buildings/`, `data/mmaps-config.yaml`, `plugins/.staging/` | Leftovers of an interrupted step; the next run of that step starts over. |
 | `data/maps/` with the data cache off | The tiles are built again as grids load. |
 | `data/mmaps/` | Optional in the wizard; the Maintenance page then reports it missing. |
@@ -104,10 +107,10 @@ Keep `setup/`: the wizard's "Databases" step needs `sql.pak` and `configs.pak`, 
 
 ## What to back up
 
-- `db/`, all four files. The launcher's own backups leave out `world.sqlite`; the world database also holds the
-  plugins' named ids (`plugin_ids`) and patch stamps (`plugin_patches`) and anything changed in the world by hand.
-  With the server running, use the launcher's backup (Maintenance → Backups) for the other three; copy
-  `world.sqlite` with the server stopped.
+- `db/`, all four files; the world database also holds the plugins' named ids (`plugin_ids`) and patch stamps
+  (`plugin_patches`) and anything changed in the world by hand. The launcher's backups (Maintenance → Backups)
+  cover all four, also while the server runs; to take them elsewhere, copy `backups/store/` or Export a backup.
+  Copy `db/` itself only with the server stopped.
 - `configs/`: the server's and the plugins' settings.
 - `lonelyice.ini`: the launcher's settings, including the server folder and the storage.
 - `plugins/` if exact plugin versions matter; otherwise they can be installed again from the catalogs.

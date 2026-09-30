@@ -26,7 +26,9 @@ data.
   rest.
 - **Runs quietly in the tray**: closing the window keeps your world running; start, stop and restart from the
   tray menu.
-- **Automatic backups** of your characters every day.
+- **Automatic backups** of your characters and your world, as often as every hour: only what changed takes
+  space, old backups thin out by themselves within the disk space you allow, and any of them can be restored
+  with two clicks.
 
 ## Building from source
 

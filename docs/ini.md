@@ -80,15 +80,21 @@ and `playerbots` ([Environment variables](/docs/environment)).
 
 ## [backup]
 
-Scheduled backups copy the SQLite databases (auth, characters, playerbots) into `<root>/backups`
-([Install layout](/docs/install-layout)). They run only while the launcher runs and only with
-`[server] location = local`; the launcher looks every 30 seconds.
+Backups of the SQLite databases (auth, characters, world, playerbots) into `<root>/backups/store`, keeping only
+what changed ([Backups](/docs/backups)). Scheduled ones run only while the launcher runs and only with
+`[server] location = local`; the launcher looks every 30 seconds. A scheduled backup that finds nothing changed
+makes none.
 
 | Key | Default | Meaning | Set by |
 |---|---|---|---|
-| `time` | `04:00` | Daily time `HH:MM` (exactly five characters): the first check at or after it on a day starts that day's backup. Empty (or any other length): no scheduled backups. | Settings → Launcher → Backup, time |
-| `keep` | `7` | How many backup folders to keep (at least 1); the oldest go after each backup, manual ones included. | Settings → Launcher → Backups to keep |
-| `lastDay` | empty | `YYYY-MM-DD` of the last scheduled backup. | the launcher |
+| `schedule` | `daily` | `off`, `daily` (at `time`), or the hours between backups: `1`, `3`, `6`, `12`. Without the key, an empty `time` (older versions) means `off`. | Settings → Launcher → Backups |
+| `time` | `04:00` | Daily time `HH:MM` (exactly five characters): the first check at or after it on a day starts that day's backup. | Settings → Launcher → Daily backup, time |
+| `days` | `14` | For that many days the newest backup of each day stays; older ones thin out to one per week. Everything of the last 24 hours stays. | Settings → Launcher → Daily backups, days |
+| `budget` | `2048` | Disk space for the backups in MB; over it the oldest backups go (the newest always stays). `0`: no limit. | Settings → Launcher → Disk space for backups, MB |
+| `lastDay` | empty | `YYYY-MM-DD` of the last scheduled daily backup. | the launcher |
+| `lastAt` | `0` | Unix time of the last scheduled backup with an hourly schedule. | the launcher |
+
+`keep` (the number of full copies of older versions) is removed when the launcher saves the file.
 
 ## [packages]
 

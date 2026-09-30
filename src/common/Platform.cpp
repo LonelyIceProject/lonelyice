@@ -20,6 +20,7 @@
 #include <csignal>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/file.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -371,6 +372,20 @@ bool Platform::IsProcessRunning(fs::path const& exe)
     }
     CloseHandle(snap);
     return found;
+}
+
+Platform::FileLock::FileLock(fs::path const& file)
+{
+    // no sharing: a second open fails while this handle is open
+    HANDLE h = CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE)
+        _handle = reinterpret_cast<intptr_t>(h);
+}
+
+Platform::FileLock::~FileLock()
+{
+    if (Held())
+        CloseHandle(reinterpret_cast<HANDLE>(_handle));
 }
 
 bool Platform::DesktopShortcutsSupported()
@@ -823,6 +838,25 @@ bool Platform::IsProcessRunning(fs::path const& exe)
     }
     return false;
 #endif
+}
+
+Platform::FileLock::FileLock(fs::path const& file)
+{
+    int fd = open(file.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (fd == -1)
+        return;
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0)
+    {
+        close(fd);
+        return;
+    }
+    _handle = fd;
+}
+
+Platform::FileLock::~FileLock()
+{
+    if (Held())
+        close(int(_handle));
 }
 
 bool Platform::DesktopShortcutsSupported()

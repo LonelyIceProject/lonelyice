@@ -68,9 +68,20 @@ set.launch.autostart = Запускать сервер вместе с лаун�
 set.launch.stop_with_game = Выход из игры останавливает сервер
 set.launch.tray_on_close = Закрытие окна сворачивает в трей
 set.launch.tray_on_close.hint = Сервер продолжает работать, LonelyIce остаётся в области уведомлений
-set.launch.backup_time = Резервная копия, время
-set.launch.backup_time.hint = ЧЧ:ММ, пусто — без расписания
-set.launch.backup_keep = Хранить копий
+set.launch.backup_schedule = Резервные копии
+set.launch.backup_schedule.hint = Если ничего не изменилось, копия не создаётся
+set.opt.backup.off = Выключены
+set.opt.backup.1 = Каждый час
+set.opt.backup.3 = Каждые 3 часа
+set.opt.backup.6 = Каждые 6 часов
+set.opt.backup.12 = Каждые 12 часов
+set.opt.backup.daily = Раз в день
+set.launch.backup_time = Ежедневная копия, время
+set.launch.backup_time.hint = ЧЧ:ММ
+set.launch.backup_days = Ежедневные копии, дней
+set.launch.backup_days.hint = По одной копии в день хранится столько дней, дальше — по одной в неделю
+set.launch.backup_budget = Место под копии, МБ
+set.launch.backup_budget.hint = Сверх него удаляются самые старые копии; 0 — без лимита
 
 set.opt.locale.config_wtf = Как в Config.wtf
 

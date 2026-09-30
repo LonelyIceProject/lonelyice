@@ -3,9 +3,9 @@
 `LonelyIce.exe` (`LonelyIce` on Linux and macOS) is one program with several modes. Without a mode argument it
 opens the launcher window; the launcher runs the other modes as child processes of the same executable (the
 server, the extractors, the database steps of the wizard), and they can be run by hand the same way. The mode is
-the first of `--server`, `--tool`, `--pkg` or `--pack` found anywhere on the command line. On Windows the
+the first of `--server`, `--tool`, `--pkg`, `--backup` or `--pack` found anywhere on the command line. On Windows the
 executable is a GUI program: the console modes attach to the console they were started from (`--server` reads
-commands from it as well). Messages of `--pkg` are in the launcher's language ([Environment variables](/docs/environment),
+commands from it as well). Messages of `--pkg` and `--backup` are in the launcher's language ([Environment variables](/docs/environment),
 `LONELYICE_LANG`).
 
 ## Modes
@@ -16,6 +16,7 @@ commands from it as well). Messages of `--pkg` are in the launcher's language ([
 | `--server` | the launcher, the wizard, `--pkg apply` | World and auth server in one process, and the one-shot database steps. |
 | `--tool` | the wizard | Client data extractors: maps, terrain tiles, vmaps, mmaps. |
 | `--pkg` | the player, scripts | Plugin package manager. |
+| `--backup` | the player, scripts | Backups of the databases: make, list, restore, export. |
 | `--pack` | the build (`lonelyice_release`) | Packs the core's SQL and default configs into `setup/`. |
 
 ## Launcher
@@ -147,6 +148,36 @@ LonelyIce.exe --pkg --index "D:\catalog" available --locale ru
 LonelyIce.exe --pkg pack plugins\lonelyice.tactics D:\catalog
 cd C:\Games\WoW\LonelyIce
 LonelyIce.exe --pkg apply -c configs\worldserver.conf --client C:\Games\WoW335
+```
+
+## Backups
+
+```
+LonelyIce --backup [<command>] [-c <worldserver.conf>] [--root <server folder>]
+```
+
+The same backups as the launcher's, in `<server folder>/backups/store` ([Backups](/docs/backups)), with the
+retention of `lonelyice.ini` next to the executable (`[backup] days`, `budget`).
+
+| Command | Meaning |
+|---|---|
+| `create` (or none) | A backup now, while the server runs as well. Prints `Backup <id>: +<size>`, or `Nothing changed since backup <id>.` without making one. Then old backups are thinned out. |
+| `list` | Backups, newest first: id, time, size added, what changed; then the size of the store. |
+| `restore <id>` | Puts the backup's databases in place. Refused while any process has a database open (stop the server first); the current state is backed up first and its id printed. |
+| `export <id>` | Writes the backup's database files into `<server folder>/backups/export/<id>/`. |
+
+| Option | Default | Meaning |
+|---|---|---|
+| `-c`, `--config <file>` | as the launcher: `[server] config`, else `<server folder>/configs/worldserver.conf` | The server config naming the databases (`*DatabaseInfo`, `modules/playerbots.conf`). |
+| `--root <dir>` | the folder above the config's `configs` folder, else `[server] root`, else the executable's folder | The server folder: relative database paths and `backups/`. |
+
+Exit code 0 on success (also when nothing changed), 1 on an error (printed as `Error: <message>`) or an unknown
+command (usage).
+
+```
+LonelyIce.exe --backup
+LonelyIce.exe --backup list
+LonelyIce.exe --backup restore 2026-09-30_040012
 ```
 
 ## Release packer

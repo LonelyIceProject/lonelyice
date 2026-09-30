@@ -86,6 +86,22 @@ namespace LonelyIce::Platform
     // A process whose executable (or, for programs run through Wine, command line) ends with this file name.
     bool IsProcessRunning(std::filesystem::path const& exe);
 
+    // An exclusive lock on a file (created when missing) between processes, held until destroyed; the operating
+    // system drops it with the process however it ends. Held() is false when another process has it.
+    class FileLock
+    {
+    public:
+        explicit FileLock(std::filesystem::path const& file);
+        ~FileLock();
+        FileLock(FileLock const&) = delete;
+        FileLock& operator=(FileLock const&) = delete;
+
+        bool Held() const { return _handle != -1; }
+
+    private:
+        intptr_t _handle = -1;
+    };
+
     // A desktop shortcut starting target with args. False (error set) where the desktop has none.
     bool CreateDesktopShortcut(std::string const& name, std::filesystem::path const& target,
         std::vector<std::string> const& args, std::filesystem::path const& icon, std::string& error);

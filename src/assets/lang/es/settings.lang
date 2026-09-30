@@ -68,9 +68,20 @@ set.launch.autostart = Iniciar el servidor junto con el lanzador
 set.launch.stop_with_game = Salir del juego detiene el servidor
 set.launch.tray_on_close = Cerrar la ventana la minimiza a la bandeja
 set.launch.tray_on_close.hint = El servidor sigue funcionando, LonelyIce permanece en el área de notificación
-set.launch.backup_time = Copia de seguridad, hora
-set.launch.backup_time.hint = HH:MM, vacío para no programar ninguna
-set.launch.backup_keep = Copias de seguridad a conservar
+set.launch.backup_schedule = Copias de seguridad
+set.launch.backup_schedule.hint = Si nada ha cambiado, no se crea ninguna copia
+set.opt.backup.off = Desactivadas
+set.opt.backup.1 = Cada hora
+set.opt.backup.3 = Cada 3 horas
+set.opt.backup.6 = Cada 6 horas
+set.opt.backup.12 = Cada 12 horas
+set.opt.backup.daily = Diaria
+set.launch.backup_time = Copia diaria, hora
+set.launch.backup_time.hint = HH:MM
+set.launch.backup_days = Copias diarias, días
+set.launch.backup_days.hint = Se conserva una copia por día durante tantos días, después una por semana
+set.launch.backup_budget = Espacio para copias, MB
+set.launch.backup_budget.hint = Al superarlo se eliminan las copias más antiguas; 0 = sin límite
 
 set.opt.locale.config_wtf = Como en Config.wtf
 

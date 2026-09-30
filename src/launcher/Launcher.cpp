@@ -153,6 +153,14 @@ namespace
 
     // "2026-09-28 19:12:40" -> "today, 19:12" or the date
     std::string FormatLogin(std::string const& ts)
+    std::string FormatTime(std::time_t t)
+    {
+        std::tm const tm = Platform::LocalTime(t);
+        char buf[32];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", &tm);
+        return buf;
+    }
+
     {
         if (ts.size() < 16 || ts.rfind("0000", 0) == 0)
             return "—";
@@ -266,6 +274,8 @@ namespace
 
         bool NeedsSetup() const;
         void OpenWizard();
+        void BackupAction(std::string const& action, int index);
+        void FinishBackup();
         std::string ServerLocale() const;
         StorageChoice CurrentStorage() const;
         std::vector<StorageProviderInfo> StorageProviders() const;
@@ -313,6 +323,8 @@ namespace
         // accounts
         std::vector<AccRow> _accRows;
         Rml::String _accNote = Tr("acc.start_server"), _accLogin, _accPass, _accLevel = "0";
+        std::vector<std::string> _backupIds;    // per backup row; empty for an old full copy
+        int _backupConfirm = -1;                // row whose restore waits for a second click
         bool _accLoaded = false;
         // commands
         std::vector<GroupView> _cmdGroups;
@@ -367,6 +379,8 @@ namespace
         ClientPatch::Result _syncResult;
     };
 
+        std::string _backupOp;                  // create, restore, export
+        bool _backupScheduled = false;
     // No config or no world database: the wizard has to run first.
     bool Launcher::NeedsSetup() const
     {
@@ -1062,6 +1076,7 @@ namespace
         c.Bind("pl_repos", &_plRepos);
         c.Bind("pl_repo_new", &_plRepoNew);
         c.Bind("pl_has_official", &_plHasOfficial);
+        c.Bind("backup_confirm", &_backupConfirm);
         c.Bind("pl_locale", &_plLocale);
         c.Bind("pl_locales", &_plLocales);
         c.Bind("set_fields", &_setFields);
@@ -1200,6 +1215,9 @@ namespace
         {
             _plView = v.Get<Rml::String>();
             RefreshPlugins();
+        onArg("backup_restore", [this](Rml::Variant const& v) { BackupAction("restore", v.Get<int>()); });
+        onArg("backup_export", [this](Rml::Variant const& v) { BackupAction("export", v.Get<int>()); });
+        on("backup_cancel", [this] { BackupAction("cancel", -1); });
             RefreshRepos();
             _model.DirtyVariable("pl_view");
         });
@@ -1426,18 +1444,7 @@ namespace
         }
 
         if (_backupDone.exchange(false))
-        {
-            if (_backupThread.joinable())
-                _backupThread.join();
-            _backupBusy = false;
-            _model.DirtyVariable("backup_busy");
-            if (_backupResult.ok)
-                AddEvent(Tr("event.backup_done", FormatBytes(_backupResult.bytes), Platform::PathToUtf8(_backupResult.dir.filename())));
-            else
-                AddEvent(Tr("event.backup_failed", _backupResult.message));
-            RefreshBackups();
-            RefreshNews();
-        }
+            FinishBackup();
 
         std::string picked, pickedRepo;
         {
@@ -1763,21 +1770,10 @@ namespace
         if (_plUpdates > 0)
             _news.push_back({ "update", Tr("news.updates", _plUpdates), Tr("news.updates.text"), "updates", Tr("news.open") });
 
-        // the newest backup folder
-        std::error_code ec;
-        fs::path newest;
-        fs::file_time_type newestTime{};
-        for (fs::directory_iterator it(Root() / "backups", ec), end; !ec && it != end; it.increment(ec))
-            if (it->is_directory(ec) && it->last_write_time(ec) > newestTime)
-            {
-                newestTime = it->last_write_time(ec);
-                newest = it->path();
-            }
-        if (!newest.empty())
-        {
-            DirStats const s = Scan(newest);
-            _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", Platform::PathToUtf8(newest.filename()), FormatBytes(s.bytes)), "backups", Tr("news.open") });
-        }
+        // the newest backup
+        std::vector<Backup::SnapshotFile> const backups = ListBackups(Root() / "backups");
+        if (!backups.empty())
+            _news.push_back({ "info", Tr("news.backup"), Tr("news.backup.text", FormatTime(backups.front().time), DescribeBackup(backups.front())), "backups", Tr("news.open") });
         else if (!NeedsSetup() && _settings.location == "local")
             _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
         _model.DirtyVariable("news");
@@ -1816,20 +1812,33 @@ namespace
     {
         std::error_code ec;
         _backupRows.clear();
-        std::vector<fs::path> dirs;
-        for (fs::directory_iterator it(Root() / "backups", ec), end; !ec && it != end; it.increment(ec))
-            if (it->is_directory(ec))
-                dirs.push_back(it->path());
-        std::sort(dirs.rbegin(), dirs.rend());
-        uint64_t total = 0;
-        for (fs::path const& d : dirs)
+        _backupIds.clear();
+        _backupConfirm = -1;
+        for (Backup::SnapshotFile const& s : ListBackups(dir))
+        {
+            _backupRows.push_back({ FormatTime(s.time), DescribeBackup(s), "backup", "+" + FormatBytes(s.added) });
+            _backupIds.push_back(s.id);
+        }
+        // full copies made by earlier versions stay until deleted by hand
+        std::vector<fs::path> old;
+        for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_directory(ec) && it->path().filename() != "store" && it->path().filename() != "export")
+                old.push_back(it->path());
+        std::sort(old.rbegin(), old.rend());
+        uint64_t total = BackupStoreBytes(dir);
+        for (fs::path const& d : old)
         {
             DirStats const s = Scan(d);
             total += s.bytes;
-            _backupRows.push_back({ Platform::PathToUtf8(d.filename()), Tr("backup.files", s.files), "ok", FormatBytes(s.bytes) });
+            _backupRows.push_back({ Platform::PathToUtf8(d.filename()), Tr("backup.old_copy", s.files), "old", FormatBytes(s.bytes) });
+            _backupIds.emplace_back();
         }
-        _backupSum = _settings.backupTime.empty() ? Tr("backup.sum_manual", dirs.size(), FormatBytes(total))
-            : Tr("backup.sum", dirs.size(), FormatBytes(total), _settings.backupTime, _settings.backupKeep);
+        std::string const& when = _settings.backupSchedule;
+        std::string const schedule = when == "off" ? Tr("backup.schedule.off")
+            : when == "daily" ? Tr("backup.schedule.daily", _settings.backupTime) : Tr("backup.schedule.hours", when);
+        _backupSum = Tr("backup.sum", _backupIds.size(), FormatBytes(total),
+            _settings.backupBudgetMb ? FormatBytes(uint64_t(_settings.backupBudgetMb) << 20) : Tr("backup.no_limit"), schedule);
+        _model.DirtyVariable("backup_confirm");
 
         _logRows.clear();
         std::vector<fs::directory_entry> logs;
@@ -1883,6 +1892,7 @@ namespace
             Message(Tr("msg.client_data_needs_client"));
             return;
         }
+        fs::path const dir = Root() / "backups";
         std::optional<StorageProviderInfo> const provider = _settings.location != "local" ? FindProvider(_settings.location) : std::nullopt;
         if (_settings.location != "local" && !provider)
         {
@@ -1935,6 +1945,11 @@ namespace
         _server->Stop();
         RefreshServerView();
     }
+        if (_backupBusy && _backupOp == "restore")
+        {
+            Message(Tr("msg.backup_restoring"));
+            return;
+        }
 
     void Launcher::Play()
     {
@@ -2807,9 +2822,10 @@ namespace
             Message(Tr("msg.backup_running"));
         if (_backupThread.joinable())
             _backupThread.join();
-        _backupThread = std::thread([this, dbs, root = Root() / "backups", keep = _settings.backupKeep]
+        Backup::Retention const retention{ _settings.backupDays, uint64_t(_settings.backupBudgetMb) << 20 };
+        _backupThread = std::thread([this, dbs, root = Root() / "backups", scheduled, retention]
         {
-            _backupResult = BackupDatabases(dbs, root, keep);
+            _backupResult = BackupDatabases(dbs, root, scheduled ? "scheduled" : "manual", retention);
             _backupDone = true;
             UiBackend::Wake();
         });
@@ -2817,12 +2833,23 @@ namespace
 
     void Launcher::CheckScheduledBackup()
     {
-        if (_settings.backupTime.size() != 5 || _backupBusy || _settings.location != "local")
+        if (_backupBusy || _settings.location != "local" || _settings.backupSchedule == "off" || _wizard->IsInstalling() || NeedsSetup())
             return;
-        std::string today = Now("%Y-%m-%d");
-        if (_settings.lastBackupDay == today || Now("%H:%M") < _settings.backupTime)
-            return;
-        _settings.lastBackupDay = today;
+        if (_settings.backupSchedule == "daily")
+        {
+            std::string const today = Now("%Y-%m-%d");
+            if (_settings.backupTime.size() != 5 || _settings.lastBackupDay == today || Now("%H:%M") < _settings.backupTime)
+                return;
+            _settings.lastBackupDay = today;
+        }
+        else
+        {
+            int64_t const hours = std::atoi(_settings.backupSchedule.c_str());
+            int64_t const now = std::time(nullptr);
+            if (hours <= 0 || (now >= _settings.lastBackupAt && now - _settings.lastBackupAt < hours * 3600))
+                return;
+            _settings.lastBackupAt = now;
+        }
         _settings.Save();
         StartBackup(true);
     }
@@ -2833,3 +2860,87 @@ int LauncherMain(int argc, char** argv)
     Launcher launcher;
     return launcher.Run(argc, argv);
 }
+        _backupOp = "create";
+        _backupScheduled = scheduled;
+    // Daily at a time, or every few hours; a backup finding nothing changed makes none.
+
+    // restore / export of a backup row; restore asks for a second click
+    void Launcher::BackupAction(std::string const& action, int index)
+    {
+        if (action == "cancel" || index < 0 || index >= int(_backupIds.size()) || _backupIds[index].empty() || _backupBusy)
+        {
+            _backupConfirm = -1;
+            _model.DirtyVariable("backup_confirm");
+            return;
+        }
+        std::string const id = _backupIds[index];
+        fs::path const root = Root() / "backups";
+        if (action == "restore")
+        {
+            if (_backupConfirm != index)
+            {
+                _backupConfirm = index;
+                _model.DirtyVariable("backup_confirm");
+                return;
+            }
+            _backupConfirm = -1;
+            _model.DirtyVariable("backup_confirm");
+            if (_server->IsRunning() || _wizard->IsInstalling())
+            {
+                Message(Tr("msg.backup_stop_server"));
+                return;
+            }
+            Message(Tr("msg.backup_restoring"));
+        }
+        _backupBusy = true;
+        _backupOp = action;
+        _model.DirtyVariable("backup_busy");
+        if (_backupThread.joinable())
+            _backupThread.join();
+        _backupThread = std::thread([this, action, id, root, dbs = FindDatabases(ServerConfig(), Root())]
+        {
+            _backupResult = action == "restore" ? RestoreBackup(dbs, root, id) : ExportBackup(root, id);
+            _backupDone = true;
+            UiBackend::Wake();
+        });
+    }
+
+    void Launcher::FinishBackup()
+    {
+        if (_backupThread.joinable())
+            _backupThread.join();
+        _backupBusy = false;
+        _model.DirtyVariable("backup_busy");
+        BackupResult const& r = _backupResult;
+        std::string changed;
+        for (std::string const& name : r.changed)
+            changed += (changed.empty() ? "" : ", ") + name;
+        if (changed.empty())
+            changed = Tr("backup.no_changes");
+        if (!r.ok)
+        {
+            AddEvent(Tr("event.backup_failed", r.message));
+            if (_backupOp != "create" || !_backupScheduled)
+                Message(Tr("event.backup_failed", r.message));
+        }
+        else if (_backupOp == "restore")
+        {
+            AddEvent(Tr("event.backup_restored", changed));
+            Message(Tr("event.backup_restored", changed));
+        }
+        else if (_backupOp == "export")
+        {
+            AddEvent(Tr("event.backup_exported", Platform::PathToUtf8(r.dir)));
+            Platform::OpenInShell(r.dir);
+        }
+        else if (r.created)
+        {
+            AddEvent(Tr("event.backup_done", FormatBytes(r.added), changed));
+            if (!r.message.empty())
+                AddEvent(r.message);
+        }
+        else if (!_backupScheduled)
+            Message(Tr("msg.backup_unchanged"));
+        RefreshBackups();
+        RefreshNews();
+    }

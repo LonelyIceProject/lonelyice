@@ -1,6 +1,7 @@
 #ifndef LONELYICE_LAUNCHERSETTINGS_H
 #define LONELYICE_LAUNCHERSETTINGS_H
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -31,9 +32,12 @@ namespace LonelyIce
         bool trayOnClose = true;
         std::string language;            // launcher language code, empty = English
         int uiScale = 0;                 // percent on top of the system display scale, 0 = largest that fits the screen
-        std::string backupTime = "04:00"; // empty = no scheduled backups
-        int backupKeep = 7;
-        std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled backup
+        std::string backupSchedule = "daily"; // off, daily (at backupTime), or hours between backups: 1, 3, 6, 12
+        std::string backupTime = "04:00";
+        int backupDays = 14;             // one backup per day for that many days, then one per week
+        int backupBudgetMb = 2048;       // disk space the backups may take, 0 = no limit
+        std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled daily backup
+        int64_t lastBackupAt = 0;        // time of the last scheduled backup (hourly schedules)
         std::string sqlStamp;            // setup/sql.pak the databases were last deployed from
         // Where the databases are: "local" (SQLite files in <dataRoot>/db) or the id of a plugin's storage (a database
         // server, see StorageProvider), reached with remote.

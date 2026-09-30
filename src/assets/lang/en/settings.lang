@@ -68,9 +68,20 @@ set.launch.autostart = Start the server with the launcher
 set.launch.stop_with_game = Quitting the game stops the server
 set.launch.tray_on_close = Closing the window minimizes to tray
 set.launch.tray_on_close.hint = The server keeps running, LonelyIce stays in the notification area
-set.launch.backup_time = Backup, time
-set.launch.backup_time.hint = HH:MM, empty for no schedule
-set.launch.backup_keep = Backups to keep
+set.launch.backup_schedule = Backups
+set.launch.backup_schedule.hint = A backup that finds nothing changed makes none
+set.opt.backup.off = Off
+set.opt.backup.1 = Every hour
+set.opt.backup.3 = Every 3 hours
+set.opt.backup.6 = Every 6 hours
+set.opt.backup.12 = Every 12 hours
+set.opt.backup.daily = Daily
+set.launch.backup_time = Daily backup, time
+set.launch.backup_time.hint = HH:MM
+set.launch.backup_days = Daily backups, days
+set.launch.backup_days.hint = One backup per day is kept for that many days, then one per week
+set.launch.backup_budget = Disk space for backups, MB
+set.launch.backup_budget.hint = Over it the oldest backups go; 0 = no limit
 
 set.opt.locale.config_wtf = As in Config.wtf
 

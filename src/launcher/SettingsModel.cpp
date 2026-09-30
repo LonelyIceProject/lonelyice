@@ -111,8 +111,12 @@ SettingsModel::SettingsModel()
         L("launch", "set.launch.autostart", "Launcher.AutoStart", 'b'),
         L("launch", "set.launch.stop_with_game", "Launcher.StopWithGame", 'b'),
         L("launch", "set.launch.tray_on_close", "Launcher.TrayOnClose", 'b', "set.launch.tray_on_close.hint"),
+        L("launch", "set.launch.backup_schedule", "Backup.Schedule", 's', "set.launch.backup_schedule.hint",
+            { { "off", "set.opt.backup.off" }, { "1", "set.opt.backup.1" }, { "3", "set.opt.backup.3" }, { "6", "set.opt.backup.6" },
+              { "12", "set.opt.backup.12" }, { "daily", "set.opt.backup.daily" } }),
         L("launch", "set.launch.backup_time", "Backup.Time", 't', "set.launch.backup_time.hint"),
-        L("launch", "set.launch.backup_keep", "Backup.Keep", 'n'),
+        L("launch", "set.launch.backup_days", "Backup.Days", 'n', "set.launch.backup_days.hint"),
+        L("launch", "set.launch.backup_budget", "Backup.Budget", 'n', "set.launch.backup_budget.hint"),
     };
 
     for (SetDef& d : _coreDefs)
@@ -215,8 +219,10 @@ void SettingsModel::Load(fs::path const& worldConf, std::vector<PluginManifest> 
                 else if (d.key == "Launcher.AutoStart") v = ls.autoStart ? "1" : "0";
                 else if (d.key == "Launcher.StopWithGame") v = ls.stopWithGame ? "1" : "0";
                 else if (d.key == "Launcher.TrayOnClose") v = ls.trayOnClose ? "1" : "0";
+                else if (d.key == "Backup.Schedule") v = ls.backupSchedule;
                 else if (d.key == "Backup.Time") v = ls.backupTime;
-                else if (d.key == "Backup.Keep") v = std::to_string(ls.backupKeep);
+                else if (d.key == "Backup.Days") v = std::to_string(ls.backupDays);
+                else if (d.key == "Backup.Budget") v = std::to_string(ls.backupBudgetMb);
                 break;
         }
         _values.push_back({ &d, v, v });
@@ -305,8 +311,10 @@ SaveResult SettingsModel::Save(LauncherSettings& ls)
                 else if (d.key == "Launcher.AutoStart") ls.autoStart = v.cur == "1";
                 else if (d.key == "Launcher.StopWithGame") ls.stopWithGame = v.cur == "1";
                 else if (d.key == "Launcher.TrayOnClose") ls.trayOnClose = v.cur == "1";
+                else if (d.key == "Backup.Schedule") ls.backupSchedule = v.cur;
                 else if (d.key == "Backup.Time") ls.backupTime = v.cur;
-                else if (d.key == "Backup.Keep") ls.backupKeep = std::max(1, std::atoi(v.cur.c_str()));
+                else if (d.key == "Backup.Days") ls.backupDays = std::max(1, std::atoi(v.cur.c_str()));
+                else if (d.key == "Backup.Budget") ls.backupBudgetMb = std::max(0, std::atoi(v.cur.c_str()));
                 break;
         }
     }

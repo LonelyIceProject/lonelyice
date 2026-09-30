@@ -369,9 +369,13 @@
                 <div class="pane" data-if="svc_section == 'backups'">
                     <div class="ribbon">@{svc.backups} <span class="ribbon-note">{{backup_sum}}</span></div>
                     <div class="scroll grow">
-                        <div class="drow" data-for="d : backup_rows">
+                        <div class="drow" data-for="d, bi : backup_rows">
                             <div class="d-main"><div class="d-title">{{d.title}}</div><div class="d-detail">{{d.detail}}</div></div>
                             <div class="d-size">{{d.size}}</div>
+                            <div class="btn small" data-if="d.status == 'backup' && backup_confirm != bi" data-attr-id="'bk-export-' + bi" data-class-disabled="backup_busy" data-event-click="backup_export(bi)">@{svc.backup.export}</div>
+                            <div class="btn small" data-if="d.status == 'backup' && backup_confirm != bi" data-attr-id="'bk-restore-' + bi" data-class-disabled="backup_busy" data-event-click="backup_restore(bi)">@{svc.backup.restore}</div>
+                            <div class="btn small danger" data-if="backup_confirm == bi" data-attr-id="'bk-confirm-' + bi" data-event-click="backup_restore(bi)">@{svc.backup.restore_confirm}</div>
+                            <div class="btn small" data-if="backup_confirm == bi" data-attr-id="'bk-cancel-' + bi" data-event-click="backup_cancel">@{wizard.button.cancel}</div>
                         </div>
                         <div class="note pad" data-if="backup_rows.size == 0">@{svc.backups.empty}</div>
                     </div>

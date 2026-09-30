@@ -68,9 +68,20 @@ set.launch.autostart = Démarrer le serveur avec le lanceur
 set.launch.stop_with_game = Quitter le jeu arrête le serveur
 set.launch.tray_on_close = Fermer la fenêtre réduit dans la barre système
 set.launch.tray_on_close.hint = Le serveur continue de tourner, LonelyIce reste dans la zone de notification
-set.launch.backup_time = Sauvegarde, heure
-set.launch.backup_time.hint = HH:MM, vide pour aucune planification
-set.launch.backup_keep = Sauvegardes à conserver
+set.launch.backup_schedule = Sauvegardes
+set.launch.backup_schedule.hint = Une sauvegarde qui ne trouve aucun changement n'en crée pas
+set.opt.backup.off = Désactivées
+set.opt.backup.1 = Toutes les heures
+set.opt.backup.3 = Toutes les 3 heures
+set.opt.backup.6 = Toutes les 6 heures
+set.opt.backup.12 = Toutes les 12 heures
+set.opt.backup.daily = Quotidienne
+set.launch.backup_time = Sauvegarde quotidienne, heure
+set.launch.backup_time.hint = HH:MM
+set.launch.backup_days = Sauvegardes quotidiennes, jours
+set.launch.backup_days.hint = Une sauvegarde par jour est gardée pendant autant de jours, puis une par semaine
+set.launch.backup_budget = Espace disque pour les sauvegardes, Mo
+set.launch.backup_budget.hint = Au-delà, les plus anciennes sont supprimées ; 0 = sans limite
 
 set.opt.locale.config_wtf = Comme dans Config.wtf
 
