@@ -135,6 +135,7 @@ event.server_starting = Запуск сервера
 event.world_ready = Мир готов за {0} с, вход открыт
 event.realm_renamed = Имя мира изменено на «{0}», видно после перезапуска
 event.server_stopped = Сервер остановлен
+event.server_restarting = Сервер перезапускается
 event.server_failed = Сервер завершился с ошибкой: {0}. Подробности во вкладке «Консоль».
 event.game_started = Запущена игра
 event.game_started_locale = Запущена игра ({0})

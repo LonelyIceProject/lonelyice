@@ -98,8 +98,9 @@ One line per command, UTF-8.
 - Restart: stop, and start again when the state reaches Stopped.
 - Exit: exit code 0 or 2 (the core's restart code), or any code once the state is Stopping (after `@@quit` or the
   server's own `state stopping`), is Stopped; any other code is Failed with the reason from `state failed`, else
-  `exit code <n>`. A process that reported `state failed` stays Failed. The launcher does not start the server
-  again by itself after code 2.
+  `exit code <n>`. A process that reported `state failed` stays Failed. After code 2 (`server restart <seconds>`,
+  e.g. the Commands tab's Restart card) the launcher starts the server again, as with its own Restart, unless it
+  is quitting.
 - Closing the window with `[launcher] trayOnClose = 1` only hides it. Quitting (tray menu, or closing with
   `trayOnClose = 0`) stops the server and waits for it; closing again while it saves kills it. When the desktop
   session ends the launcher sends `@@quit` and leaves; the server object then closes stdin and waits up to

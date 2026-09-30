@@ -135,6 +135,7 @@ event.server_starting = Starting the server
 event.world_ready = World ready in {0} s, login is open
 event.realm_renamed = Realm renamed to “{0}”, visible after a restart
 event.server_stopped = Server stopped
+event.server_restarting = Server restarting
 event.server_failed = The server stopped with an error: {0}. Details in the Console tab.
 event.game_started = Game started
 event.game_started_locale = Game started ({0})

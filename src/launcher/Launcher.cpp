@@ -39,6 +39,7 @@ using namespace LonelyIce;
 namespace
 {
     constexpr int MaxLogLines = 600;
+    constexpr int RestartExitCode = 2;      // the core's RESTART_EXIT_CODE
     constexpr char RealmHost[] = "127.0.0.1";
 
     struct Opt { Rml::String id, label; };
@@ -1514,14 +1515,16 @@ namespace
                 break;
             }
             case ServerState::Stopped:
+            {
+                // exit code 2: the server restarts itself ("server restart"), as the launcher's own Restart
+                bool const restart = _pendingRestart || (_server->GetExitCode() == RestartExitCode && !_quitting);
                 if (prev != ServerState::Stopped)
-                    AddEvent(Tr("event.server_stopped"));
-                if (_pendingRestart)
-                {
-                    _pendingRestart = false;
+                    AddEvent(Tr(restart ? "event.server_restarting" : "event.server_stopped"));
+                _pendingRestart = false;
+                if (restart)
                     StartServer();
-                }
                 break;
+            }
             case ServerState::Failed:
                 AddEvent(Tr("event.server_failed", _server->GetFailReason()));
                 _pendingPlay = _pendingRestart = false;

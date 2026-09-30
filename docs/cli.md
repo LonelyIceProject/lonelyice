@@ -63,7 +63,7 @@ When several one-shot options are given, the first applicable in this order wins
 |---|---|
 | 0 | Stopped normally, or the one-shot step succeeded. `--storage-check` exits with 0 once the check has run; its result is in the control lines. |
 | 1 | Failed: config, client data, database, realm, auth or network (reported before as `@@LI state failed <reason>`), a one-shot step failed, or the core stopped with its error code. |
-| 2 | The core's restart code (e.g. the `server restart` console command). The launcher treats it as a normal stop and does not start the server again. |
+| 2 | The core's restart code (e.g. the `server restart` console command). The launcher starts the server again. |
 
 ```
 cd C:\Games\WoW\LonelyIce

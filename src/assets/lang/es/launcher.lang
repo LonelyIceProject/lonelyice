@@ -135,6 +135,7 @@ event.server_starting = Iniciando el servidor
 event.world_ready = Mundo listo en {0} s, el inicio de sesión está abierto
 event.realm_renamed = Reino renombrado a «{0}», visible tras un reinicio
 event.server_stopped = Servidor detenido
+event.server_restarting = Reiniciando el servidor
 event.server_failed = El servidor se detuvo con un error: {0}. Detalles en la pestaña Consola.
 event.game_started = Juego iniciado
 event.game_started_locale = Juego iniciado ({0})
