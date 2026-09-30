@@ -71,7 +71,7 @@ waiting, the last 600 shown).
 | `@@LI out <text>` | One line a console command printed (UTF-8). The launcher shows it in the log and keeps it as the command's answer. |
 | `@@LI done ok`, `@@LI done fail` | A console command finished (its output comes before, as `out` lines); `fail` when the command reported an error. Commands run one after another, so each `done` answers the oldest command still waiting; the Accounts tab reads the result of the accounts it creates this way. |
 | `@@LI realmname ok` | Answer to `@@realmname`. |
-| `@@LI deploy ok`, `@@LI deploy failed account` | Result of `--deploy`. |
+| `@@LI deploy ok`, `@@LI deploy failed account`, `@@LI deploy failed patches` | Result of `--deploy`: the databases are ready, but the account could not be created or the plugins' patches failed. A database failure ends `--deploy` earlier with `state failed database` (`state failed config` for an unreadable config). The wizard names the part that failed. |
 | `@@LI apply ok`, `@@LI apply failed` | Result of `--apply`. |
 | `@@LI dbc <done> <total> <table>`, `@@LI dbc ok`, `@@LI dbc failed` | Progress and result of `--dbc`. |
 | `@@LI check db <auth\|characters\|world> ok\|missing\|empty\|error <message>` | `--storage-check`: a database opens and holds the server's tables, does not exist, exists without them, or cannot be reached. A server that does not answer is not asked for the next database. |

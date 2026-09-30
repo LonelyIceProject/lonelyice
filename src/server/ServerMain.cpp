@@ -1007,9 +1007,10 @@ int ServerMain(int argc, char** argv)
 
     if (deploy)
     {
-        bool ok = DeploySetup() && patched;
-        Control(ok ? "deploy ok" : "deploy failed account");
-        return ok ? 0 : 1;
+        // the databases are ready here (a database failure left with "state failed database")
+        bool const account = DeploySetup();
+        Control(!account ? "deploy failed account" : !patched ? "deploy failed patches" : "deploy ok");
+        return account && patched ? 0 : 1;
     }
 
     if (std::string error; !LonelyIce::ClientData::OpenTerrain(error))

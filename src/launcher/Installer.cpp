@@ -412,7 +412,12 @@ bool Installer::RunDatabases()
         });
     if (rc != 0 || !deployed)
     {
-        Fail("db", _cancel ? Tr("install.note.aborted") : Tr("install.error.deploy", failure.empty() ? Tr("install.error.code", rc) : failure));
+        // "state failed <why>" or "deploy failed <what>": the last word says which part failed
+        std::string const what = failure.substr(failure.find_last_of(' ') + 1);
+        std::string const key = what == "database" || what == "config" || what == "account" || what == "patches" || what == "client"
+            ? "install.error.deploy." + what : std::string();
+        Fail("db", _cancel ? Tr("install.note.aborted") : !key.empty() ? Tr(key)
+            : Tr("install.error.deploy", failure.empty() ? Tr("install.error.code", rc) : failure));
         return false;
     }
     fs::remove_all(sql, ec);
