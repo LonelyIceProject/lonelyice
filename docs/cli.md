@@ -66,7 +66,7 @@ When several one-shot options are given, the first applicable in this order wins
 | 2 | The core's restart code (e.g. the `server restart` console command). The launcher starts the server again. |
 
 ```
-cd C:\Games\WoW\LonelyIce
+cd C:\Games\LonelyIce
 LonelyIce.exe --server -c configs\worldserver.conf
 LonelyIce.exe --server --dbc fill -c configs\worldserver.conf
 ```
@@ -106,8 +106,8 @@ The wizard moves the client archives LonelyIce wrote (the plugins' client patch)
 client's `Data` folder.
 
 ```
-LonelyIce.exe --tool maps "C:\Games\WoW335" "C:\Games\WoW\LonelyIce\data" 5
-LonelyIce.exe --tool mmaps "C:\Games\WoW\LonelyIce\data" 8
+LonelyIce.exe --tool maps "C:\Games\Client-3.3.5a" "C:\Games\LonelyIce\data" 5
+LonelyIce.exe --tool mmaps "C:\Games\LonelyIce\data" 8
 ```
 
 ## Package manager
@@ -146,8 +146,8 @@ client follow on the next server start (or `apply`). Exit code 0 on success, 1 o
 LonelyIce.exe --pkg install lonelyice.tactics@^1.3
 LonelyIce.exe --pkg --index "D:\catalog" available --locale ru
 LonelyIce.exe --pkg pack plugins\lonelyice.tactics D:\catalog
-cd C:\Games\WoW\LonelyIce
-LonelyIce.exe --pkg apply -c configs\worldserver.conf --client C:\Games\WoW335
+cd C:\Games\LonelyIce
+LonelyIce.exe --pkg apply -c configs\worldserver.conf --client C:\Games\Client-3.3.5a
 ```
 
 ## Backups
