@@ -3,6 +3,7 @@
 #include "Platform.h"
 #include <algorithm>
 #include <cstdlib>
+#include <string_view>
 
 namespace
 {
@@ -14,6 +15,15 @@ namespace
     int ReadInt(LonelyIce::IniFile const& ini, char const* section, char const* key, int def)
     {
         return std::atoi(ini.Get(section, key, std::to_string(def)).c_str());
+    }
+
+    // The LonelyIce catalog moved from a GitHub repository to the project site; lists saved before keep working.
+    std::string ReplaceIndex(std::string list)
+    {
+        static constexpr std::string_view old = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
+        for (size_t at; (at = list.find(old)) != std::string::npos;)
+            list.replace(at, old.size(), LonelyIce::LauncherSettings::DefaultPackageIndex);
+        return list;
     }
 
     std::filesystem::path ReadPath(LonelyIce::IniFile const& ini, char const* section, char const* key)
@@ -64,8 +74,8 @@ void LonelyIce::LauncherSettings::Load()
     if (location != "local")
         dataCache = true;
     pendingRealmName = ini.Get("server", "pendingRealmName", "");
-    packageIndex = ini.Get("packages", "index", DefaultPackageIndex);
-    packageIndexOff = ini.Get("packages", "disabled", "");
+    packageIndex = ReplaceIndex(ini.Get("packages", "index", DefaultPackageIndex));
+    packageIndexOff = ReplaceIndex(ini.Get("packages", "disabled", ""));
     packageLocale = ini.Get("packages", "locale", "");
 }
 

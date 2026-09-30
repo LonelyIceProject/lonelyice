@@ -48,7 +48,7 @@ namespace LonelyIce
         std::string packageIndexOff;     // indexes kept in the list but not read, same format
         std::string packageLocale;       // catalog filter: only packages with texts in this language, empty: all
 
-        static constexpr char const* DefaultPackageIndex = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
+        static constexpr char const* DefaultPackageIndex = "https://lonelyice.com/packages/index.json";
         static constexpr char const* DefaultRunner = "wine";
 
         // The client's game data stays in its archives (local location without the cache).
