@@ -233,10 +233,11 @@ A plugin that owns a database declares it with a connection key and base folder:
 
 The server applies plugin SQL itself on start when `Updates.EnableDatabases` allows it, and creates a
 plugin-owned database when `Updates.AutoSetup` is on, exactly as for core databases. LonelyIce runs the
-same step during its install wizard so the first start is fast. Afterwards its updates stay off; when the SQL
-files of the loaded plugins or the database connections differ from the last start (a hash kept in
-`plugins/.cache/sql.stamp`), the server runs the updater over the plugins' folders only, so a plugin installed
-or updated later gets its tables on the next start.
+same step during its install wizard so the first start is fast. Afterwards its updates stay off; when the contents
+of the loaded plugins' SQL files for `auth`, `characters` and `world` or the core database connections differ from
+the last start (a hash kept in `plugins/.cache/sql.stamp`), the server runs the updater over the plugins' folders
+only, so a plugin installed, updated or edited later gets its tables on the next start. A database the plugin owns
+is not part of that hash: the plugin updates it itself when it opens it.
 
 ## 6. Launcher settings
 

@@ -289,15 +289,18 @@ The server (`LonelyIce --server`, started by the launcher) runs these steps in o
 1. **Load plugins.** The server reads `plugins/`, checks dependencies, conflicts and ABI, and loads the libraries
    ([Plugin API](/docs/plugin-api#loading)).
 2. **Open the databases.**
-3. **Plugin SQL.** The server hashes the database connection strings and, for every `.sql` file in the `databases`
-   folders of every loaded plugin, the plugin id, the plugin version, the database, the file's relative path and
-   its size. It compares the hash with `plugins/.cache/sql.stamp`.
+3. **Plugin SQL.** The server hashes the core database connection strings (`LoginDatabaseInfo`,
+   `CharacterDatabaseInfo`, `WorldDatabaseInfo`) and, for every `.sql` file in the `databases` folders (`auth`,
+   `characters`, `world`) of every loaded plugin, the plugin id, the plugin version, the database, the file's
+   relative path and the SHA-256 of its contents. It compares the hash with `plugins/.cache/sql.stamp`.
    - When they differ and `Updates.EnableDatabases` is off (the normal case after the wizard), the core's updater
      runs over the loaded plugins' folders only. When it is on, the updater has already applied them.
    - The new stamp is saved afterwards.
    - If the updater fails, the server does not start (`@@LI state failed database`).
-   - The stamp does not cover file contents. An SQL file edited without a new plugin version or a new size is not
-     applied again.
+   - An edited SQL file changes the stamp, so the updater runs; what it does with a file already recorded in the
+     database's `updates` table under another hash follows the core's rules (`Updates.Redundancy`).
+   - Databases a plugin owns (an object in `databases`, such as playerbots' own database) are not covered: the
+     plugin opens and updates them itself on every start, with its own settings.
 4. **Patch recipes** ([Plugin format](/docs/plugin-format), section 7).
    - Each plugin's stamp in the world table `plugin_patches` covers the recipe text, the plugin version and the
      installer version. A plugin whose stamp changed is uninstalled and installed again with the same named ids.

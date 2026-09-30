@@ -230,9 +230,11 @@ namespace
         return r.ok;
     }
 
-    // The SQL files of the loaded plugins and the database connections, hashed. The updater is off on normal starts;
-    // when this differs from the value saved by the last start, plugins were installed or updated (or the storage
-    // changed) and their SQL has to be applied.
+    // The SQL files of the loaded plugins (their contents) and the core database connections, hashed. The updater is
+    // off on normal starts; when this differs from the value saved by the last start, plugins were installed, updated
+    // or edited (or the storage changed) and their SQL has to be applied. It covers only what the updater below
+    // applies: the plugins' folders for auth, characters and world. A database a plugin owns is opened and updated
+    // by the plugin itself on every start.
     std::string PluginSqlStamp()
     {
         std::set<std::string> lines;
@@ -248,7 +250,8 @@ namespace
                 for (fs::recursive_directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
                     if (it->is_regular_file(ec) && it->path().extension() == ".sql")
                         lines.insert(Acore::StringFormat("{} {} {} {} {}", plugin.id, plugin.version, database,
-                            fs::relative(it->path(), dir, ec).generic_string(), it->file_size(ec)));
+                            fs::relative(it->path(), dir, ec).generic_string(), ByteArrayToHexStr(Acore::Crypto::SHA256::GetDigestOf(content))));
+                    }
             }
         }
 
@@ -276,6 +279,9 @@ namespace
             LOG_INFO("server.loading", "Plugins changed since the last start: applying their SQL");
             // The updater reads the folders relative to the source directory, which the installer leaves empty.
             std::error_code ec;
+                    {
+                        std::ifstream in(it->path(), std::ios::binary);
+                        std::string const content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
             fs::path const source = fs::absolute(fs::u8path(BuiltInConfig::GetSourceDirectory()), ec);
             fs::create_directories(source, ec);
             std::map<std::string, std::vector<std::string>> folders;
