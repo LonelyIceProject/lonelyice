@@ -269,7 +269,7 @@ in place, keeping comments. A plugin without `config` gets no group.
     { "key": "Tactics.MaxRules", "type": "int", "min": 1, "max": 64, "apply": "reload",
       "label": { "en": "Rules per bot", "ru": "Правил на бота" },
       "hint": { "en": "More rules cost more CPU", "ru": "Больше правил — больше нагрузка" } },
-    { "key": "Tactics.Mode", "type": "choice", "apply": "now",
+    { "key": "Tactics.Mode", "type": "choice", "apply": "reload",
       "options": [ { "value": "0", "label": { "en": "Off", "ru": "Выкл" } }, { "value": "1", "label": "Party" } ] }
   ]
 }
