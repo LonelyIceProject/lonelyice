@@ -122,7 +122,9 @@ news.open = Öffnen
 
 # Ereignisse
 event.install_done = Installation abgeschlossen: {0}
-event.sql_updates = setup\sql.pak enthält neue Datenbank-Updates: Wartung › Assistent › Datenbanken.
+event.sql_updates = setup\sql.pak enthält neue Datenbank-Updates: sie werden beim Serverstart eingespielt.
+event.sql_updating = Datenbanken werden vor dem Serverstart aktualisiert
+event.sql_updated = Datenbanken sind aktuell
 event.game_closed = Spiel geschlossen
 event.stop_with_game = Der Server stoppt zusammen mit dem Spiel
 event.client_line = Client: {0}
@@ -381,6 +383,8 @@ wz.bots.1000 = 1000 — starker PC
 wz.rights = Rechte
 wz.rights.admin = Administrator (GM 3)
 wz.world.note = Der Account wird in der neuen Datenbank erstellt. Alles andere kann später unter Einstellungen geändert werden.
+wz.world.note_existing = Die Datenbanken sind vorhanden: Login und Passwort leer lassen, dann bleiben die Accounts, wie sie sind. Ein hier eingegebener Login wird angelegt, falls er fehlt; ein vorhandener Account behält Passwort und Rechte. Realmname, Raten und Bots ändern sich nur, wenn Sie sie ändern.
+wz.world.note_no_db = Die Datenbanken sind vorhanden und aktuell: Accounts verwalten Sie in der Registerkarte Accounts. Realmname, Raten und Bots ändern sich nur, wenn Sie sie ändern.
 wz.prep = Client-Vorbereitung
 wz.prep.rl = realmlist auf 127.0.0.1 setzen
 wz.prep.rl.desc = Die alte realmlist.wtf bleibt als realmlist.wtf.bak erhalten

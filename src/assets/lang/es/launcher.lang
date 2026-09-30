@@ -122,7 +122,9 @@ news.open = Abrir
 
 # eventos
 event.install_done = Instalación finalizada: {0}
-event.sql_updates = setup\sql.pak tiene nuevas actualizaciones de bases de datos: Mantenimiento › Asistente › Bases de datos.
+event.sql_updates = setup\sql.pak tiene nuevas actualizaciones de bases de datos: se aplican al iniciar el servidor.
+event.sql_updating = Actualizando las bases de datos antes de iniciar el servidor
+event.sql_updated = Las bases de datos están actualizadas
 event.game_closed = Juego cerrado
 event.stop_with_game = El servidor se detiene junto con el juego
 event.client_line = Cliente: {0}
@@ -381,6 +383,8 @@ wz.bots.1000 = 1000 — PC potente
 wz.rights = Permisos
 wz.rights.admin = Administrador (GM 3)
 wz.world.note = La cuenta se crea en la base de datos nueva. Todo lo demás se puede cambiar después en Ajustes.
+wz.world.note_existing = Las bases de datos ya existen: deja vacíos el inicio de sesión y la contraseña para conservar tus cuentas. Un inicio de sesión escrito aquí se añade si no existe; una cuenta existente conserva su contraseña y sus permisos. El nombre del reino, las tasas y los bots solo cambian si los cambias.
+wz.world.note_no_db = Las bases de datos existen y están al día: las cuentas se gestionan en la pestaña Cuentas. El nombre del reino, las tasas y los bots solo cambian si los cambias.
 wz.prep = Preparación del cliente
 wz.prep.rl = Configurar realmlist a 127.0.0.1
 wz.prep.rl.desc = El realmlist.wtf antiguo se conserva como realmlist.wtf.bak

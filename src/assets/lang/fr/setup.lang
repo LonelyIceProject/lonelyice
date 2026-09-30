@@ -76,13 +76,15 @@ wizard.error.not_writable = Impossible d'écrire dans ce dossier : {0}
 wizard.error.no_setup = setup\sql.pak et configs.pak sont introuvables à côté de LonelyIce.exe.
 wizard.error.threads = Le nombre de threads doit être supérieur à zéro.
 wizard.error.low_space = Attention : moins de 9 Go libres, la navigation risque de ne pas tenir.
-wizard.error.login = Identifiant : lettres latines et chiffres, jusqu'à 16 caractères ; le mot de passe ne doit pas être vide.
+wizard.error.login = Identifiant : lettres latines et chiffres, jusqu'à 16 caractères ; mot de passe : jusqu'à 16 caractères, non vide, sans espaces.
+wizard.error.login_optional = Laissez l'identifiant et le mot de passe vides, ou saisissez un identifiant en lettres latines et chiffres (jusqu'à 16) et un mot de passe de 16 caractères au plus, sans espaces.
 wizard.error.realm = Le nom du royaume ne peut pas être vide.
 wizard.error.server_running = Arrêtez le serveur avant d'installer.
 wizard.done.db = Bases de données construites
 wizard.done.data = Données du client
 wizard.done.account = Compte {0}
 wizard.done.account_gm = Compte {0}, GM {1}
+wizard.done.account_kept = Compte {0} (créé s'il n'existait pas ; un compte existant reste tel quel)
 
 # Installer.cpp (step titles are also the wizard's component titles)
 install.step.db = Bases de données

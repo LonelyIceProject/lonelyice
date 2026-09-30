@@ -32,10 +32,11 @@ bool LonelyIce::HasUnpackedFiles(fs::path const& dataDir)
     return false;
 }
 
-StoragePlan LonelyIce::PlanStorage(StorageState const& state, bool cache, fs::path const& dataDir)
+StoragePlan LonelyIce::PlanStorage(StorageState const& state, bool cache, fs::path const& dataDir, bool sqlChanged)
 {
     StoragePlan plan;
-    plan.db = !state.databases;
+    plan.newDatabases = !state.databases;
+    plan.db = plan.newDatabases || sqlChanged;
     bool const files = HasUnpackedFiles(dataDir);
     if (cache)
         plan.unpack = !state.HasDbc() || !files;

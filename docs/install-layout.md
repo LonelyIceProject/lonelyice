@@ -53,7 +53,7 @@ it.
 
 | Path | Contents |
 |---|---|
-| `configs/worldserver.conf` | The server's config. Created from `worldserver.conf.dist` once, with LonelyIce's values: SQLite databases in `db/`, `DataDir = data`, `LogsDir = logs`, `SourceDirectory = sql`, `Updates.EnableDatabases = 0`, `BindIP = 127.0.0.1`, `MapUpdate.Threads` from the CPU count, the rates chosen in the wizard. The wizard does not overwrite an existing one; Settings edits it in place. |
+| `configs/worldserver.conf` | The server's config. Created from `worldserver.conf.dist` once, with LonelyIce's values: SQLite databases in `db/`, `DataDir = data`, `LogsDir = logs`, `SourceDirectory = sql`, `Updates.EnableDatabases = 0`, `BindIP = 127.0.0.1`, `EnablePlayerSettings = 1` (per-character settings of the core and of plugins such as mod-transmog, table `character_settings`), `MapUpdate.Threads` from the CPU count, the rates chosen in the wizard. The wizard does not overwrite an existing one (only the rates, when changed on its Realm page); Settings edits it in place. A config from an older version gets `EnablePlayerSettings = 1` once, on the next start (`[server] configVersion`). |
 | `configs/worldserver.conf.dist` | Rewritten from `setup/configs.pak` on every "Databases" step. |
 | `configs/modules/<name>.conf` | Configs of the static modules and of the plugins (copied from the plugin's `.conf.dist` at install, or when Settings first saves a value of a plugin installed later). The server reads them from the `modules` folder beside the config it was started with (the launcher passes the config's absolute path), on every system. |
 | `configs/modules/<name>.conf.dist` | The static modules' defaults from `setup/configs.pak`. |
@@ -102,7 +102,7 @@ The storage check writes `LonelyIce/storage-check.conf` in the system's temporar
 | `Data/<locale>/patch-<locale>-4.MPQ` | Built again at the next server start. |
 
 Keep `setup/`: the wizard's "Databases" step needs `sql.pak` and `configs.pak`, and the launcher compares
-`sql.pak` with `[server] sqlStamp` to notice database updates. Removing `data/maps/` with the data cache on, or
+`sql.pak` with `[server] sqlStamp` to notice database updates, which it applies before the next server start. Removing `data/maps/` with the data cache on, or
 `db/world.sqlite`, makes the launcher open the wizard.
 
 ## What to back up

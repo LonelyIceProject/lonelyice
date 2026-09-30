@@ -190,8 +190,9 @@ namespace
         return LonelyIce::Platform::GetEnv(name).value_or(std::string());
     }
 
-    // First-run setup after the databases were created: the player's account (LONELYICE_ACCOUNT = login\tpassword\tgmlevel)
-    // and the realm name (LONELYICE_REALMNAME). Runs without the world loaded, so nothing here may touch sWorld.
+    // Setup after the databases were created or updated: the player's account (LONELYICE_ACCOUNT =
+    // login\tpassword\tgmlevel) and the realm name (LONELYICE_REALMNAME), each only when set. An account that exists
+    // already keeps its password and rights. Runs without the world loaded, so nothing here may touch sWorld.
     bool DeploySetup()
     {
         std::string account = Env("LONELYICE_ACCOUNT");
@@ -204,8 +205,11 @@ namespace
             uint32 gm = parts.size() > 2 ? Acore::StringTo<uint32>(parts[2]).value_or(0) : 0;
             Utf8ToUpperOnlyLatin(user);
             Utf8ToUpperOnlyLatin(pass);
+            LoginDatabase.EscapeString(user);
 
-            if (!LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user))
+            if (LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user))
+                LOG_INFO("server.worldserver", "Account {} exists, left as it is", user);
+            else
             {
                 // The account statements are prepared for the async connection only, so plain SQL here.
                 auto [salt, verifier] = Acore::Crypto::SRP6::MakeRegistrationData(user, pass);
@@ -214,17 +218,16 @@ namespace
                     uint32(EXPANSION_WRATH_OF_THE_LICH_KING));
                 LoginDatabase.DirectExecute("INSERT INTO realmcharacters (realmid, acctid, numchars) SELECT realmlist.id, account.id, 0 "
                     "FROM realmlist, account LEFT JOIN realmcharacters ON acctid = account.id WHERE acctid IS NULL");
+                QueryResult r = LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user);
+                if (!r)
+                {
+                    LOG_ERROR("server.worldserver", "Account {} could not be created", user);
+                    return false;
+                }
+                if (gm)
+                    LoginDatabase.DirectExecute("INSERT INTO account_access (id, gmlevel, RealmID) VALUES ({}, {}, -1)", r->Fetch()[0].Get<uint32>(), gm);
                 LOG_INFO("server.worldserver", "Account {} created", user);
             }
-            if (QueryResult r = LoginDatabase.Query("SELECT id FROM account WHERE username = '{}'", user))
-            {
-                uint32 id = r->Fetch()[0].Get<uint32>();
-                LoginDatabase.DirectExecute("DELETE FROM account_access WHERE id = {}", id);
-                if (gm)
-                    LoginDatabase.DirectExecute("INSERT INTO account_access (id, gmlevel, RealmID) VALUES ({}, {}, -1)", id, gm);
-            }
-            else
-                return false;
         }
 
         std::string realmName = Env("LONELYICE_REALMNAME");

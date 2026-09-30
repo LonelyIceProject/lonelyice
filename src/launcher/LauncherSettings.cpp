@@ -68,6 +68,7 @@ void LonelyIce::LauncherSettings::Load()
     lastBackupAt = std::atoll(ini.Get("backup", "lastAt", "0").c_str());
     realmName = ini.Get("server", "realmName", "");
     sqlStamp = ini.Get("server", "sqlStamp", "");
+    configVersion = ReadInt(ini, "server", "configVersion", 0);
     if (std::optional<std::string> old = ini.Get("server", "storage"))
     {
         // storage = client | unpacked | mysql, with [mysql] for the last (the first storage settings)
@@ -107,6 +108,7 @@ void LonelyIce::LauncherSettings::Save() const
     ini.Set("server", "root", Platform::PathToUtf8(dataRoot));
     ini.Set("server", "realmName", realmName);
     ini.Set("server", "sqlStamp", sqlStamp);
+    ini.Set("server", "configVersion", std::to_string(configVersion));
     ini.Remove("server", "storage");
     ini.RemoveSection("mysql");
     ini.Set("server", "location", location);

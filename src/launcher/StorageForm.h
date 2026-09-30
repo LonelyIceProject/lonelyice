@@ -43,6 +43,7 @@ namespace LonelyIce
     struct StoragePlan
     {
         bool db = false;        // create the databases (or bring existing ones up to date)
+        bool newDatabases = false;  // db creates them: the player's account goes in
         bool unpack = false;    // fill the game data cache
         bool pack = false;      // drop a cache that is no longer wanted
 
@@ -51,7 +52,9 @@ namespace LonelyIce
 
     // Maps and cameras extracted into dataDir (not terrain tiles built from the client, which carry a stamp).
     bool HasUnpackedFiles(std::filesystem::path const& dataDir);
-    StoragePlan PlanStorage(StorageState const& state, bool cache, std::filesystem::path const& dataDir);
+    // sqlChanged: setup/sql.pak differs from the one the databases were last deployed from, so existing databases
+    // are brought up to date too.
+    StoragePlan PlanStorage(StorageState const& state, bool cache, std::filesystem::path const& dataDir, bool sqlChanged);
 
     // The storage choice of the wizard and of the settings page: the databases' location (the built-in files or a
     // plugin's database server with its connection), the cache switch, and a check of the chosen place that runs

@@ -76,13 +76,15 @@ wizard.error.not_writable = В эту папку нельзя записыват
 wizard.error.no_setup = Нет файлов setup\sql.pak и configs.pak рядом с LonelyIce.exe.
 wizard.error.threads = Число потоков должно быть больше нуля.
 wizard.error.low_space = Внимание: свободно меньше 9 ГБ, навигации может не хватить места.
-wizard.error.login = Логин: латинские буквы и цифры, до 16 символов; пароль не пустой.
+wizard.error.login = Логин: латинские буквы и цифры, до 16 символов; пароль: до 16 символов, не пустой, без пробелов.
+wizard.error.login_optional = Оставьте логин и пароль пустыми или введите логин из латинских букв и цифр (до 16) и пароль до 16 символов без пробелов.
 wizard.error.realm = Имя мира не может быть пустым.
 wizard.error.server_running = Остановите сервер перед установкой.
 wizard.done.db = Базы собраны
 wizard.done.data = Данные клиента
 wizard.done.account = Аккаунт {0}
 wizard.done.account_gm = Аккаунт {0}, GM {1}
+wizard.done.account_kept = Аккаунт {0} (создан, если его не было; существующий оставлен как был)
 
 # Installer.cpp (step titles are also the wizard's component titles)
 install.step.db = Базы данных

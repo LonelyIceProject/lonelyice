@@ -76,13 +76,15 @@ wizard.error.not_writable = In diesen Ordner kann nicht geschrieben werden: {0}
 wizard.error.no_setup = setup\sql.pak und configs.pak fehlen neben LonelyIce.exe.
 wizard.error.threads = Die Anzahl der Threads muss größer als null sein.
 wizard.error.low_space = Achtung: weniger als 9 GB frei, die Navigation passt eventuell nicht.
-wizard.error.login = Login: lateinische Buchstaben und Ziffern, bis zu 16 Zeichen; das Passwort darf nicht leer sein.
+wizard.error.login = Login: lateinische Buchstaben und Ziffern, bis zu 16 Zeichen; Passwort: bis zu 16 Zeichen, nicht leer, ohne Leerzeichen.
+wizard.error.login_optional = Login und Passwort leer lassen oder einen Login aus lateinischen Buchstaben und Ziffern (bis zu 16) und ein Passwort mit bis zu 16 Zeichen ohne Leerzeichen eingeben.
 wizard.error.realm = Der Realmname darf nicht leer sein.
 wizard.error.server_running = Stoppen Sie den Server vor der Installation.
 wizard.done.db = Datenbanken erstellt
 wizard.done.data = Client-Daten
 wizard.done.account = Account {0}
 wizard.done.account_gm = Account {0}, GM {1}
+wizard.done.account_kept = Account {0} (angelegt, falls er fehlte; ein vorhandener bleibt, wie er war)
 
 # Installer.cpp (Schritttitel sind auch die Komponententitel des Assistenten)
 install.step.db = Datenbanken

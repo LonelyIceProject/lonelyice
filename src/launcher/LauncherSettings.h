@@ -39,6 +39,7 @@ namespace LonelyIce
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled daily backup
         int64_t lastBackupAt = 0;        // time of the last scheduled backup (hourly schedules)
         std::string sqlStamp;            // setup/sql.pak the databases were last deployed from
+        int configVersion = 0;           // LonelyIce's changes to the server config applied so far (ServerConfigVersion)
         // Where the databases are: "local" (SQLite files in <dataRoot>/db) or the id of a plugin's storage (a database
         // server, see StorageProvider), reached with remote.
         std::string location = "local";

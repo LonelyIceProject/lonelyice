@@ -40,6 +40,8 @@ namespace
 {
     constexpr int MaxLogLines = 600;
     constexpr int RestartExitCode = 2;      // the core's RESTART_EXIT_CODE
+    // Changes LonelyIce makes once to an existing server config (MigrateServerConfig); raise with each new one.
+    constexpr int ServerConfigVersion = 1;
 
     struct Opt { Rml::String id, label; };
     struct LocaleChip { Rml::String name, cls; bool launch = false; };
@@ -290,6 +292,8 @@ namespace
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
         std::string LoginPort() const;
+        bool SqlUpdatePending() const;
+        void MigrateServerConfig();
 
         fs::path _exe, _exeDir;
         LauncherSettings _settings;
@@ -365,6 +369,7 @@ namespace
         std::vector<std::string> _plLog;
 
         ServerState _lastState = ServerState::Stopped;
+        bool _startAfterUpdate = false;     // the wizard brings the databases up to date, then the server starts
         bool _pendingPlay = false, _pendingRestart = false, _quitting = false, _startHidden = false, _scriptClose = false;
         uint64_t _lastStatsTick = 0, _accRefreshAt = 0, _lastBackupCheck = 0;
         std::unique_ptr<Platform::Child> _game;
@@ -486,7 +491,8 @@ namespace
             Message(state.error);
             return;
         }
-        StoragePlan const plan = PlanStorage(state, to.cache, ConfPath("DataDir", "."));
+        std::string const stamp = Installer::SqlStamp(_exeDir / "setup");
+        StoragePlan const plan = PlanStorage(state, to.cache, ConfPath("DataDir", "."), !stamp.empty() && stamp != _settings.sqlStamp);
         if (plan.Empty())
         {
             _settings.location = to.location;
@@ -509,7 +515,7 @@ namespace
         _stStatus = Tr("storage.status.wizard");
         _model.DirtyVariable("st_status");
         ShowWindow();
-        _wizard->SwitchStorage(_client.dir, to, _storageForm->LocationTitle(to.location), plan, !state.databases, _settings.realmName);
+        _wizard->SwitchStorage(_client.dir, to, _storageForm->LocationTitle(to.location), plan, _settings.realmName);
     }
 
     // Follows the storage form: its check, what differs from the storage in use, an apply that waits for the check.
@@ -574,6 +580,34 @@ namespace
         return f.Get("RealmServerPort").value_or("3724");
     }
 
+    // setup/sql.pak differs from the one the databases were last deployed from. Only for a server folder the wizard
+    // set up (its stamp is saved, its config is <root>/configs/worldserver.conf): the database step then brings the
+    // databases up to date before the server starts.
+    bool Launcher::SqlUpdatePending() const
+    {
+        std::string const stamp = Installer::SqlStamp(_exeDir / "setup");
+        std::error_code ec;
+        return !stamp.empty() && !_settings.sqlStamp.empty() && stamp != _settings.sqlStamp
+            && fs::exists(_exeDir / "setup" / "configs.pak", ec) && fs::equivalent(ServerConfig(), Root() / "configs" / "worldserver.conf", ec);
+    }
+
+    // Changes LonelyIce makes once to a server config made by an older version; later edits of the player stay.
+    // 1: EnablePlayerSettings = 1 (plugins such as mod-transmog keep per-character settings through it).
+    void Launcher::MigrateServerConfig()
+    {
+        if (_settings.configVersion >= ServerConfigVersion)
+            return;
+        ConfFile f;
+        if (!f.Load(ServerConfig()))
+            return;
+        if (_settings.configVersion < 1)
+            f.Set("EnablePlayerSettings", "1");
+        if (!f.Save())
+            return;
+        _settings.configVersion = ServerConfigVersion;
+        _settings.Save();
+    }
+
     int Launcher::Run(int argc, char** argv)
     {
         _exe = Platform::ExePath();
@@ -598,6 +632,7 @@ namespace
             [this] { return StorageProviders(); },
             [this](StorageChoice const& c) { return RemoteEnv(c); },
             [this] { return ServerLocale(); },
+            [this] { return _settings.pendingRealmName.empty() ? _settings.realmName : _settings.pendingRealmName; },
             [this](InstallOptions const& o)
             {
                 _settings.dataRoot = o.root;
@@ -610,17 +645,30 @@ namespace
                 if (o.db)
                 {
                     _settings.sqlStamp = Installer::SqlStamp(o.setupDir);
-                    _settings.realmName = o.realmName;
-                    _settings.pendingRealmName.clear();
+                    // the realm is renamed only when the wizard passed a name
+                    if (!o.realmName.empty())
+                    {
+                        _settings.realmName = o.realmName;
+                        _settings.pendingRealmName.clear();
+                    }
                 }
+                else if (!o.realmName.empty())
+                    _settings.pendingRealmName = o.realmName;   // no database step: renamed when the server is up
                 _settings.Save();
+                MigrateServerConfig();
                 RefreshClient();
                 LoadSettingsModel();
                 if (_page == "settings" && _setGroup == "storage")
                     LoadStorageForm();
                 RefreshData();
                 RefreshNews();
-                AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
+                if (std::exchange(_startAfterUpdate, false))
+                {
+                    AddEvent(Tr("event.sql_updated"));
+                    StartServer();
+                }
+                else
+                    AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
             [this] { Play(); }, [] { UiBackend::Wake(); } });
         // the storage form checks the server folder's built-in databases for "local"
@@ -659,8 +707,7 @@ namespace
             OpenWizard();
         else
         {
-            std::string stamp = Installer::SqlStamp(_exeDir / "setup");
-            if (!stamp.empty() && stamp != _settings.sqlStamp)
+            if (SqlUpdatePending())
                 AddEvent(Tr("event.sql_updates"));
             if (_startHidden && _settings.trayOnClose)
                 UiBackend::HideWindow();
@@ -1322,6 +1369,12 @@ namespace
         RunUiScript();
         _wizard->Tick();
         StorageTick();
+        // the database update was closed without finishing: the start (and a Play waiting for it) is off
+        if (_startAfterUpdate && !_wizard->IsOpen() && !_wizard->IsInstalling())
+        {
+            _startAfterUpdate = _pendingPlay = false;
+            RefreshServerView();
+        }
 
         for (std::string const& line : _server->TakeLines())
         {
@@ -1920,6 +1973,18 @@ namespace
             Message(Tr("msg.storage_no_plugin", _settings.location));
             return;
         }
+        // A newer LonelyIce brought database updates: the wizard's database step applies them (no account, no
+        // realm name), then the start goes on.
+        if (SqlUpdatePending())
+        {
+            _startAfterUpdate = true;
+            AddEvent(Tr("event.sql_updating"));
+            ShowWindow();
+            _wizard->UpdateDatabases(_client.valid ? _client.dir : fs::path());
+            RefreshServerView();
+            return;
+        }
+        MigrateServerConfig();
         AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
         // the config goes by its absolute path: the core reads the module configs from "modules" beside it
         EnvList env;

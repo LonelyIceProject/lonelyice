@@ -502,13 +502,15 @@
                         <div class="f"><div class="f-label">@{wz.bots}</div>
                             <select id="wz-bots" class="field" data-value="wz_bots"><option value="0">@{wz.bots.0}</option><option value="100">@{wz.bots.100}</option><option value="500">@{wz.bots.500}</option><option value="1000">@{wz.bots.1000}</option></select></div>
                     </div>
-                    <div class="form-row">
+                    <div class="form-row" data-if="wz_ask_account">
                         <div class="f"><div class="f-label">@{acc.login}</div><input type="text" id="wz-login" class="field" data-value="wz_login"/></div>
                         <div class="f"><div class="f-label">@{acc.password}</div><input type="password" id="wz-pass" class="field" data-value="wz_pass"/></div>
                         <div class="f"><div class="f-label">@{wz.rights}</div>
                             <select id="wz-gm" class="field" data-value="wz_gm"><option value="0">@{acc.player}</option><option value="3">@{wz.rights.admin}</option></select></div>
                     </div>
-                    <div class="note">@{wz.world.note}</div>
+                    <div class="note" data-if="!wz_account_optional">@{wz.world.note}</div>
+                    <div class="note" data-if="wz_account_optional && wz_ask_account">@{wz.world.note_existing}</div>
+                    <div class="note" data-if="wz_account_optional && !wz_ask_account">@{wz.world.note_no_db}</div>
                 </div>
                 <!-- 4 client preparation -->
                 <div data-if="wz_step == 4">

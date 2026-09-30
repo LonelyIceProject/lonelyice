@@ -292,6 +292,28 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
         }
     }
 
+    // Configs that exist keep their values, except rates and bots the wizard was told to change.
+    for (auto [file, changed] : { std::pair{ "worldserver.conf", o.rateChanged }, std::pair{ "modules/playerbots.conf", o.botsChanged } })
+    {
+        fs::path const conf = configs / file;
+        ConfFile f;
+        if (!changed || std::find(created.begin(), created.end(), conf) != created.end() || !f.Load(conf))
+            continue;
+        if (o.rateChanged && std::string_view(file) == "worldserver.conf")
+            for (char const* key : RateKeys)
+                f.Set(key, std::to_string(o.rate));
+        if (o.botsChanged && std::string_view(file) != "worldserver.conf")
+        {
+            f.Set("AiPlayerbot.MinRandomBots", std::to_string(o.bots));
+            f.Set("AiPlayerbot.MaxRandomBots", std::to_string(o.bots));
+        }
+        if (!f.Save())
+        {
+            error = Tr("install.error.write", Platform::PathToUtf8(conf));
+            return false;
+        }
+    }
+
     for (fs::path const& conf : created)
     {
         ConfFile f;
@@ -300,6 +322,8 @@ bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
         std::string name = Platform::PathToUtf8(conf.filename());
         if (name == "worldserver.conf")
         {
+            // per-character settings of the core and of plugins such as mod-transmog
+            f.Set("EnablePlayerSettings", "1");
             f.Set("LoginDatabaseInfo", "sqlite:db/auth.sqlite");
             f.Set("WorldDatabaseInfo", "sqlite:db/world.sqlite");
             f.Set("CharacterDatabaseInfo", "sqlite:db/characters.sqlite");
@@ -373,8 +397,9 @@ bool Installer::RunDatabases()
         { "AC_PLUGINS_DIR", Platform::PathToUtf8(_o.exe.parent_path() / "plugins") },
         { EnvName("Updates.EnableDatabases"), "7" },
         { EnvName("Playerbots.Updates.EnableDatabases"), "1" },
-        { "LONELYICE_REALMNAME", _o.realmName },
         { "LONELYICE_CLIENT", Platform::PathToUtf8(_o.client) } };
+    if (!_o.realmName.empty())
+        env.push_back({ "LONELYICE_REALMNAME", _o.realmName });
     if (!_o.login.empty())
         env.push_back({ "LONELYICE_ACCOUNT", _o.login + "\t" + _o.password + "\t" + std::to_string(_o.gmLevel) });
     env.insert(env.end(), _o.serverEnv.begin(), _o.serverEnv.end());

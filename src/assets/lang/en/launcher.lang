@@ -122,7 +122,9 @@ news.open = Open
 
 # events
 event.install_done = Installation finished: {0}
-event.sql_updates = setup\sql.pak has new database updates: Maintenance › Wizard › Databases.
+event.sql_updates = setup\sql.pak has new database updates: they are applied when the server starts.
+event.sql_updating = Bringing the databases up to date before the server starts
+event.sql_updated = Databases are up to date
 event.game_closed = Game closed
 event.stop_with_game = The server stops together with the game
 event.client_line = Client: {0}
@@ -381,6 +383,8 @@ wz.bots.1000 = 1000 — powerful PC
 wz.rights = Rights
 wz.rights.admin = Administrator (GM 3)
 wz.world.note = The account is created in the new database. Everything else can be changed later under Settings.
+wz.world.note_existing = The databases exist: leave login and password empty to keep your accounts as they are. A login entered here is added if it does not exist; an existing account keeps its password and rights. Realm name, rates and bots change only if you change them.
+wz.world.note_no_db = The databases exist and are up to date: accounts are managed in the Accounts tab. Realm name, rates and bots change only if you change them.
 wz.prep = Client preparation
 wz.prep.rl = Set realmlist to 127.0.0.1
 wz.prep.rl.desc = The old realmlist.wtf is kept as realmlist.wtf.bak

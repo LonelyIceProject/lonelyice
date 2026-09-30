@@ -33,11 +33,13 @@ namespace LonelyIce
         bool db = true, unpack = false, pack = false, vmaps = true, mmaps = true, client_prep = true;
         int threads = 4;
 
-        std::string realmName = "LonelyIce";
+        std::string realmName = "LonelyIce";    // empty: the realm keeps its name
         int rate = 1;
         int bots = 100;
-        std::string login, password;
+        bool rateChanged = false, botsChanged = false;  // also written into configs that exist already
+        std::string login, password;            // empty: no account (one that exists keeps its password and rights)
         int gmLevel = 3;
+        bool newDatabases = true;               // the database step creates them (else brings them up to date)
 
         bool realmlist = true, clearWdb = true, accountName = true, shortcut = false;
     };

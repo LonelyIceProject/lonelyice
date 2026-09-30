@@ -131,8 +131,9 @@ What `--server` does, in order; the one-shot options leave at the marked points.
 6. `--dbc` leaves here.
 7. Applies the plugins' patches: named ids, server DBC rows, recipe SQL, the client archives when
    `LONELYICE_CLIENT` is set. A failure is logged and the start goes on. `--apply` leaves here.
-8. `--deploy` creates the account and sets the realm name, then leaves.
-9. Opens the client's terrain archives (client data only), reads the realm (`state failed realm`), starts auth on
+8. `--deploy` creates the account and sets the realm name when they are passed, then leaves.
+9. Opens the client's terrain archives (client data only), writes the realm's address and port into `realmlist`
+   (see [Network](#network)), reads the realm (`state failed realm`), starts auth on
    `RealmServerPort` (`state failed auth`), `state loading`, loads the world, starts SOAP when enabled and the
    world network (`state failed network`), `state ready ...`, then runs the world loop.
 
@@ -146,7 +147,7 @@ one in this order:
 
 | Step | What runs |
 |---|---|
-| Databases | Writes the configs from `setup/configs.pak` (new files only get LonelyIce's values), unpacks `setup/sql.pak` into `<server folder>/sql`, runs `--server --deploy` with `AC_UPDATES_ENABLE_DATABASES=7`, `LONELYICE_ACCOUNT`, `LONELYICE_REALMNAME` and `LONELYICE_CLIENT`, requires `@@LI deploy ok`, removes `sql/`. Progress comes from the updater's "Applying" lines. |
+| Databases | Writes the configs from `setup/configs.pak` (new files only get LonelyIce's values), unpacks `setup/sql.pak` into `<server folder>/sql`, runs `--server --deploy` with `AC_UPDATES_ENABLE_DATABASES=7`, `LONELYICE_CLIENT` and, when there is one to set, `LONELYICE_ACCOUNT` and `LONELYICE_REALMNAME`; requires `@@LI deploy ok`, removes `sql/`. Configs that exist get the rates and bots only when they were changed on the Realm page. Progress comes from the updater's "Applying" lines. |
 | Unpack game data | `--tool maps <client> <data> 5` (maps and cameras), then `--server --dbc fill`. |
 | Remove the disk cache | `--server --dbc drop`, then deletes `data/dbc`, `data/Cameras`, `data/maps`. |
 | vmaps | `--tool vmaps`, then `--tool assemble`. |
@@ -157,11 +158,39 @@ While `maps` and `vmaps` run, the client archives LonelyIce wrote are moved out 
 extractors see stock data. A failed step stops the install; Retry runs it again with the steps after it, skipping
 those that finished (a storage switch runs all its steps again). On success
 the launcher saves the server folder, client, storage and, after the Databases step, `[server] sqlStamp` and
-`realmName` to `lonelyice.ini`.
+(when one was passed) `realmName` to `lonelyice.ini`.
+
+Run again on a server folder that has its databases, the wizard starts from what is there: the realm name the
+launcher knows, the rates of `worldserver.conf` and the bots of `playerbots.conf`. The realm is renamed, and rates
+and bots are written into the existing configs, only when they are changed on the Realm page. The account is
+optional then: empty fields leave the accounts alone, a login entered is created when it does not exist, and an
+existing account keeps its password and GM level. Without a Databases step (nothing to update) the account fields
+are hidden.
 
 Changing the storage in Settings → Storage runs a storage check against the new place; if nothing is missing the
-setting changes at once, otherwise the wizard shows a Storage page with what it will do (new or updated
-databases, unpacking or removing the cache; the account when the databases are new) and runs the same steps.
+setting changes at once, otherwise the wizard shows a Storage page with what it will do and runs the same steps:
+"Create the databases" (with the player's account) when the place has none, "Bring the databases up to date" when
+it has them but `setup/sql.pak` changed since the last deploy, unpacking or removing the cache.
+
+When `setup/sql.pak` differs from `[server] sqlStamp` (a newer LonelyIce was unpacked over the old one), the
+launcher says so when it starts, and the next server start (Start, Play, auto start) first opens the wizard's
+install page with the Databases step alone on the storage in use: no account, no realm name. It closes by
+itself on success and the start goes on (Play too); closed after a failure, the start is dropped and the next one
+tries again. This happens only for server folders the wizard made (`sqlStamp` set, config
+`<root>/configs/worldserver.conf`).
+
+## Network
+
+On every start the server writes its entry in the auth database's `realmlist` from the config: `port` is
+`WorldServerPort`; with `BindIP` on a loopback address `address` is `127.0.0.1` (Settings → Network and resources → This computer only, the default); otherwise it is `BindIP`, or with `0.0.0.0` this computer's address in the local network (the address the
+system sends from by default when it is private, i.e. 10/8, 172.16/12 or 192.168/16, else the first private address
+of the host name, else the default one; `LONELYICE_REALM_ADDRESS` overrides it).
+`localAddress` is always `127.0.0.1` with mask `255.0.0.0`, so a client on this computer (realmlist `127.0.0.1`)
+is sent to `127.0.0.1` and clients in the network to `address`. Auth and world listen on `BindIP`.
+
+The client finds the login server through `realmlist.wtf`. The 3.3.5a client takes `host:port`, so with a
+`RealmServerPort` other than 3724 the launcher writes `127.0.0.1:<port>` (Play with `[client] writeRealmlist`, Fix
+realmlist, the wizard's client step) and takes `127.0.0.1` or `localhost` with the configured port as its own.
 
 ## Starting the game
 

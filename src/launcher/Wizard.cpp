@@ -1,7 +1,9 @@
 #include "Wizard.h"
+#include "ConfFile.h"
 #include "ConfigEnv.h"
 #include "Lang.h"
 #include "Platform.h"
+#include "TextUtil.h"
 #include "UiBackend.h"
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Event.h>
@@ -112,9 +114,14 @@ namespace
         return true;
     }
 
-    bool ValidLogin(std::string const& s)
+    // A whole-number config value of file, empty when missing.
+    std::string ConfNumber(fs::path const& file, std::string const& key)
     {
-        return !s.empty() && s.size() <= 16 && std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0; });
+        ConfFile f;
+        if (!f.Load(file))
+            return {};
+        std::optional<std::string> v = f.Get(key);
+        return v && !v->empty() ? std::to_string(std::atoi(v->c_str())) : std::string();
     }
 }
 
@@ -251,6 +258,8 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     c.Bind("wz_transfer_title", &_transferTitle);
     c.Bind("wz_transfer_note", &_transferNote);
     c.Bind("wz_need_account", &_needAccount);
+    c.Bind("wz_ask_account", &_askAccount);
+    c.Bind("wz_account_optional", &_accountOptional);
     c.Bind("wz_switching", &_switching);
     _form.Bind(c, true);
 
@@ -299,7 +308,8 @@ void Wizard::Open(fs::path const& client)
         return;
     }
     _open = true;
-    _switching = false;
+    _switching = _updating = false;
+    _prefilledFor.clear();
     _customPlace.clear();
     Inspect(client);
     fs::path root = _host.currentRoot();
@@ -402,6 +412,7 @@ void Wizard::BuildComponents()
     bool setup = fs::exists(_host.exeDir / "setup" / "sql.pak", ec) && fs::exists(_host.exeDir / "setup" / "configs.pak", ec);
     // the built-in files are seen at once; a database server only once the check has reached it
     bool haveDb = storage.Remote() ? checked && checked->databases : !root.empty() && fs::exists(root / "db" / "world.sqlite", ec);
+    _dbExists = haveDb;
     bool const haveCache = !root.empty() && HasUnpackedFiles(data) && (checked ? checked->HasDbc() : haveDb);
     uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", ".vmtree");
     uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps");
@@ -432,6 +443,32 @@ void Wizard::BuildComponents()
     RefreshTotal();
 }
 
+// Realm, rates and bots as the chosen place has them now (defaults for a new place); read once per place, so what
+// the player typed survives going back and forth.
+void Wizard::Prefill()
+{
+    fs::path const root = PlacePath();
+    if (root == _prefilledFor)
+        return;
+    _prefilledFor = root;
+    std::error_code ec;
+    fs::path const conf = root / "configs" / "worldserver.conf";
+    bool const existing = !root.empty() && fs::exists(conf, ec);
+    // the realm name is kept by the launcher for the server folder it uses
+    _realmWas = existing && _host.realmName && fs::equivalent(root, _host.currentRoot(), ec) ? _host.realmName() : std::string();
+    if (!_realmWas.empty())
+        _realm = _realmWas;
+    // a value the list does not offer stays as it is unless the player picks another one
+    std::string const rate = existing ? ConfNumber(conf, "Rate.XP.Kill") : std::string();
+    if (rate == "1" || rate == "2" || rate == "5")
+        _rate = rate;
+    std::string const bots = existing ? ConfNumber(root / "configs" / "modules" / "playerbots.conf", "AiPlayerbot.MaxRandomBots") : std::string();
+    if (bots == "0" || bots == "100" || bots == "500" || bots == "1000")
+        _bots = bots;
+    _rateWas = rate.empty() ? std::string() : std::string(_rate);
+    _botsWas = bots.empty() ? std::string() : std::string(_bots);
+}
+
 bool Wizard::HasComp(char const* id) const
 {
     return std::any_of(_comps.begin(), _comps.end(), [&](CompRow const& c) { return c.id == id && c.on; });
@@ -455,13 +492,16 @@ void Wizard::RefreshFooter()
     _steps.clear();
     if (_switching)
     {
+        // a database update has no page of its own before the install page
+        SwitchStep const* const list = _updating ? SwitchSteps + 1 : SwitchSteps;
+        int const count = int(std::size(SwitchSteps)) - (_updating ? 1 : 0);
         int cur = 0;
-        for (int i = 0; i < int(std::size(SwitchSteps)); ++i)
-            if (SwitchSteps[i].step == _step)
+        for (int i = 0; i < count; ++i)
+            if (list[i].step == _step)
                 cur = i;
-        for (int i = 0; i < int(std::size(SwitchSteps)); ++i)
-            _steps.push_back({ Tr(SwitchSteps[i].key), i < cur ? "done" : i == cur ? "cur" : "" });
-        _counter = Tr("wizard.counter", cur + 1, int(std::size(SwitchSteps)));
+        for (int i = 0; i < count; ++i)
+            _steps.push_back({ Tr(list[i].key), i < cur ? "done" : i == cur ? "cur" : "" });
+        _counter = Tr("wizard.counter", cur + 1, count);
     }
     else
     {
@@ -501,6 +541,8 @@ void Wizard::Go(int step)
     _waitCheck = false;
     if (_step == 1)
         BuildPlaces();
+    _askAccount = HasComp("db");
+    _accountOptional = _dbExists;
     RefreshFooter();
     Dirty();
 }
@@ -529,6 +571,7 @@ void Wizard::Next()
             if (!Writable(root))
                 return Error(Tr("wizard.error.not_writable", Utf8(root)));
             BuildComponents();
+            Prefill();
             return Go(2);
         }
         case 2:
@@ -558,8 +601,10 @@ void Wizard::Next()
             return;
         }
         case 3:
-            if (HasComp("db") && (!ValidLogin(_login) || _pass.empty()))
-                return Error(Tr("wizard.error.login"));
+            // new databases need the player's account; existing ones have theirs, a login given is added if missing
+            if (HasComp("db") && (!_dbExists || !_login.empty() || !_pass.empty())
+                && (!ValidAccountName(_login) || !ValidAccountPassword(_pass)))
+                return Error(Tr(_dbExists ? "wizard.error.login_optional" : "wizard.error.login"));
             if (_realm.empty())
                 return Error(Tr("wizard.error.realm"));
             return Go(4);
@@ -594,7 +639,7 @@ void Wizard::Next()
                 _host.play();
             return;
         case TransferStep:
-            if (_needAccount && (!ValidLogin(_login) || _pass.empty()))
+            if (_needAccount && (!ValidAccountName(_login) || !ValidAccountPassword(_pass)))
                 return Error(Tr("wizard.error.login"));
             if (_host.serverRunning && _host.serverRunning())
                 return Error(Tr("wizard.error.server_running"));
@@ -615,7 +660,7 @@ void Wizard::Cancel()
 }
 
 void Wizard::SwitchStorage(fs::path const& client, StorageChoice const& to, std::string const& title, StoragePlan const& plan,
-    bool newDatabases, std::string const& realmName)
+    std::string const& realmName)
 {
     _open = true;
     if (_installer.IsRunning())
@@ -623,14 +668,33 @@ void Wizard::SwitchStorage(fs::path const& client, StorageChoice const& to, std:
 
     Inspect(client);
     _switching = true;
+    _updating = false;
     _switchTo = to;
     _switchTitle = title;
     _switchPlan = plan;
-    _needAccount = newDatabases;
+    _needAccount = plan.newDatabases;
     if (!realmName.empty())
         _realm = realmName;
     BuildTransfer();
     Go(TransferStep);
+}
+
+void Wizard::UpdateDatabases(fs::path const& client)
+{
+    _open = true;
+    if (_installer.IsRunning())
+        return Go(5);
+
+    Inspect(client);
+    _switching = _updating = true;
+    _switchTo = _host.storage ? _host.storage() : StorageChoice{};
+    _switchTitle.clear();
+    _switchPlan = {};
+    _switchPlan.db = true;
+    _needAccount = false;
+    _inst.clear();
+    StartSwitch();
+    Go(5);
 }
 
 void Wizard::BuildTransfer()
@@ -664,7 +728,9 @@ void Wizard::StartSwitch()
     o.unpack = _switchPlan.unpack;
     o.pack = _switchPlan.pack;
     o.vmaps = o.mmaps = o.client_prep = false;
-    o.realmName = _realm;
+    // new databases get the realm's current name; existing ones keep theirs
+    o.realmName = _needAccount ? std::string(_realm) : std::string();
+    o.newDatabases = _needAccount;
     if (_needAccount)
     {
         o.login = _login;
@@ -701,12 +767,17 @@ void Wizard::StartInstall()
     o.mmaps = HasComp("mmaps");
     o.client_prep = HasComp("client");
     o.threads = std::max(1, std::atoi(_threads.c_str()));
-    o.realmName = _realm;
+    // On databases that exist the realm is renamed only when the name was changed here; rates and bots go into
+    // configs that exist only when changed here too (new configs always get them).
+    o.realmName = !_dbExists || (!_realmWas.empty() && _realm != _realmWas) ? std::string(_realm) : std::string();
     o.rate = std::max(1, std::atoi(_rate.c_str()));
     o.bots = std::max(0, std::atoi(_bots.c_str()));
+    o.rateChanged = !_rateWas.empty() && _rate != _rateWas;
+    o.botsChanged = !_botsWas.empty() && _bots != _botsWas;
     o.login = _login;
     o.password = _pass;
     o.gmLevel = std::atoi(_gm.c_str());
+    o.newDatabases = !_dbExists;
     o.realmlist = _rl;
     o.clearWdb = _wdb;
     o.accountName = _accName;
@@ -812,6 +883,9 @@ void Wizard::Tick()
         if (_installer.Succeeded())
         {
             BuildDone();
+            // a database update closes by itself: the launcher goes on with the start that asked for it
+            if (_updating)
+                _open = false;
             if (_host.installed)
                 _host.installed(_options);
         }
@@ -834,9 +908,10 @@ void Wizard::BuildDone()
         _done.push_back({ "ok", Tr("wizard.done.data"), Utf8(root / "data") });
     _done.push_back({ "ok", Tr(_options.cache ? "wizard.done.cache" : "wizard.done.client"), "" });
     if (_options.db && !_options.login.empty())
-        _done.push_back({ "ok", _options.gmLevel ? Tr("wizard.done.account_gm", _options.login, _options.gmLevel) : Tr("wizard.done.account", _options.login), "" });
+        _done.push_back({ "ok", !_options.newDatabases ? Tr("wizard.done.account_kept", _options.login)
+            : _options.gmLevel ? Tr("wizard.done.account_gm", _options.login, _options.gmLevel) : Tr("wizard.done.account", _options.login), "" });
     if (_options.client_prep && _options.realmlist)
-        _done.push_back({ "ok", "realmlist.wtf: 127.0.0.1", _rlNote });
+        _done.push_back({ "ok", "realmlist.wtf: " + GameClient::LocalRealmlist(Installer::LoginPort(_options.root)), _rlNote });
 }
 
 void Wizard::BrowseFolder(bool forClient)

@@ -48,7 +48,7 @@ server. The databases, the plugins folder and the game data come from the config
 | Option | Meaning |
 |---|---|
 | `-c <file>`, `--config <file>` | The worldserver.conf to use. Default: `configs/worldserver.conf` in the working directory on Windows, `<CONF_DIR>/worldserver.conf` of the core build elsewhere. Relative paths in the config (`DataDir`, `sqlite:` files) are resolved against the working directory. |
-| `--deploy` | Open (and, as the config's `Updates.*` options allow, create and update) the databases, apply the plugins' patches, create the player's account (`LONELYICE_ACCOUNT`) and set the realm name (`LONELYICE_REALMNAME`), then exit. The wizard's "Databases" step. |
+| `--deploy` | Open (and, as the config's `Updates.*` options allow, create and update) the databases, apply the plugins' patches, create the player's account (`LONELYICE_ACCOUNT`, when set and missing) and set the realm name (`LONELYICE_REALMNAME`, when set), then exit. The wizard's "Databases" step. Reports `@@LI deploy ok`, `@@LI deploy failed account` or `@@LI deploy failed patches`; a database failure ends it before with `@@LI state failed database`. |
 | `--apply` | Open the databases, apply the SQL of plugins changed since the last start and the plugins' patches (DBC rows, recipe SQL, client archive when `LONELYICE_CLIENT` is set), then exit. `--pkg apply` runs this. |
 | `--dbc fill` | Unpack the client's DBC files (`LONELYICE_CLIENT`, `LONELYICE_LOCALE`, else the client's first locale) into `dbc_*` tables of the world database, then exit ([Server game data](/docs/server-data)). Any value other than `drop` fills. |
 | `--dbc drop` | Drop the `dbc_*` tables from the world database, then exit. |

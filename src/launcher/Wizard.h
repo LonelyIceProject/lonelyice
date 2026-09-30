@@ -36,6 +36,7 @@ namespace LonelyIce
             std::function<std::vector<StorageProviderInfo>()> providers;    // plugins' storages
             std::function<Platform::Env(StorageChoice const&)> remoteEnv;   // connection of a plugin's storage
             std::function<std::string()> serverLocale;              // client locale of the server data, empty = the client's first
+            std::function<std::string()> realmName;                 // the realm's name now, empty when unknown
             std::function<void(InstallOptions const&)> installed;   // install finished successfully
             std::function<void()> play;
             std::function<void()> wake;
@@ -49,9 +50,12 @@ namespace LonelyIce
 
         void Open(std::filesystem::path const& client);
         // Moves the server's data to the storage "to" (title: its name for the page): the page lists the plan's
-        // steps (and asks for the player's account when newDatabases), then the install page runs them.
+        // steps (and asks for the player's account when the plan makes new databases), then the install page runs them.
         void SwitchStorage(std::filesystem::path const& client, StorageChoice const& to, std::string const& title, StoragePlan const& plan,
-            bool newDatabases, std::string const& realmName);
+            std::string const& realmName);
+        // Brings the databases of the storage in use up to date with setup/sql.pak (the database step without the
+        // account and the realm name) on the install page; closes by itself when it succeeded.
+        void UpdateDatabases(std::filesystem::path const& client);
         bool IsOpen() const { return _open; }
         bool IsInstalling() const { return _installer.IsRunning(); }
         void Tick();
@@ -84,6 +88,7 @@ namespace LonelyIce
         bool HasComp(char const* id) const;
         void BuildTransfer();
         void StartSwitch();
+        void Prefill();
 
         Host _host;
         Installer _installer;
@@ -112,8 +117,13 @@ namespace LonelyIce
         std::optional<StorageChoice> _compsFor;         // the form the components were built for
         bool _compsChecked = false;                     // ... with the storage's check done
         bool _waitCheck = false;                        // Next waits for the storage check
-        // 3 world and account
+        bool _dbExists = false;                         // the chosen place has the databases already
+        // 3 world and account; on an existing install the realm, rates and bots start as they are (the *Was values),
+        // and only what the player changes is written
         Rml::String _realm = "LonelyIce", _rate = "2", _bots = "100", _login, _pass, _gm = "3";
+        std::string _realmWas, _rateWas, _botsWas;
+        std::filesystem::path _prefilledFor;    // the place those were read from
+        bool _askAccount = true, _accountOptional = false;  // the database step runs; ... on databases that exist
         // 4 client preparation
         bool _rl = true, _wdb = true, _accName = true, _lnk = false;
         bool _lnkSupported = true;              // the desktop has shortcuts (model: wz_lnk_supported)
@@ -126,6 +136,7 @@ namespace LonelyIce
         bool _reported = false;
         // 7 (switching only): what moving to another storage does
         bool _switching = false;                // the pages run a storage switch, not the wizard's choices
+        bool _updating = false;                 // ... or only the database update (UpdateDatabases)
         StorageChoice _switchTo;
         StoragePlan _switchPlan;
         std::vector<CheckRow> _transfer;
