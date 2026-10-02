@@ -2,17 +2,14 @@
 
 The package manager is part of `LonelyIce.exe`. The launcher's Plugins page and `LonelyIce --pkg`
 ([Command line](/docs/cli#package-manager)) run the same code. It reads catalogs, resolves versions and
-dependencies, and installs, updates, enables, disables and removes plugin folders. It only changes files in the
-plugins folder. The databases and the game client catch up on the next server start (or `--pkg apply`). The
+dependencies, and installs, updates, enables, disables and removes plugin folders. It changes plugin files and the corresponding desired plugin entries in the YAML profile. The databases and the game client catch up on the next server start (or `--pkg apply`). The
 package and index formats are in [Plugin format](/docs/plugin-format#8-packages).
 
 ## Catalogs
 
-A catalog is one `index.json`. The catalogs in use are `[packages] index` in `lonelyice.ini` ([lonelyice.ini](/docs/ini)),
-and `[packages] disabled` holds the ones kept but not read. Both lists are separated by `;`, and spaces and tabs
-around each entry are trimmed. The default is `https://lonelyice.org/packages/index.json`. An old
-`https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json` entry is replaced with it when the
-settings are read. `--pkg --index <catalogs>` replaces the list for one command.
+A catalog is one `index.json`. The catalogs in use are `packages.index` in `server.yaml` ([YAML configuration](/docs/configuration)),
+and `packages.disabled` holds the ones kept but not read. Both lists are separated by `;`, and spaces and tabs
+around each entry are trimmed. The default is `https://lonelyice.org/packages/index.json`. `--pkg --index <catalogs>` replaces the list for one command.
 
 | Location | Read as |
 |---|---|
@@ -201,7 +198,7 @@ language when its `locales` list that code or `*`.
 
 | Where | Filter |
 |---|---|
-| Plugins page, **Catalog** view | **Language** (saved as `[packages] locale`). Empty: all packages. |
+| Plugins page, **Catalog** view | **Language** (saved as `packages.locale`). Empty: all packages. |
 | `--pkg available --locale <code>` | Only matching packages. |
 
 A package without `locales` matches no language, so a language filter hides it. The filter does not apply to the
@@ -252,7 +249,8 @@ inside the plugins folder, so they do not copy anything; on Windows a folder wit
 renamed, which makes a running server fail step 1 before anything changed.
 
 The new version is always enabled (`plugins/<id>`). Files outside the plugin folder are never touched: the plugin's
-`configs/modules/<name>.conf` stays through updates and removal.
+YAML settings stay through updates. Explicit removal removes that plugin's profile entry.
+`--pkg sync` reproduces an imported YAML profile after a preview, while unlisted folders are disabled and retained.
 
 ## Enable, disable, remove
 

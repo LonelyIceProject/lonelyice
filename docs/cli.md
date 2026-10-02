@@ -3,7 +3,7 @@
 `LonelyIce.exe` (`LonelyIce` on Linux and macOS) is one program with several modes. Without a mode argument it
 opens the launcher window; the launcher runs the other modes as child processes of the same executable (the
 server, the extractors, the database steps of the wizard), and they can be run by hand the same way. The mode is
-the first of `--server`, `--tool`, `--pkg`, `--backup` or `--pack` found anywhere on the command line. On Windows the
+the first of `--tui` (`-nw`, `--nw`), `--headless`, `--server`, `--tool`, `--pkg`, `--backup` or `--pack` found anywhere on the command line. Builds without the graphical launcher open the TUI by default when it is enabled. On Windows the
 executable is a GUI program: the console modes attach to the console they were started from (`--server` reads
 commands from it as well). Messages of `--pkg` and `--backup` are in the launcher's language ([Environment variables](/docs/environment),
 `LONELYICE_LANG`).
@@ -13,6 +13,8 @@ commands from it as well). Messages of `--pkg` and `--backup` are in the launche
 | Mode | Started by | Purpose |
 |---|---|---|
 | (none) | the player | The launcher window. |
+| `--tui`, `-nw`, `--nw` | the administrator over SSH or a local terminal | Plugin installation, configuration and storage preparation. |
+| `--headless` | the administrator, external process tools | Run the configured server in the foreground without stdin commands. |
 | `--server` | the launcher, the wizard, `--pkg apply` | World and auth server in one process, and the one-shot database steps. |
 | `--tool` | the wizard | Client data extractors: maps, terrain tiles, vmaps, mmaps. |
 | `--pkg` | the player, scripts | Plugin package manager. |
@@ -27,16 +29,23 @@ LonelyIce [--tray]
 
 | Option | Meaning |
 |---|---|
-| `--tray` | Start with the window hidden in the notification area. Only when `[launcher] trayOnClose = 1` ([lonelyice.ini](/docs/ini)); otherwise the window opens as usual. |
+| `--tray` | Start with the window hidden in the notification area. Only when `launcher.trayOnClose: true` ([server.yaml](/docs/configuration)); otherwise the window opens as usual. |
 
 Exit code 0; 1 when the window or its OpenGL context cannot be created or the interface cannot be loaded (a
 message box says which).
 
 ## Server
 
+For terminal configuration and a separate server process using saved launcher settings, see
+[Terminal setup and headless servers](/docs/terminal). Both `--tui` and `--headless` accept `--settings <server.yaml>`.
+The TUI does not start or stop servers and does not install operating-system services.
+
+`--server` is the low-level core entry point: it reads `.conf` files and environment variables directly and
+does not load or regenerate the YAML profile. Use `--headless --settings <profile>` for a configured deployment.
+
 ```
 LonelyIce --server [-c <worldserver.conf>] [--deploy | --apply | --dbc fill|drop | --storage-check]
-                   [--config-policy <policy>]
+                   [--config-policy <policy>] [--no-console]
 ```
 
 Without a one-shot option the process runs auth and world until it is stopped. It writes the log and
@@ -54,6 +63,7 @@ server. The databases, the plugins folder and the game data come from the config
 | `--dbc drop` | Drop the `dbc_*` tables from the world database, then exit. |
 | `--storage-check` | Load the plugins (so their database backends are registered), try to open the auth, characters and world databases the config (or the environment) names and report what it found, then exit. Needs no server folder. |
 | `--config-policy <policy>` | The core's config severity policy (`--config-policy=<policy>` also works), see the core's `doc/ConfigPolicy.md`. |
+| `--no-console` | Disable stdin commands and shutdown on EOF. Use SIGINT or SIGTERM for graceful shutdown. |
 
 When several one-shot options are given, the first applicable in this order wins: `--storage-check`, `--dbc`,
 `--apply`, `--deploy`. The one-shot modes report their result as a control line (`@@LI deploy ok`,
@@ -63,12 +73,12 @@ When several one-shot options are given, the first applicable in this order wins
 |---|---|
 | 0 | Stopped normally, or the one-shot step succeeded. `--storage-check` exits with 0 once the check has run; its result is in the control lines. |
 | 1 | Failed: config, client data, database, realm, auth or network (reported before as `@@LI state failed <reason>`), a one-shot step failed, or the core stopped with its error code. |
-| 2 | The core's restart code (e.g. the `server restart` console command). The launcher starts the server again. |
+| 2 | The core's restart code (e.g. the `server restart` console command). The GUI launcher restarts its owned server; a standalone or headless process exits with this code. |
 
 ```
 cd C:\Games\LonelyIce
-LonelyIce.exe --server -c configs\worldserver.conf
-LonelyIce.exe --server --dbc fill -c configs\worldserver.conf
+LonelyIce.exe --server -c .runtime\configs\worldserver.conf
+LonelyIce.exe --server --dbc fill -c .runtime\configs\worldserver.conf
 ```
 
 The working directory matters: the default config written by the wizard uses paths relative to the server folder
@@ -110,6 +120,13 @@ LonelyIce.exe --tool maps "C:\Games\Client-3.3.5a" "C:\Games\LonelyIce\data" 5
 LonelyIce.exe --tool mmaps "C:\Games\LonelyIce\data" 8
 ```
 
+## YAML profiles
+
+`--settings <server.yaml>` selects the portable profile; sibling `local.yaml` is loaded automatically.
+GUI, TUI, headless, package and backup modes use this profile. To reproduce the plugin set, preview
+`--pkg sync --settings <server.yaml> --dry-run`, then apply without `--dry-run`. `--pkg snapshot` explicitly
+records installed versions and states. See [YAML configuration](/docs/configuration).
+
 ## Package manager
 
 ```
@@ -124,14 +141,18 @@ LonelyIce --pkg <command> [<arguments>] [--plugins <dir>] [--index <catalogs>]
 | `update [<id>...]` | Updates the given plugins, or every enabled plugin that has a newer compatible version. |
 | `remove <id>` | Deletes the plugin folder. Refused while an enabled plugin needs it. |
 | `enable <id>`, `disable <id>` | Moves the plugin between `plugins/<id>` and `plugins/.disabled/<id>`. Disabling is refused while an enabled plugin needs it; enabling is refused while one of the plugin's dependencies is missing, disabled or out of range, or a conflict with an enabled plugin exists. |
-| `apply -c <worldserver.conf> [--client <game folder>]` | Applies the plugins' SQL and patches to the databases (and the client archives with `--client`) now instead of on the next server start: runs `--server --apply` in this process with `AC_PLUGINS_DIR` set to the plugins folder. Relative paths of the config are resolved against the current directory. |
+| `sync [--dry-run]` | Reconciles installed plugins with the YAML profile's exact versions and enabled states. Preview the plan with `--dry-run`; unlisted plugin folders are retained but disabled. |
+| `snapshot` | Explicitly records installed versions and enabled states in the selected profile, preserving settings. |
+| `apply [-c <worldserver.conf>] [--client <game folder>]` | Applies the plugins' SQL and patches to the databases (and the client archives with `--client`) now instead of on the next server start: runs `--server --apply` in this process with `AC_PLUGINS_DIR` set to the plugins folder. Relative paths of the config are resolved against the current directory. |
 | `pack <plugin folder> [<out dir>]` | Writes `<out dir>/<id>-<version>.zip` (default: the current directory), copies the plugin's `icon.png` next to it and prints the package's entry for a catalog's `index.json` ([Plugin format](/docs/plugin-format), section 8); it does not write or change an `index.json`. Refused for unknown `locales` codes and for `depends` ranges that cannot be read. |
 
 | Option | Default | Meaning |
 |---|---|---|
 | `--plugins <dir>` | `plugins` next to the executable | The plugins folder to work on. |
-| `--index <catalogs>` | `[packages] index` of `lonelyice.ini` next to the executable | Catalogs, separated by `;`: http(s) URLs of an `index.json`, index files or folders holding `index.json`. |
-| `-c`, `--config <file>` | | The config for `apply`. |
+| `--index <catalogs>` | `packages.index` of `server.yaml` next to the executable | Catalogs, separated by `;`: http(s) URLs of an `index.json`, index files or folders holding `index.json`. |
+| `--settings <profile>` | `server.yaml` beside the executable | YAML profile, merged with sibling `local.yaml`. |
+| `--dry-run` | off | Preview `sync` without changing plugins or the profile. |
+| `-c`, `--config <file>` | generated runtime config | Optional low-level config override for `apply`; without it, the launcher generates config and startup overrides from YAML. |
 | `--client <dir>` | | The game folder for `apply`. |
 | `--locale <lang>` | | Language filter for `available`. |
 
@@ -147,7 +168,7 @@ LonelyIce.exe --pkg install lonelyice.tactics@^1.3
 LonelyIce.exe --pkg --index "D:\catalog" available --locale ru
 LonelyIce.exe --pkg pack plugins\lonelyice.tactics D:\catalog
 cd C:\Games\LonelyIce
-LonelyIce.exe --pkg apply -c configs\worldserver.conf --client C:\Games\Client-3.3.5a
+LonelyIce.exe --pkg apply --settings server.yaml --client C:\Games\Client-3.3.5a
 ```
 
 ## Backups
@@ -157,7 +178,7 @@ LonelyIce --backup [<command>] [-c <worldserver.conf>] [--root <server folder>]
 ```
 
 The same backups as the launcher's, in `<server folder>/backups/store` ([Backups](/docs/backups)), with the
-retention of `lonelyice.ini` next to the executable (`[backup] days`, `budget`).
+retention of the selected YAML profile (`backup.days`, `budget`).
 
 | Command | Meaning |
 |---|---|
@@ -168,8 +189,8 @@ retention of `lonelyice.ini` next to the executable (`[backup] days`, `budget`).
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-c`, `--config <file>` | as the launcher: `[server] config`, else `<server folder>/configs/worldserver.conf` | The server config naming the databases (`*DatabaseInfo`, `modules/playerbots.conf`). |
-| `--root <dir>` | the folder above the config's `configs` folder, else `[server] root`, else the executable's folder | The server folder: relative database paths and `backups/`. |
+| `-c`, `--config <file>` | as the launcher: generated `<server folder>/.runtime/configs/worldserver.conf` | The server config naming the databases (`*DatabaseInfo`, `modules/playerbots.conf`). |
+| `--root <dir>` | the folder above the config's `configs` folder, else `server.root`, else the executable's folder | The server folder: relative database paths and `backups/`. |
 
 Exit code 0 on success (also when nothing changed), 1 on an error (printed as `Error: <message>`) or an unknown
 command (usage).

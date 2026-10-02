@@ -2,11 +2,10 @@
 
 # tools/PkgMain.cpp: LonelyIce.exe --pkg
 pkg.cli.error = error: {0}
-pkg.cli.usage = uso: LonelyIce.exe --pkg list | available | install <id>[@<rango>]... | update [<id>...] | remove <id> |\n                         enable <id> | disable <id> | apply -c <worldserver.conf> [--client <carpeta del juego>] |\n                         pack <carpeta del plugin> [<carpeta de salida>]\nopciones: --plugins <carpeta>, --index <direcciones separadas por ;>, --locale <idioma>
+pkg.cli.usage = Uso: LonelyIce --pkg list | available | install <id>[@<range>]... | update [<id>...] | remove <id> | enable <id> | disable <id> | sync | snapshot | apply | pack <folder> [<out>]\nOpciones: --settings <server.yaml>, --dry-run (sync), --plugins <dir>, --index <sources separated by ;>, --locale <language>\napply: [--client <folder>] [-c <worldserver.conf>]
 pkg.cli.list_disabled = {0} {1} (deshabilitado)  {2}
 pkg.cli.available_installed = {0} {1} (instalado: {2})  {3}
 pkg.cli.need_folder = indica la carpeta del plugin
-pkg.cli.need_config = indica -c <worldserver.conf>
 pkg.cli.need_id = indica el id del plugin
 pkg.cli.needed_by = {0} lo requieren: {1}
 pkg.cli.removed = {0}: eliminado. Las bases de datos y el cliente se actualizarán en el próximo inicio del servidor.

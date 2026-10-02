@@ -26,6 +26,7 @@ namespace LonelyIce
 
 namespace
 {
+#ifdef LONELYICE_GUI
     struct OpenAsset
     {
         std::vector<char> owned;
@@ -33,6 +34,7 @@ namespace
         std::size_t size = 0;
         std::size_t pos = 0;
     };
+#endif
 
     std::string Normalize(std::string path)
     {
@@ -94,6 +96,7 @@ std::vector<std::string> LonelyIce::ListAssets(std::string_view folder)
     return out;
 }
 
+#ifdef LONELYICE_GUI
 LonelyIce::AssetFileInterface::AssetFileInterface()
 {
     _diskRoot = DiskRoot();
@@ -164,3 +167,4 @@ size_t LonelyIce::AssetFileInterface::Length(Rml::FileHandle file)
 {
     return reinterpret_cast<OpenAsset*>(file)->size;
 }
+#endif

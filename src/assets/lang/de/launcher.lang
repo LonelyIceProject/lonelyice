@@ -231,10 +231,9 @@ set.changed = Geändert: {0}
 set.changed_restart = Geändert: {0}, ein Neustart ist erforderlich
 set.unchanged = Keine Änderungen
 set.saved = Einstellungen gespeichert.
-set.saved_reloaded = Einstellungen gespeichert, Konfiguration neu geladen.
 set.saved_restarting = Einstellungen gespeichert, der Server startet neu.
 apply.now = sofort
-apply.reload = .reload
+apply.reload = nächster Start
 apply.restart = Neustart
 
 # Über (eine Einstellungsgruppe)
@@ -249,7 +248,7 @@ about.fonts = Schriftarten
 about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
 about.app_dir = Programmordner
 about.data_dir = Serverdaten
-about.config = Serverkonfiguration
+about.config = Generierte Serverkonfiguration
 about.plugins_dir = Plugin-Ordner
 
 # Plugin-Seite
@@ -370,7 +369,7 @@ wz.client.order = Suchreihenfolge: gespeicherter Ordner, Ordner von LonelyIce.ex
 wz.client.browse = Anderen Ordner wählen…
 wz.place = Wo die Serverdaten gespeichert werden
 wz.place.browse = Ordner wählen…
-wz.place.note = Darin: configs — Einstellungen, db — Datenbanken, data — dbc, maps, vmaps, mmaps, logs — Protokolle, backups — Kopien.
+wz.place.note = Serverdaten: db — Datenbanken, data — dbc, maps, vmaps und mmaps, logs — Protokolle, backups — Sicherungen. YAML-Profile liegen separat.
 wz.threads = Threads für Navigation
 wz.world = Realm und Ihr Account
 wz.realm_name = Realmname

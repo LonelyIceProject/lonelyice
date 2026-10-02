@@ -119,13 +119,7 @@ namespace
 
         // The generator reads its settings from a yaml file; ours is embedded, with dataDir pointing at the data folder.
         std::string yaml;
-        LonelyIce::AssetFileInterface assets;
-        if (Rml::FileHandle f = assets.Open("tools/mmaps-config.yaml"))
-        {
-            yaml.resize(assets.Length(f));
-            assets.Read(yaml.data(), yaml.size(), f);
-            assets.Close(f);
-        }
+        LonelyIce::ReadAsset("tools/mmaps-config.yaml", yaml);
         std::string dir = root.generic_string();
         if (dir.back() != '/')
             dir += '/';

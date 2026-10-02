@@ -338,7 +338,7 @@ PluginPatches::Result PluginPatches::Apply(Options const& o)
         res.log.push_back(Tr("patch.plugin.installed", r.Plugin()));
     }
 
-    if (!o.clientDir.empty())
+    if (o.writeClient && !o.clientDir.empty())
     {
         ClientPatch::Result client = ClientPatch::Apply(o.clientDir, recipes, ids);
         res.log.insert(res.log.end(), client.log.begin(), client.log.end());

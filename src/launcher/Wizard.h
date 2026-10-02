@@ -40,6 +40,7 @@ namespace LonelyIce
             std::function<void(InstallOptions const&)> installed;   // install finished successfully
             std::function<void()> play;
             std::function<void()> wake;
+            std::function<std::filesystem::path()> profileFile;
         };
 
         explicit Wizard(Host host);

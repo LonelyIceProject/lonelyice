@@ -11,10 +11,12 @@ developer variables are for working on LonelyIce.
 
 | Variable | Read by | Set by | Meaning |
 |---|---|---|---|
-| `LONELYICE_LANG` | every mode | the launcher, for itself and so for its children | Language of messages and the interface: `en`, `de`, `es`, `fr`, `ru`; unknown: English. Takes precedence over `[launcher] language` ([lonelyice.ini](/docs/ini)). Every process sets it to the language it picked. |
+| `LONELYICE_LANG` | every mode | the launcher, for itself and so for its children | Language of messages and the interface: `en`, `de`, `es`, `fr`, `ru`; unknown: English. Takes precedence over `launcher.language` ([server.yaml](/docs/configuration)). Every process sets it to the language it picked. |
 | `LONELYICE_CLIENT` | `--server` | the launcher (server start, when a client was found), the wizard (`--deploy`, `--dbc`), `--pkg apply --client` | The game folder. The server builds the plugins' client patch archives into it while it starts; with `LONELYICE_DATA=client` it reads the game data from it; `--dbc fill` unpacks from it. |
-| `LONELYICE_LOCALE` | `--server` | the launcher (server start), the wizard (`--dbc`) | The client locale the game data is read in (`enUS`, `ruRU`, ...): `[client] locale`, else `SET locale` of the client's `Config.wtf`. Empty: the client's first locale. |
-| `LONELYICE_DATA` | `--server` | the launcher, when `[server] location = local` and `dataCache = 0` | `client`: DBC tables, terrain and cameras come from the client's archives, nothing unpacked ([Server game data](/docs/server-data)). The server then sets `AC_DBC_FROM_DATABASE=1` for itself. |
+| `LONELYICE_SERVER_ONLY` | `--server` | `--headless`, terminal server-only preparation | `1`: skip writing plugin patch archives into the client. Stock client data can still be read. |
+| `LONELYICE_PENDING_REALM_NAME`, `LONELYICE_SETTINGS_FILE` | `--server --no-console` | `--headless` | Internal handoff of a saved realm-name edit and its settings file. The pending edit is cleared after the database value is verified. |
+| `LONELYICE_LOCALE` | `--server` | the launcher (server start), the wizard (`--dbc`) | The client locale the game data is read in (`enUS`, `ruRU`, ...): `client.locale`, else `SET locale` of the client's `Config.wtf`. Empty: the client's first locale. |
+| `LONELYICE_DATA` | `--server` | the launcher, when `server.location: local` and `dataCache: false` | `client`: DBC tables, terrain and cameras come from the client's archives, nothing unpacked ([Server game data](/docs/server-data)). The server then sets `AC_DBC_FROM_DATABASE=1` for itself. |
 | `LONELYICE_ACCOUNT` | `--server --deploy` | the wizard, when an account was entered (required for new databases, optional for existing ones) | `<login>\t<password>\t<gm level>` (tab-separated). Creates the account if it does not exist (login and password upper-cased, as the client sends them) with that GM level on all realms (0: none). An account that exists keeps its password and rights. |
 | `LONELYICE_REALMNAME` | `--server --deploy` | the wizard, for new databases and when the realm name was changed; not for a database update | Realm name written to `realmlist` for the config's `RealmID`. Not set: the realm keeps its name. |
 | `LONELYICE_REALM_ADDRESS` | `--server` | nobody (the player, for a realm reached from outside the local network) | With `BindIP` not on a loopback address: the address written to `realmlist.address` instead of this computer's LAN address. |
@@ -35,6 +37,10 @@ lower-case letter and a following capital and between letters and digits.
 | `LoginDatabaseInfo` | `AC_LOGIN_DATABASE_INFO` |
 | `Rate.XP.Kill` | `AC_RATE_XP_KILL` |
 
+At startup, effective YAML core and plugin values are also passed as exact `AC_*` overrides. They replace
+inherited variables of the same name; managed paths and storage connection values take precedence.
+This means console `reload config` cannot apply a newly edited YAML profile. Restart through the launcher.
+
 The launcher sets these:
 
 | Variable | When | Value and purpose |
@@ -43,7 +49,7 @@ The launcher sets these:
 | `AC_DBC_FROM_DATABASE` | server start with the data cache on | `1`: the core loads its DBC stores from the `dbc_*` tables. |
 | `AC_UPDATES_ENABLE_DATABASES` | `--deploy` (install, storage switch, and the database update before a start when `setup/sql.pak` changed) | `7`: the updater creates and updates auth, characters and world. Normal starts use the config's value, `0` in the config the wizard writes. |
 | `AC_PLAYERBOTS_UPDATES_ENABLE_DATABASES` | `--deploy` | `1`: the same for the playerbots database. |
-| `AC_LOGIN_DATABASE_INFO`, `AC_CHARACTER_DATABASE_INFO`, `AC_WORLD_DATABASE_INFO`, `AC_PLAYERBOTS_DATABASE_INFO` | a plugin's storage (`[server] location` not `local`): server start, the wizard's steps, the storage check | `<id>:<host>;<port>;<user>;<password>;<prefix><name>` with `<name>` `auth`, `characters`, `world`, `playerbots` ([lonelyice.ini](/docs/ini), `[remote]`). |
+| `AC_LOGIN_DATABASE_INFO`, `AC_CHARACTER_DATABASE_INFO`, `AC_WORLD_DATABASE_INFO`, `AC_PLAYERBOTS_DATABASE_INFO` | a plugin's storage (`server.location` not `local`): server start, the wizard's steps, the storage check | `<id>:<host>;<port>;<user>;<password>;<prefix><name>` with `<name>` `auth`, `characters`, `world`, `playerbots` ([server.yaml](/docs/configuration), `remote`). |
 | the same four | the storage check of the built-in files | `sqlite:<server folder>/db/<name>.sqlite`; playerbots with `;attach=characters=<server folder>/db/characters.sqlite`. |
 | `AC_<KEY>` of the storage's `config` | with a plugin's storage | The values the plugin's manifest lists under `storage.config` ([Plugin format](/docs/plugin-format)), `{bin}` replaced by the plugin's `server/<platform>` folder and `{exe}` by `.exe` on Windows (empty elsewhere). |
 | `AC_DISABLE_INTERACTIVE` | the wizard's steps and the storage check; the server sets it for itself in every mode | `1`: the core's updater never asks on stdin whether to create a missing database; it creates it. |

@@ -9,7 +9,7 @@ set.group.diff.hint = For playing with a small group of bots
 set.group.perf = Network and resources
 set.group.perf.hint = Ports, threads and saving
 set.group.launch = Launcher
-set.group.launch.hint = LonelyIce's own options, lonelyice.ini
+set.group.launch.hint = Desktop preferences and backup scheduling
 
 set.realm.name = Realm name
 set.realm.name.hint = Stored in the login database, shown in the realm list

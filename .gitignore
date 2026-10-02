@@ -20,3 +20,7 @@ AGENTS.md
 
 # UI dependencies built by tools/build-ui-deps.ps1
 deps/
+
+# Machine-local YAML overrides and generated core configuration
+local.yaml
+.runtime/

@@ -64,7 +64,7 @@ namespace
         }
 #else
         // the default Wine prefix
-        if (auto home = Platform::GetEnv("HOME"))
+        if (auto home = LonelyIce::Platform::GetEnv("HOME"))
             for (char const* dir : { "Program Files (x86)", "Program Files" })
                 out.push_back(fs::path(*home) / ".wine" / "drive_c" / dir / "World of Warcraft");
 #endif

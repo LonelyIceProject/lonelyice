@@ -231,10 +231,9 @@ set.changed = Cambiado: {0}
 set.changed_restart = Cambiado: {0}, se necesita un reinicio
 set.unchanged = Sin cambios
 set.saved = Ajustes guardados.
-set.saved_reloaded = Ajustes guardados, configuración recargada.
 set.saved_restarting = Ajustes guardados, el servidor se está reiniciando.
 apply.now = ahora
-apply.reload = .reload
+apply.reload = próximo inicio
 apply.restart = reinicio
 
 # acerca de (un grupo de ajustes)
@@ -249,7 +248,7 @@ about.fonts = Fuentes
 about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
 about.app_dir = Carpeta del programa
 about.data_dir = Datos del servidor
-about.config = Configuración del servidor
+about.config = Configuración generada del servidor
 about.plugins_dir = Carpeta de plugins
 
 # página de plugins
@@ -370,7 +369,7 @@ wz.client.order = Orden de búsqueda: la carpeta guardada, la carpeta de LonelyI
 wz.client.browse = Elegir otra carpeta…
 wz.place = Dónde guardar los datos del servidor
 wz.place.browse = Elegir una carpeta…
-wz.place.note = Dentro: configs — ajustes, db — bases de datos, data — dbc, maps, vmaps, mmaps, logs — registros, backups — copias.
+wz.place.note = Datos del servidor: db — bases de datos, data — dbc, maps, vmaps y mmaps, logs — registros, backups — copias. Los perfiles YAML se guardan aparte.
 wz.threads = Hilos para la navegación
 wz.world = El reino y tu cuenta
 wz.realm_name = Nombre del reino

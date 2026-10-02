@@ -86,6 +86,19 @@ namespace
         return out + " }";
     }
 
+    bool SafeId(std::string const& id)
+    {
+        if (id.empty() || id.front() == '.' || id.back() == '.' || !std::all_of(id.begin(), id.end(), [](unsigned char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+        }))
+            return false;
+        std::string base = id.substr(0, id.find('.'));
+        std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        return base != "con" && base != "prn" && base != "aux" && base != "nul" &&
+            !(base.size() == 4 && (base.starts_with("com") || base.starts_with("lpt")) && base[3] >= '1' && base[3] <= '9');
+    }
+
     bool SafeRelative(std::string const& name)
     {
         if (name.empty() || name[0] == '/' || name[0] == '\\' || name.find(':') != std::string::npos)
@@ -341,7 +354,7 @@ bool Manager::LoadIndex(std::string const& sources, std::string& error, Http::Pr
 
                 // Only packages this build can run: same core (when it has server code) and a build for this platform.
                 bool const server = !pkg.platforms.empty();
-                if (pkg.id.empty() || pkg.version.empty() || pkg.url.empty())
+                if (!SafeId(pkg.id) || pkg.version.empty() || pkg.url.empty())
                     continue;
                 if (server && (pkg.core != CoreAbi() || std::find(pkg.platforms.begin(), pkg.platforms.end(), Platform()) == pkg.platforms.end()))
                     continue;
@@ -616,11 +629,19 @@ Plan Manager::ResolveUpdates() const
 
 bool Manager::Install(Plan const& plan, std::string& error, std::function<void(std::string const&)> const& log, Http::Progress const& progress)
 {
-    if (ServerRunning())
+    ServerLock const operationLock(_dir);
+    if (!operationLock.Held())
     {
         error = Tr("pkg.error.server_running", Platform::PathToUtf8(_dir));
         return false;
     }
+
+    for (Step const& step : plan.steps)
+        if (!SafeId(step.package.id))
+        {
+            error = Tr("pkg.error.bad_path", step.package.id);
+            return false;
+        }
 
     std::error_code ec;
     fs::path const staging = _dir / ".staging";
@@ -754,7 +775,8 @@ std::vector<std::string> Manager::Dependents(std::string const& id) const
 
 bool Manager::Remove(std::string const& id, std::string& error)
 {
-    if (ServerRunning())
+    ServerLock const operationLock(_dir);
+    if (!operationLock.Held())
     {
         error = Tr("pkg.error.server_running", Platform::PathToUtf8(_dir));
         return false;
@@ -777,7 +799,8 @@ bool Manager::Remove(std::string const& id, std::string& error)
 
 bool Manager::SetEnabled(std::string const& id, bool enabled, std::string& error)
 {
-    if (ServerRunning())
+    ServerLock const operationLock(_dir);
+    if (!operationLock.Held())
     {
         error = Tr("pkg.error.server_running", Platform::PathToUtf8(_dir));
         return false;
@@ -866,7 +889,7 @@ bool Manager::Pack(fs::path const& pluginDir, fs::path const& outDir, std::strin
         return false;
     }
     std::string const id = Str(root, "id"), version = Str(root, "version");
-    if (id.empty() || version.empty())
+    if (!SafeId(id) || version.empty())
     {
         error = Tr("pkg.error.manifest_no_id");
         return false;

@@ -22,6 +22,7 @@
 #include "GameTime.h"
 #include "GitRevision.h"
 #include "IoContext.h"
+#include "ProfileConfig.h"
 #include "MapMgr.h"
 #include "Metric.h"
 #include "ModuleMgr.h"
@@ -239,6 +240,34 @@ namespace
         return true;
     }
 
+    // Headless starts cannot send the GUI's @@realmname command after readiness. Apply a saved pending name
+    // before loading the realm, and clear it only after reading the committed value back successfully.
+    void ApplyHeadlessRealmName()
+    {
+        std::string const name = Env("LONELYICE_PENDING_REALM_NAME");
+        std::string const settingsPath = Env("LONELYICE_SETTINGS_FILE");
+        if (name.empty() || settingsPath.empty())
+            return;
+        std::string escaped = name;
+        LoginDatabase.EscapeString(escaped);
+        LoginDatabase.DirectExecute("UPDATE realmlist SET name = '{}' WHERE id = {}", escaped, realm.Id.Realm);
+        QueryResult current = LoginDatabase.Query("SELECT name FROM realmlist WHERE id = {}", realm.Id.Realm);
+        if (!current || current->Fetch()[0].Get<std::string>() != name)
+        {
+            LOG_ERROR("server.worldserver", "The pending realm name could not be saved");
+            return;
+        }
+        LonelyIce::ProfileConfig settings;
+        fs::path const path = LonelyIce::Platform::Utf8ToPath(settingsPath);
+        std::string error;
+        if (!settings.Load(path, error) || settings.String({ "runtime", "pendingRealmName" }) != name)
+            return;
+        settings.SetEffective({ "server", "realmName" }, name);
+        settings.Set({ "runtime", "pendingRealmName" }, "", LonelyIce::ProfileConfig::Layer::Local);
+        if (!settings.Save(error))
+            LOG_WARN("server.worldserver", "The realm name was saved, but the launcher settings could not be updated");
+    }
+
     // Patches of the installed plugins: named ids, server rows of DBC tables, recipe SQL and, when LONELYICE_CLIENT
     // names the game folder, the client archives. Runs before the world loads the DBC stores.
     bool ApplyPluginPatches()
@@ -247,6 +276,7 @@ namespace
         o.pluginsDir = sConfigMgr->GetOption<std::string>("PluginsDir", "plugins");
         o.serverDbcDir = fs::path(sConfigMgr->GetOption<std::string>("DataDir", "./")) / "dbc";
         o.clientDir = fs::u8path(Env("LONELYICE_CLIENT"));
+        o.writeClient = Env("LONELYICE_SERVER_ONLY") != "1";
         for (PluginInfo const& plugin : sPluginMgr->GetPlugins())
             if (plugin.loaded)
                 o.loaded.insert(plugin.id);
@@ -305,8 +335,11 @@ namespace
         if (saved == stamp)
             return true;
 
-        // With updates on (deploy) the updater has already applied them together with the core's SQL.
-        if (!sConfigMgr->GetOption<int32>("Updates.EnableDatabases", 0, false))
+        // Only pools selected by the update mask have already applied their plugins' SQL.
+        uint32 const updateFlags = sConfigMgr->GetOption<uint32>("Updates.EnableDatabases", 0, false);
+        if (!DBUpdater<LoginDatabaseConnection>::IsEnabled(updateFlags) ||
+            !DBUpdater<CharacterDatabaseConnection>::IsEnabled(updateFlags) ||
+            !DBUpdater<WorldDatabaseConnection>::IsEnabled(updateFlags))
         {
             LOG_INFO("server.loading", "Plugins changed since the last start: applying their SQL");
             // The updater reads the folders relative to the source directory, which the installer leaves empty.
@@ -319,9 +352,12 @@ namespace
                     for (auto const& [database, dir] : plugin.databases)
                         folders[database].push_back("/" + fs::relative(fs::absolute(dir, ec), source, ec).generic_string());
 
-            if ((folders.count("auth") && !DBUpdater<LoginDatabaseConnection>::Update(LoginDatabase, &folders["auth"])) ||
-                (folders.count("characters") && !DBUpdater<CharacterDatabaseConnection>::Update(CharacterDatabase, &folders["characters"])) ||
-                (folders.count("world") && !DBUpdater<WorldDatabaseConnection>::Update(WorldDatabase, &folders["world"])))
+            if ((!DBUpdater<LoginDatabaseConnection>::IsEnabled(updateFlags) && folders.count("auth") &&
+                    !DBUpdater<LoginDatabaseConnection>::Update(LoginDatabase, &folders["auth"])) ||
+                (!DBUpdater<CharacterDatabaseConnection>::IsEnabled(updateFlags) && folders.count("characters") &&
+                    !DBUpdater<CharacterDatabaseConnection>::Update(CharacterDatabase, &folders["characters"])) ||
+                (!DBUpdater<WorldDatabaseConnection>::IsEnabled(updateFlags) && folders.count("world") &&
+                    !DBUpdater<WorldDatabaseConnection>::Update(WorldDatabase, &folders["world"])))
             {
                 LOG_ERROR("server.loading", "Applying the plugins' SQL failed");
                 return false;
@@ -862,10 +898,12 @@ int ServerMain(int argc, char** argv)
 
     // Nobody can answer "create the database?" on this process's stdin.
     SetEnvironment("AC_DISABLE_INTERACTIVE", "1");
-    bool deploy = false, applyOnly = false, checkStorage = false;
+    bool deploy = false, applyOnly = false, checkStorage = false, noConsole = false;
     std::string dbcAction;
     for (int i = 1; i < argc; ++i)
     {
+        if (std::string_view(argv[i]) == "--no-console")
+            noConsole = true;
         if (std::string_view(argv[i]) == "--deploy")
             deploy = true;
         if (std::string_view(argv[i]) == "--apply")
@@ -926,7 +964,9 @@ int ServerMain(int argc, char** argv)
 #ifdef _WIN32
     signals.add(SIGBREAK);
 #else
-    signals.add(SIGHUP);
+    // nohup deliberately ignores SIGHUP. Headless mode preserves that disposition for SSH logout.
+    if (!noConsole)
+        signals.add(SIGHUP);
 #endif
     signals.async_wait([](boost::system::error_code const& error, int)
     {
@@ -952,6 +992,12 @@ int ServerMain(int argc, char** argv)
     // databases. World and auth run in this process: plugins made for either load. While the lock is held,
     // LonelyIce --pkg refuses to change the plugins folder.
     LonelyIce::Packages::ServerLock const pluginsLock(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"));
+    if (!pluginsLock.Held())
+    {
+        LOG_ERROR("server.loading", "Cannot lock plugins: another server or package operation is using them");
+        Control("state failed plugins");
+        return 1;
+    }
     sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"), { "worldserver", "authserver" });
     sConfigMgr->LoadModulesConfigs();
 
@@ -1023,6 +1069,7 @@ int ServerMain(int argc, char** argv)
         return 1;
     }
 
+    ApplyHeadlessRealmName();
     LoginDatabase.DirectExecute("UPDATE realmlist SET flag = (flag & ~{}) | {} WHERE id = '{}'", REALM_FLAG_OFFLINE, REALM_FLAG_VERSION_MISMATCH, realm.Id.Realm);
     UpdateRealmAddress();
 
@@ -1109,7 +1156,8 @@ int ServerMain(int argc, char** argv)
     sScriptMgr->OnStartup();
 
     static CommandReader commands;
-    commands.Start();
+    if (!noConsole)
+        commands.Start();
 
     std::shared_ptr<StatusReporter> status = std::make_shared<StatusReporter>(*ioContext);
     StatusReporter::Start(status);

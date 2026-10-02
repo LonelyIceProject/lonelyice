@@ -1,7 +1,9 @@
 #ifndef LONELYICE_ASSETS_H
 #define LONELYICE_ASSETS_H
 
+#ifdef LONELYICE_GUI
 #include <RmlUi/Core/FileInterface.h>
+#endif
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,6 +15,7 @@ namespace LonelyIce
     // Asset paths under a folder ("lang/en/"), sorted.
     std::vector<std::string> ListAssets(std::string_view folder);
 
+#ifdef LONELYICE_GUI
     // Serves ui/ and fonts/ from arrays linked into the executable.
     // If LONELYICE_ASSETS points to the assets folder, files are read from disk instead (for editing the UI live).
     class AssetFileInterface : public Rml::FileInterface
@@ -30,6 +33,7 @@ namespace LonelyIce
     private:
         std::string _diskRoot;
     };
+#endif
 }
 
 #endif

@@ -29,14 +29,20 @@ namespace
 
 StorageCheck::~StorageCheck()
 {
+    Cancel();
+    if (_thread.joinable())
+        _thread.join();
+}
+
+void StorageCheck::Cancel()
+{
     ++_run;
     {
         std::lock_guard<std::mutex> guard(_lock);
         if (_child)
             _child->Kill();
+        _result.reset();
     }
-    if (_thread.joinable())
-        _thread.join();
 }
 
 void StorageCheck::Start(fs::path const& exe, Platform::Env const& env)

@@ -9,11 +9,14 @@
 //                                                      install / remove the plugins' patches in the databases
 //                                                      (and the client) now instead of on the next server start
 //   LonelyIce --pkg pack <plugin folder> [<out dir>]   <id>-<version>.zip and its index entry
-// Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: lonelyice.ini).
+// Options: --plugins <dir> (default: plugins next to the exe), --index <urls> (default: server.yaml).
 // Commands that change plugins refuse while a server runs on the plugins folder (Packages::ServerLock).
 
 #include "Lang.h"
 #include "LauncherSettings.h"
+#include "LauncherRuntime.h"
+#include "ProfileConfig.h"
+#include "ProfilePlugins.h"
 #include "PackageManager.h"
 #include "Platform.h"
 #include "TextUtil.h"
@@ -69,11 +72,11 @@ int PkgMain(int argc, char** argv)
 
     fs::path const exeDir = ExeDir();
     LauncherSettings settings;
-    settings.file = exeDir / "lonelyice.ini";
-    settings.Load();
+    settings.file = exeDir / "server.yaml";
 
     fs::path pluginsDir = exeDir / "plugins";
-    std::string index = settings.packageIndex, config, client, locale;
+    std::string index, config, client, locale;
+    bool dryRun = false;
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i)
     {
@@ -82,6 +85,10 @@ int PkgMain(int argc, char** argv)
             continue;
         if (a == "--plugins" && i + 1 < argc)
             pluginsDir = fs::u8path(argv[++i]);
+        else if (a == "--settings" && i + 1 < argc)
+            settings.file = Platform::Utf8ToPath(argv[++i]);
+        else if (a == "--dry-run")
+            dryRun = true;
         else if (a == "--index" && i + 1 < argc)
             index = argv[++i];
         else if ((a == "-c" || a == "--config") && i + 1 < argc)
@@ -93,6 +100,12 @@ int PkgMain(int argc, char** argv)
         else
             args.push_back(a);
     }
+    std::string loadError;
+    if (!settings.Load(&loadError))
+        return Fail(loadError);
+    ResolveSettingsPaths(settings);
+    if (index.empty())
+        index = settings.packageIndex;
     if (args.empty())
     {
         Print(Tr("pkg.cli.usage"));
@@ -103,6 +116,43 @@ int PkgMain(int argc, char** argv)
     std::vector<std::string> const rest(args.begin() + 1, args.end());
     Packages::Manager pm(pluginsDir);
     std::string error;
+    auto savePlugins = [&](std::optional<std::vector<std::string>> affected) -> bool
+    {
+        ProfileConfig profile;
+        if (!profile.Load(settings.file, error))
+            return false;
+        profile.Set({ "format" }, int64_t(1));
+        SnapshotProfilePlugins(profile, pm, affected);
+        return profile.Save(error);
+    };
+    if (cmd == "snapshot")
+    {
+        if (!savePlugins(std::nullopt))
+            return Fail(error);
+        Print(Platform::PathToUtf8(settings.file));
+        return 0;
+    }
+    if (cmd == "sync")
+    {
+        ProfileConfig profile;
+        if (!profile.Load(settings.file, error))
+            return Fail(error);
+        // A local-only profile needs no network. Catalog errors matter only when packages are missing.
+        ProfilePluginPlan plan = PreviewProfilePlugins(profile, pm, settings.location);
+        if (!plan.error.empty())
+        {
+            pm.LoadIndex(index, error);
+            plan = PreviewProfilePlugins(profile, pm, settings.location);
+        }
+        if (!plan.error.empty())
+            return Fail(plan.error);
+        Print(DescribeProfilePlugins(plan));
+        if (dryRun)
+            return 0;
+        if (!ApplyProfilePlugins(profile, pm, plan, error, [](std::string const& line) { Print(line); }))
+            return Fail(error);
+        return 0;
+    }
 
     // A running server holds its plugins' libraries and its own view of them: nothing changes under it.
     bool const changes = cmd == "install" || cmd == "update" || cmd == "remove" || cmd == "enable" || cmd == "disable" || cmd == "apply";
@@ -131,7 +181,19 @@ int PkgMain(int argc, char** argv)
     if (cmd == "apply")
     {
         if (config.empty())
-            return Fail(Tr("pkg.cli.need_config"));
+        {
+            if (!client.empty())
+                settings.clientPath = Platform::Utf8ToPath(client);
+            if (!GenerateRuntimeConfig(settings, error))
+                return Fail(error);
+            LaunchContext context;
+            if (!PrepareLaunch(settings, context, error, false))
+                return Fail(error);
+            for (auto const& [name, value] : context.env)
+                Platform::SetEnv(name, value);
+            fs::current_path(context.root);
+            config = Platform::PathToUtf8(context.config);
+        }
         if (!client.empty())
             SetEnvironment("LONELYICE_CLIENT", client);
         SetEnvironment("AC_PLUGINS_DIR", pluginsDir.string());
@@ -160,6 +222,8 @@ int PkgMain(int argc, char** argv)
         }
         bool const ok = cmd == "remove" ? pm.Remove(id, error) : pm.SetEnabled(id, cmd == "enable", error);
         if (!ok)
+            return Fail(error);
+        if (!savePlugins(std::vector<std::string>{ id }))
             return Fail(error);
         Print(Tr(cmd == "remove" ? "pkg.cli.removed" : cmd == "enable" ? "pkg.cli.enabled" : "pkg.cli.disabled", id));
         return 0;
@@ -221,6 +285,11 @@ int PkgMain(int argc, char** argv)
     Print(Tr("pkg.cli.will_install"));
     PrintPlan(plan);
     if (!pm.Install(plan, error, [](std::string const& line) { Print(line); }))
+        return Fail(error);
+    std::vector<std::string> affected;
+    for (auto const& step : plan.steps)
+        affected.push_back(step.package.id);
+    if (!savePlugins(affected))
         return Fail(error);
     Print(Tr("pkg.cli.done"));
     return 0;

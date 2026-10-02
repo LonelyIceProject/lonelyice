@@ -48,6 +48,7 @@ bool LonelyIce::ConfFile::Save() const
     // each line keeps its own ending; appended lines follow the file's style
     for (std::size_t i = 0; i < _lines.size(); ++i)
         out << _lines[i] << ((i < _cr.size() ? _cr[i] : _crlf) ? "\r\n" : "\n");
+    out.close();
     return bool(out);
 }
 

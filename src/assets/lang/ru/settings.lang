@@ -9,7 +9,7 @@ set.group.diff.hint = Для игры с малой группой ботов
 set.group.perf = Сеть и ресурсы
 set.group.perf.hint = Порты, потоки и сохранение
 set.group.launch = Лаунчер
-set.group.launch.hint = Параметры самого LonelyIce, lonelyice.ini
+set.group.launch.hint = Параметры окна и расписание резервных копий
 
 set.realm.name = Имя мира
 set.realm.name.hint = Хранится в базе входа, видно в списке миров

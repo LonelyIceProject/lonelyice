@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.22)
+
+# Only advertise the native binaries actually built into this release.
+file(GLOB manifests "${RELEASE}/plugins/*/plugin.json")
+foreach(path ${manifests})
+  file(READ "${path}" manifest)
+  string(JSON library ERROR_VARIABLE no_library GET "${manifest}" server library)
+  if (NOT no_library)
+    get_filename_component(plugin_dir "${path}" DIRECTORY)
+    if (NOT EXISTS "${plugin_dir}/server/${PLATFORM}/${PREFIX}${library}${SUFFIX}")
+      message(FATAL_ERROR "Missing ${PLATFORM} binary for ${plugin_dir}")
+    endif()
+    string(JSON manifest SET "${manifest}" platforms "[\"${PLATFORM}\"]")
+    file(WRITE "${path}" "${manifest}\n")
+  endif()
+endforeach()

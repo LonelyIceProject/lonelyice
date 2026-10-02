@@ -1,9 +1,9 @@
 # Backups
 
-The launcher backs up the SQLite databases of the built-in storage (`[server] location = local`): `auth`,
+The launcher backs up the SQLite databases of the built-in storage (`server.location: local`): `auth`,
 `characters`, `world` and, with the playerbots plugin, `playerbots`. A backup keeps only what changed since the
 previous one, so they can run every hour without filling the disk. They run from Maintenance → Backups, on a
-schedule ([Settings](/docs/ini), `[backup]`) and from the command line ([Command line](/docs/cli), `--backup`).
+schedule ([Settings](/docs/configuration), the `backup` section) and from the command line ([Command line](/docs/cli), `--backup`).
 With a plugin's database server there are no launcher backups.
 
 ## What changed
@@ -68,9 +68,9 @@ The first backup stores every page; each later one mostly refers to the packs be
 After each backup:
 
 - the newest backup always stays, and every backup of the last 24 hours;
-- for `[backup] days` days (default 14), the newest backup of each day;
+- for `backup.days` days (default 14), the newest backup of each day;
 - older, the newest backup of each week (weeks from Monday);
-- when the store is larger than `[backup] budget` MB (default 2048; 0: no limit), the oldest backups go until the
+- when the store is larger than `backup.budget` MB (default 2048; 0: no limit), the oldest backups go until the
   pages still referred to fit. When the newest backup alone is larger, only it stays and the launcher says so.
 
 Pages nobody refers to any more are removed: a pack without such pages is deleted, a pack mostly unused, or many

@@ -119,7 +119,7 @@ install.error.write = не удалось записать {0}
 install.error.deploy = сервер не смог создать базы ({0}), подробности в logs\
 install.error.code = код {0}
 install.error.deploy.database = не удалось создать или обновить базы, подробности в logs\
-install.error.deploy.config = сервер не смог прочитать конфиг (configs\worldserver.conf), подробности в logs\
+install.error.deploy.config = сервер не смог прочитать конфиг (.runtime\configs\worldserver.conf), подробности в logs\
 install.error.deploy.client = сервер не смог прочитать данные клиента игры, подробности в logs\
 install.error.deploy.account = базы готовы, но аккаунт создать не удалось, подробности в logs\
 install.error.deploy.patches = базы готовы, но патчи плагинов применить не удалось, подробности в logs\
@@ -150,7 +150,7 @@ backup.more = ещё {0}
 backup.no_changes = без изменений
 backup.before_restore = Перед восстановлением: {0}
 # BackupMain.cpp
-backup.cli.usage = Использование: LonelyIce --backup [create | list | restore <id> | export <id>] [-c <worldserver.conf>] [--root <папка сервера>]
+backup.cli.usage = Использование: LonelyIce --backup [create | list | restore <id> | export <id>] [--settings <server.yaml>] [-c <worldserver.conf>] [--root <dir>]
 backup.cli.error = Ошибка: {0}
 backup.cli.mb = {0} МБ
 backup.cli.created = Резервная копия {0}: +{1}

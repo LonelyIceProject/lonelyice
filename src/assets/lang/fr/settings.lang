@@ -9,7 +9,7 @@ set.group.diff.hint = Pour jouer avec un petit groupe de bots
 set.group.perf = Réseau et ressources
 set.group.perf.hint = Ports, threads et sauvegarde
 set.group.launch = Lanceur
-set.group.launch.hint = Options propres à LonelyIce, lonelyice.ini
+set.group.launch.hint = Options de la fenêtre et sauvegardes planifiées
 
 set.realm.name = Nom du royaume
 set.realm.name.hint = Stocké dans la base de connexion, affiché dans la liste des royaumes

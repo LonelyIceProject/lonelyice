@@ -94,7 +94,7 @@ directory). Each subfolder with a `plugin.json` is a plugin.
 | `server.library` | Library base name. The loader looks in `server/<platform>/` of the running system and adds the platform's form: `name.dll` on Windows, `libname.so` on Linux, `libname.dylib` on macOS. A plugin without a build for the running platform is skipped with a message. |
 | `server.apps` | Programs that load the plugin: `worldserver`, `authserver`, `dbimport` (default `["worldserver"]`). The LonelyIce server process runs world and auth and loads plugins made for either. A database backend lists all three. |
 | `databases` | Update folders per core database (`auth`, `characters`, `world`), and databases the plugin owns, which only the plugin's own code creates and updates (see 5). |
-| `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager; `modules/<name>.conf` beside the server's config overrides them key by key (see 3). |
+| `config` | The plugin's `.conf.dist`. Its settings are read through the normal config manager; LonelyIce writes `plugins.<id>.settings` in YAML and generates a private `modules/<name>.conf` override beside the core config (see [YAML configuration](/docs/configuration)). |
 | `settings` | Launcher settings: the name of a file (`settings.json`, also found without this field) or the schema inline (see 6). |
 | `patches` | Patch recipe file: DBC rows with named ids, SQL, client files (see 7). |
 | `client` | `addons`: client addon folders (see 7). |
@@ -254,10 +254,10 @@ is not part of that hash: the plugin updates it itself when it opens it.
 ## 6. Launcher settings
 
 `settings.json` describes what the launcher shows for the plugin: one group in its Settings tab, named `group`, next to the
-core's groups. Values live in the plugin's config, `modules/<name>.conf` beside the server's config
-(`configs/modules/<name>.conf` in a LonelyIce server folder), the same file the core reads; it is created from the
-plugin's `.dist` when a value is first saved. A key missing there shows the `.dist` value. The launcher edits values
-in place, keeping comments. A plugin without `config` gets no group.
+core's groups. User values live in `plugins.<id>.settings` in `server.yaml` or sibling `local.yaml`.
+Missing keys use the plugin's packaged `.conf.dist` default or the schema's default. The launcher preserves
+unknown YAML fields and generates `.runtime/configs/modules/<name>.conf` for the core before setup/start.
+A plugin without `config` gets no group. See [YAML configuration](/docs/configuration).
 
 ```json
 {
@@ -275,28 +275,21 @@ in place, keeping comments. A plugin without `config` gets no group.
 }
 ```
 
-| `type` | Control |
+| `type` | Control and YAML value |
 |---|---|
-| `bool` | checkbox, written in the style the file already uses (`1`/`0`, `true`/`false`) |
-| `int`, `float` | number field with optional `min`, `max` (clamped on save) |
-| `string` | text field |
-| `choice` | drop-down of `options` |
+| `bool` | checkbox; YAML boolean |
+| `int`, `float` | numeric field; invalid or out-of-range values are rejected |
+| `string` | text field; YAML string |
+| `choice` | drop-down of `options`; selected value |
 
-`apply` tells the launcher what to do after saving while the server runs:
+`apply` describes the plugin's runtime requirements: `now`, `reload`, or `restart` (default).
+It does not give the TUI control of the server. TUI changes apply on the next server start.
+When the GUI owns a running server, saving fields marked `reload` or `restart` restarts it so the new YAML
+and startup environment are applied. A raw `reload config` command does not regenerate configuration from YAML.
+Plugin code can still use `OnAfterConfigLoad` for callers using the core's low-level configuration directly.
 
-| `apply` | After saving |
-|---|---|
-| `restart` (default) | The launcher restarts the server (its Save button says so). |
-| `reload` | The launcher sends `reload config`; the core reads the main config and every module and plugin config again and calls the scripts' `OnBeforeConfigLoad(true)` / `OnAfterConfigLoad(true)`. |
-| `now` | Nothing: the file is written and that is all. |
-
-The core's config manager keeps the values it read in memory and reads the files again only on `reload config` or
-a restart, so `sConfigMgr->GetOption` returns the old value of a `now` field until one of them happens (another
-field's `reload`, a `reload config` typed in the console). Use `now` only for a value the plugin reads from its file
-by itself; a value read through the config manager on every use or in `OnAfterConfigLoad` is `reload`, one read
-once at start is `restart`.
-`label`, `hint` and option labels are localized strings; `default` is used when neither the config nor the `.dist`
-has the key.
+`label`, `hint` and option labels are localized strings. Missing values use packaged defaults,
+then the schema's `default`. Unknown YAML keys are preserved.
 
 ## 7. Patches: DBC rows, named ids, client files
 
@@ -374,7 +367,7 @@ catalog's `index.json` yourself (or with your own script). It does not write an 
 [Hosting your own catalog](https://lonelyice.org/guides/own-catalog) walks through it.
 
 An index (catalog) lists packages; the launcher's Plugins page and `--pkg` read it. Catalogs are set on the Plugins
-page or in `lonelyice.ini`: `[packages] index` holds the catalogs in use and `disabled` the ones kept but not read,
+page or in `server.yaml`: `packages.index` holds the catalogs in use and `disabled` the ones kept but not read,
 both separated by `;`. A catalog is an http(s) URL of an index, a local index file or a folder holding `index.json`.
 A catalog that cannot be read is skipped; the others still work. Package and icon URLs are relative to the index.
 

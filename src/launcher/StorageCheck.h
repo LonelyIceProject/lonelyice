@@ -34,6 +34,8 @@ namespace LonelyIce
 
         // A running check is abandoned (its result is dropped).
         void Start(std::filesystem::path const& exe, Platform::Env const& env);
+        // Cancels the child and drops its result without joining the worker on the UI thread.
+        void Cancel();
         bool IsRunning() const { return _running; }
         // The result, once, after the check finished.
         std::optional<StorageState> Take();

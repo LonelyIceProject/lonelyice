@@ -7,16 +7,51 @@ set(LONELYICE_DEPS "${CMAKE_SOURCE_DIR}/deps" CACHE PATH "Folder with sdl3/, fre
 set(LONELYICE_RMLUI_BACKENDS "${LONELYICE_DEPS}/src/rmlui/Backends")
 
 list(APPEND CMAKE_PREFIX_PATH "${LONELYICE_DEPS}/sdl3" "${LONELYICE_DEPS}/freetype" "${LONELYICE_DEPS}/rmlui" "${LONELYICE_DEPS}/stormlib" "${LONELYICE_DEPS}/miniz" "${LONELYICE_DEPS}/curl")
-find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static)
-find_package(RmlUi CONFIG QUIET)
+if (LONELYICE_GUI)
+  find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-static)
+  find_package(RmlUi CONFIG QUIET)
+endif()
 find_package(StormLib CONFIG QUIET)
 find_package(miniz CONFIG QUIET)
 # Static libcurl: its config package adds CURL_STATICLIB and the system libraries it needs.
 find_package(CURL CONFIG QUIET)
 
-if (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT StormLib_FOUND OR NOT miniz_FOUND OR NOT CURL_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
-  message(STATUS "LonelyIce: SDL3/RmlUi/StormLib/miniz/libcurl not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1 or .sh)")
+if (NOT StormLib_FOUND OR NOT miniz_FOUND OR NOT CURL_FOUND)
+  message(STATUS "LonelyIce: StormLib/miniz/libcurl not found in ${LONELYICE_DEPS}, skipping (run tools/build-ui-deps.ps1 or .sh)")
   return()
+endif()
+if (LONELYICE_GUI AND (NOT SDL3_FOUND OR NOT RmlUi_FOUND OR NOT EXISTS "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp"))
+  message(FATAL_ERROR "LonelyIce: GUI dependencies missing. Build UI dependencies or set LONELYICE_GUI=OFF for a headless build.")
+endif()
+
+if (LONELYICE_TUI)
+  find_package(ftxui 7 CONFIG QUIET)
+  if (NOT ftxui_FOUND)
+    include(FetchContent)
+    # Scoped so FTXUI stays static without changing how the core or plugins are linked.
+    function(lonelyice_fetch_ftxui)
+      set(BUILD_SHARED_LIBS OFF)
+      set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+      set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+      set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+      set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+      FetchContent_Declare(ftxui
+        GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
+        GIT_TAG f921fad208912747c17d129a8ef75ec7624b6eec) # v7.0.3
+      FetchContent_MakeAvailable(ftxui)
+    endfunction()
+    lonelyice_fetch_ftxui()
+  endif()
+  if (MSVC)
+    foreach(ftxui_target screen dom component)
+      if (TARGET ${ftxui_target})
+        get_target_property(ftxui_imported ${ftxui_target} IMPORTED)
+        if (NOT ftxui_imported)
+          target_compile_options(${ftxui_target} PRIVATE /FS)
+        endif()
+      endif()
+    endforeach()
+  endif()
 endif()
 
 set(AUTH_APP_DIR "${LONELYICE_CORE_DIR}/src/server/apps/authserver")
@@ -25,6 +60,13 @@ set(WORLD_APP_DIR "${LONELYICE_CORE_DIR}/src/server/apps/worldserver")
 file(GLOB_RECURSE LONELYICE_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+
+if (NOT LONELYICE_GUI)
+  list(FILTER LONELYICE_SOURCES EXCLUDE REGEX "/launcher/(Launcher|StorageForm|Wizard|UiBackend|Tray)\\.(cpp|h)$")
+endif()
+if (NOT LONELYICE_TUI)
+  list(FILTER LONELYICE_SOURCES EXCLUDE REGEX "/tui/")
+endif()
 
 set(TOOLS_DIR "${LONELYICE_CORE_DIR}/src/tools")
 set(MMAPS_SOURCES
@@ -37,9 +79,12 @@ list(APPEND LONELYICE_SOURCES
   "${AUTH_APP_DIR}/Server/AuthSession.cpp"
   "${AUTH_APP_DIR}/Authentication/AuthCodes.cpp"
   "${WORLD_APP_DIR}/ACSoap/ACSoap.cpp"
-  "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Platform_SDL.cpp"
-  "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp"
   ${MMAPS_SOURCES})
+if (LONELYICE_GUI)
+  list(APPEND LONELYICE_SOURCES
+    "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Platform_SDL.cpp"
+    "${LONELYICE_RMLUI_BACKENDS}/RmlUi_Renderer_GL3.cpp")
+endif()
 
 # The extractor units include the tools' .cpp files; their own headers resolve relative to those files,
 # map_extractor additionally includes "loadlib.h" from its loadlib/ folder.
@@ -50,7 +95,11 @@ set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/tools/VmapExtractorUnit
 
 # Embedded assets: every file under assets/ becomes a byte array (EmbedAsset.cmake), looked up by relative path.
 set(ASSET_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${ASSET_ROOT}/ui/*" "${ASSET_ROOT}/fonts/*.ttf" "${ASSET_ROOT}/icons/*.rgba" "${ASSET_ROOT}/icons/*.tga" "${ASSET_ROOT}/lang/*.lang")
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS "${ASSET_ROOT}/lang/*.lang")
+if (LONELYICE_GUI)
+  file(GLOB_RECURSE GUI_ASSET_FILES CONFIGURE_DEPENDS "${ASSET_ROOT}/ui/*" "${ASSET_ROOT}/fonts/*.ttf" "${ASSET_ROOT}/icons/*.rgba" "${ASSET_ROOT}/icons/*.tga")
+  list(APPEND ASSET_FILES ${GUI_ASSET_FILES})
+endif()
 set(GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(ASSET_DECL "")
 set(ASSET_INDEX "")
@@ -93,7 +142,11 @@ if (WIN32)
   set_source_files_properties("${GEN_DIR}/icon.rc" PROPERTIES OBJECT_DEPENDS "${ASSET_ROOT}/icons/lonelyice-round.ico")
 endif()
 
-add_executable(lonelyice WIN32 ${LONELYICE_SOURCES})
+if (LONELYICE_GUI)
+  add_executable(lonelyice WIN32 ${LONELYICE_SOURCES})
+else()
+  add_executable(lonelyice ${LONELYICE_SOURCES})
+endif()
 set_target_properties(lonelyice PROPERTIES OUTPUT_NAME "LonelyIce" FOLDER "server")
 add_dependencies(lonelyice revision.h)
 
@@ -104,12 +157,20 @@ target_include_directories(lonelyice PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/packages"
   "${CMAKE_CURRENT_SOURCE_DIR}/storage"
   "${CMAKE_CURRENT_SOURCE_DIR}/tools"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tui"
   "${AUTH_APP_DIR}/Server"
   "${AUTH_APP_DIR}/Authentication"
   "${WORLD_APP_DIR}/ACSoap"
   "${LONELYICE_RMLUI_BACKENDS}")
 
-target_compile_definitions(lonelyice PRIVATE RMLUI_SDL_VERSION_MAJOR=3)
+if (LONELYICE_GUI)
+  target_compile_definitions(lonelyice PRIVATE LONELYICE_GUI RMLUI_SDL_VERSION_MAJOR=3)
+  target_link_libraries(lonelyice PRIVATE RmlUi::RmlUi SDL3::SDL3-static)
+endif()
+if (LONELYICE_TUI)
+  target_compile_definitions(lonelyice PRIVATE LONELYICE_TUI)
+  target_link_libraries(lonelyice PRIVATE ftxui::component ftxui::dom ftxui::screen)
+endif()
 
 target_link_libraries(lonelyice
   PRIVATE
@@ -125,8 +186,6 @@ target_link_libraries(lonelyice
     zlib
     Recast
     fkYAML
-    RmlUi::RmlUi
-    SDL3::SDL3-static
     StormLib::storm
     miniz::miniz
     CURL::libcurl)
@@ -139,10 +198,10 @@ else()
   target_link_libraries(lonelyice PRIVATE ${CMAKE_DL_LIBS} pthread)
 endif()
 
-if (MSVC)
+if (MSVC AND LONELYICE_GUI)
   # WIN32 subsystem but keep the regular main(argc, argv) entry.
   set_property(TARGET lonelyice APPEND_STRING PROPERTY LINK_FLAGS " /ENTRY:mainCRTStartup")
-else()
+elseif (NOT MSVC)
   # The core libraries and plugins sit next to the executable.
   if (APPLE)
     set_target_properties(lonelyice PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
@@ -176,6 +235,19 @@ install(TARGETS lonelyice DESTINATION "${CMAKE_INSTALL_PREFIX}")
 # On Linux and macOS OpenSSL comes from the system and is not copied.
 set(LONELYICE_RELEASE_DIR "${CMAKE_BINARY_DIR}/lonelyice-release" CACHE PATH "Where lonelyice_release puts the release")
 if (WIN32)
+  set(RELEASE_PLATFORM "windows-x64")
+elseif (APPLE)
+  if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    set(RELEASE_PLATFORM "macos-arm64")
+  else()
+    set(RELEASE_PLATFORM "macos-x64")
+  endif()
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+  set(RELEASE_PLATFORM "linux-arm64")
+else()
+  set(RELEASE_PLATFORM "linux-x64")
+endif()
+if (WIN32)
   get_filename_component(OPENSSL_BIN_DIR "${OPENSSL_INCLUDE_DIR}/../bin" ABSOLUTE)
   set(RELEASE_LIBS "common.dll shared.dll database.dll game.dll libcrypto-3-x64.dll libssl-3-x64.dll legacy.dll")
   set(RELEASE_OPTIONAL "legacy.dll")
@@ -189,8 +261,10 @@ else()
   set(RELEASE_EXES "worldserver authserver")
   set(RELEASE_SKIP "PATTERN \"*.a\" EXCLUDE PATTERN \"*.dSYM\" EXCLUDE")
 endif()
+string(APPEND RELEASE_SKIP " PATTERN \".cache\" EXCLUDE PATTERN \".disabled\" EXCLUDE")
 file(CONFIGURE OUTPUT "${GEN_DIR}/copy-libs.cmake" @ONLY CONTENT
-"foreach(lib @RELEASE_LIBS@)
+"cmake_minimum_required(VERSION 3.22)
+foreach(lib @RELEASE_LIBS@)
   set(found OFF)
   foreach(dir \"\${BIN_DIR}\" \"@OPENSSL_BIN_DIR@\" \"@CMAKE_INSTALL_PREFIX@\" \"@CMAKE_INSTALL_PREFIX@/lib\")
     if (NOT found AND dir AND EXISTS \"\${dir}/\${lib}\")
@@ -218,7 +292,31 @@ add_custom_target(lonelyice_release
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:lonelyice>" "${LONELYICE_RELEASE_DIR}"
   COMMAND ${CMAKE_COMMAND} -DBIN_DIR=$<TARGET_FILE_DIR:lonelyice> "-Doptional=${RELEASE_OPTIONAL}" -P "${GEN_DIR}/copy-libs.cmake"
   COMMAND ${CMAKE_COMMAND} -DSRC=$<TARGET_FILE_DIR:lonelyice> -DDST=${LONELYICE_RELEASE_DIR} -P "${GEN_DIR}/copy-extras.cmake"
+  COMMAND ${CMAKE_COMMAND} -DRELEASE=${LONELYICE_RELEASE_DIR} -DPLATFORM=${RELEASE_PLATFORM}
+    -DPREFIX=${CMAKE_SHARED_LIBRARY_PREFIX} -DSUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StampPluginPlatforms.cmake"
   COMMAND "${LONELYICE_RELEASE_DIR}/$<TARGET_FILE_NAME:lonelyice>" --pack "${LONELYICE_CORE_DIR}" "${LONELYICE_RELEASE_DIR}/setup"
+  COMMAND "${LONELYICE_RELEASE_DIR}/$<TARGET_FILE_NAME:lonelyice>" --pkg snapshot --settings "${LONELYICE_RELEASE_DIR}/server.yaml"
   DEPENDS lonelyice
   VERBATIM)
 set_target_properties(lonelyice_release PROPERTIES FOLDER "server")
+foreach(plugin_source ${LONELYICE_PLUGIN_DIRS})
+  if (EXISTS "${plugin_source}/CMakeLists.txt")
+    file(READ "${plugin_source}/CMakeLists.txt" plugin_build)
+    string(REGEX MATCH "AddPlugin\\(([A-Za-z0-9_-]+)" plugin_match "${plugin_build}")
+    if (plugin_match)
+      set(plugin_target "${CMAKE_MATCH_1}")
+      if (TARGET ${plugin_target})
+        add_dependencies(lonelyice_release ${plugin_target})
+        if (TARGET ${plugin_target}-files)
+          add_dependencies(lonelyice_release ${plugin_target}-files)
+        endif()
+      endif()
+    endif()
+  endif()
+endforeach()
+foreach(core_server worldserver authserver)
+  if (TARGET ${core_server})
+    add_dependencies(lonelyice_release ${core_server})
+  endif()
+endforeach()

@@ -5,9 +5,8 @@
 
 namespace LonelyIce::Packages
 {
-    // Held by a server process (LonelyIce --server) while it runs: <plugins>/.cache/server.lock, locked through the
-    // operating system, so the lock goes away with the process however it ends. The package manager refuses to
-    // change a plugins folder whose lock is held.
+    // Held by a server process while it runs, or by a package operation while it changes plugins.
+    // <plugins>/.cache/server.lock is exclusive and released by the operating system when the process ends.
     class ServerLock
     {
     public:

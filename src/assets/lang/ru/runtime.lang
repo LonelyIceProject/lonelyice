@@ -1,0 +1,12 @@
+runtime.headless_usage = Использование: LonelyIce --headless [--settings <server.yaml>] [--help]\nСервер работает в текущем процессе. SIGINT или SIGTERM сохраняет данные и останавливает сервер; ввод игнорируется.
+runtime.config_unreadable = Конфигурация сервера отсутствует или недоступна для чтения: {0}
+runtime.config_write = Не удалось сохранить конфигурацию сервера: {0}
+runtime.settings_write = Не удалось сохранить настройки лаунчера: {0}
+runtime.settings_unreadable = Настройки лаунчера отсутствуют или недоступны для чтения: {0}
+runtime.migrate_locked = Остановите сервер и дождитесь завершения операций с пакетами перед созданием его рабочей конфигурации.
+runtime.client_required = Для этого режима хранения нужен клиент World of Warcraft 3.3.5a. Укажите путь к нему или подготовьте кеш данных.
+runtime.storage_unavailable = Выбранный плагин хранения баз данных недоступен или несовместим: {0}
+runtime.sql_update_required = Эта версия содержит обновления баз данных. Запустите LonelyIce --tui --settings "{0}" и примените обновление баз данных в настройке сервера перед запуском без интерфейса.
+runtime.generate_failed = Не удалось создать внутреннюю конфигурацию ядра: {0}
+runtime.plugins_sync_required = Примените список плагинов профиля командой LonelyIce --pkg sync --settings "{0}" перед запуском сервера.
+runtime.data_dir_managed = server/settings/DataDir управляется LonelyIce. Чтобы перенести данные, укажите server/root в local.yaml.

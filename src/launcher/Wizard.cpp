@@ -314,9 +314,9 @@ void Wizard::Open(fs::path const& client)
     Inspect(client);
     fs::path root = _host.currentRoot();
     std::error_code ec;
-    if (fs::exists(root / "configs" / "worldserver.conf", ec) && !fs::equivalent(root, _host.exeDir, ec))
+    if (fs::exists(root / ".runtime" / "configs" / "worldserver.conf", ec) && !fs::equivalent(root, _host.exeDir, ec))
         _customPlace = root;
-    _place = !_customPlace.empty() ? "custom" : (fs::exists(_host.exeDir / "configs" / "worldserver.conf", ec) ? "exe" : "client");
+    _place = !_customPlace.empty() ? "custom" : (fs::exists(_host.exeDir / ".runtime" / "configs" / "worldserver.conf", ec) ? "exe" : "client");
 #ifndef _WIN32
     fs::path user = UserDataDir();
     if (!_customPlace.empty() && !user.empty() && fs::equivalent(_customPlace, user, ec))
@@ -452,7 +452,7 @@ void Wizard::Prefill()
         return;
     _prefilledFor = root;
     std::error_code ec;
-    fs::path const conf = root / "configs" / "worldserver.conf";
+    fs::path const conf = root / ".runtime" / "configs" / "worldserver.conf";
     bool const existing = !root.empty() && fs::exists(conf, ec);
     // the realm name is kept by the launcher for the server folder it uses
     _realmWas = existing && _host.realmName && fs::equivalent(root, _host.currentRoot(), ec) ? _host.realmName() : std::string();
@@ -462,7 +462,7 @@ void Wizard::Prefill()
     std::string const rate = existing ? ConfNumber(conf, "Rate.XP.Kill") : std::string();
     if (rate == "1" || rate == "2" || rate == "5")
         _rate = rate;
-    std::string const bots = existing ? ConfNumber(root / "configs" / "modules" / "playerbots.conf", "AiPlayerbot.MaxRandomBots") : std::string();
+    std::string const bots = existing ? ConfNumber(root / ".runtime" / "configs" / "modules" / "playerbots.conf", "AiPlayerbot.MaxRandomBots") : std::string();
     if (bots == "0" || bots == "100" || bots == "500" || bots == "1000")
         _bots = bots;
     _rateWas = rate.empty() ? std::string() : std::string(_rate);
@@ -715,6 +715,7 @@ void Wizard::StartSwitch()
 {
     InstallOptions o;
     o.exe = _host.exe;
+    o.profileFile = _host.profileFile ? _host.profileFile() : _host.exeDir / "server.yaml";
     o.setupDir = _host.exeDir / "setup";
     o.root = _host.currentRoot();
     o.client = _client.dir;
@@ -748,6 +749,7 @@ void Wizard::StartInstall()
     _switching = false;
     InstallOptions o;
     o.exe = _host.exe;
+    o.profileFile = _host.profileFile ? _host.profileFile() : _host.exeDir / "server.yaml";
     o.setupDir = _host.exeDir / "setup";
     o.root = PlacePath();
     o.client = _client.dir;

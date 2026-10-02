@@ -9,6 +9,9 @@
 cmake_minimum_required(VERSION 3.22)
 project(LonelyIce LANGUAGES CXX C)
 
+option(LONELYICE_GUI "Build the graphical launcher (SDL3/RmlUi)" ON)
+option(LONELYICE_TUI "Build the terminal launcher (FTXUI)" ON)
+
 set(LONELYICE_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/azerothcore" CACHE PATH
   "Checkout of LonelyIceProject/azerothcore-wotlk")
 # Plugins shipped with LonelyIce: every plugins/<name> with a plugin.json (git submodules), unless given explicitly.
@@ -35,6 +38,15 @@ set(TOOLS_BUILD "maps-only" CACHE STRING "LonelyIce embeds the map extractors" F
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # Linux, macOS: the core's shared libraries next to the executables too (found through the $ORIGIN rpath).
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if (UNIX AND NOT APPLE)
+  # Keep every ELF executable and library usable after the release folder is moved.
+  set(CMAKE_BUILD_RPATH "$ORIGIN")
+  set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
+endif()
 
 add_subdirectory("${LONELYICE_CORE_DIR}" azerothcore)
+if (TARGET libsidecar AND NOT USE_REAL_LIBSIDECAR)
+  # The stub is linked into the shared game library.
+  set_target_properties(libsidecar PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 add_subdirectory(src)

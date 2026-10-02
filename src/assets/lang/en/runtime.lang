@@ -1,0 +1,12 @@
+runtime.headless_usage = Usage: LonelyIce --headless [--settings <server.yaml>] [--help]\nRuns the server in the foreground. SIGINT or SIGTERM saves and stops it; stdin is ignored.
+runtime.config_unreadable = Server configuration is missing or unreadable: {0}
+runtime.config_write = Cannot save server configuration: {0}
+runtime.settings_write = Cannot save launcher settings: {0}
+runtime.settings_unreadable = Launcher settings are missing or unreadable: {0}
+runtime.migrate_locked = Stop the server and wait for package operations to finish before generating its runtime configuration.
+runtime.client_required = This storage mode requires a valid World of Warcraft 3.3.5a client. Configure its path or deploy the data cache.
+runtime.storage_unavailable = The selected database storage plugin is unavailable or incompatible: {0}
+runtime.sql_update_required = This release contains database updates. Run LonelyIce --tui --settings "{0}" and apply the database update in setup before starting headless mode.
+runtime.generate_failed = Cannot generate the private core configuration: {0}
+runtime.plugins_sync_required = Apply the profile's plugin list with LonelyIce --pkg sync --settings "{0}" before starting the server.
+runtime.data_dir_managed = server/settings/DataDir is managed by LonelyIce. Set server/root in local.yaml to relocate storage.

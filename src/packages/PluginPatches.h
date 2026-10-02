@@ -16,8 +16,9 @@ namespace LonelyIce::PluginPatches
     {
         std::filesystem::path pluginsDir;
         std::filesystem::path serverDbcDir;     // the server's extracted DBC files (DataDir/dbc)
-        std::filesystem::path clientDir;        // empty: no client archives
+        std::filesystem::path clientDir;        // stock DBC reads; empty: no client archives
         std::set<std::string> loaded;           // plugins with server code that loaded; others with server code wait
+        bool writeClient = true;               // false: read stock data without changing the client's archives
     };
 
     struct Result

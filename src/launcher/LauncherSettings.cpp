@@ -1,138 +1,167 @@
 #include "LauncherSettings.h"
-#include "IniFile.h"
+#include "ProfileConfig.h"
 #include "Platform.h"
 #include <algorithm>
-#include <cctype>
-#include <cstdlib>
-#include <string_view>
+#include <limits>
+#include <stdexcept>
+
+using namespace LonelyIce;
 
 namespace
 {
-    // 1/0, true/false, yes/no, on/off in any case; anything else keeps the default.
-    bool ReadBool(LonelyIce::IniFile const& ini, char const* section, char const* key, bool def)
+    int ReadInt(ProfileConfig const& profile, char const* section, char const* key, int fallback)
     {
-        std::string v = ini.Get(section, key, "");
-        std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-        if (v == "1" || v == "true" || v == "yes" || v == "on")
-            return true;
-        if (v == "0" || v == "false" || v == "no" || v == "off")
-            return false;
-        return def;
-    }
-
-    int ReadInt(LonelyIce::IniFile const& ini, char const* section, char const* key, int def)
-    {
-        return std::atoi(ini.Get(section, key, std::to_string(def)).c_str());
-    }
-
-    // The LonelyIce catalog moved from a GitHub repository to the project site; lists saved before keep working.
-    std::string ReplaceIndex(std::string list)
-    {
-        static constexpr std::string_view old = "https://raw.githubusercontent.com/LonelyIceProject/packages/main/index.json";
-        for (size_t at; (at = list.find(old)) != std::string::npos;)
-            list.replace(at, old.size(), LonelyIce::LauncherSettings::DefaultPackageIndex);
-        return list;
-    }
-
-    std::filesystem::path ReadPath(LonelyIce::IniFile const& ini, char const* section, char const* key)
-    {
-        return LonelyIce::Platform::Utf8ToPath(ini.Get(section, key, ""));
+        int64_t value = profile.Integer({ section, key }, fallback);
+        if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max())
+            throw std::runtime_error(std::string("YAML integer is outside the supported range at ")
+                + section + '/' + key);
+        return int(value);
     }
 }
 
-void LonelyIce::LauncherSettings::Load()
+bool LauncherSettings::Load(std::string* error)
 {
-    IniFile ini;
-    ini.Load(file);
-    clientPath = ReadPath(ini, "client", "path");
-    locale = ini.Get("client", "locale", "");
-    runner = ini.Get("client", "runner", DefaultRunner);
-    writeRealmlist = ReadBool(ini, "client", "writeRealmlist", true);
-    clearWdb = ReadBool(ini, "client", "clearWdb", true);
-    serverConfig = ReadPath(ini, "server", "config");
-    dataRoot = ReadPath(ini, "server", "root");
-    autoStart = ReadBool(ini, "launcher", "autoStart", false);
-    stopWithGame = ReadBool(ini, "launcher", "stopWithGame", false);
-    trayOnClose = ReadBool(ini, "launcher", "trayOnClose", true);
-    language = ini.Get("launcher", "language", "");
-    uiScale = ReadInt(ini, "launcher", "uiScale", 0);
-    uiScale = uiScale ? std::clamp(uiScale, 50, 300) : 0;
-    backupTime = ini.Get("backup", "time", "04:00");
-    // before schedules: an empty time meant no scheduled backups
-    backupSchedule = ini.Get("backup", "schedule", backupTime.empty() ? "off" : "daily");
-    if (backupTime.empty())
-        backupTime = "04:00";
-    backupDays = std::max(1, ReadInt(ini, "backup", "days", 14));
-    backupBudgetMb = std::max(0, ReadInt(ini, "backup", "budget", 2048));
-    lastBackupDay = ini.Get("backup", "lastDay", "");
-    lastBackupAt = std::atoll(ini.Get("backup", "lastAt", "0").c_str());
-    realmName = ini.Get("server", "realmName", "");
-    sqlStamp = ini.Get("server", "sqlStamp", "");
-    configVersion = ReadInt(ini, "server", "configVersion", 0);
-    if (std::optional<std::string> old = ini.Get("server", "storage"))
+    ProfileConfig profile;
+    std::filesystem::path const path = file.empty() ? Platform::ExePath().parent_path() / "server.yaml" : file;
+    std::string message;
+    if (!profile.Load(path, message))
     {
-        // storage = client | unpacked | mysql, with [mysql] for the last (the first storage settings)
-        location = *old == "mysql" ? "mysql" : "local";
-        dataCache = *old != "client";
-        remote = { ini.Get("mysql", "host", remote.host), ini.Get("mysql", "port", ""), ini.Get("mysql", "user", remote.user),
-            ini.Get("mysql", "password", ""), ini.Get("mysql", "prefix", remote.prefix) };
+        loadError = message;
+        if (error)
+            *error = message;
+        return false;
     }
-    else
+    try
     {
-        location = ini.Get("server", "location", "local");
-        dataCache = ReadBool(ini, "server", "dataCache", false);
-        remote = { ini.Get("remote", "host", remote.host), ini.Get("remote", "port", ""), ini.Get("remote", "user", remote.user),
-            ini.Get("remote", "password", ""), ini.Get("remote", "prefix", remote.prefix) };
+        if (profile.Integer({ "format" }, 1) != 1)
+            throw std::runtime_error("Unsupported YAML profile format. Use format: 1.");
+        LauncherSettings loaded;
+        loaded.file = profile.ProfilePath();
+        loaded.clientPath = Platform::Utf8ToPath(profile.String({ "client", "path" }));
+        loaded.locale = profile.String({ "client", "locale" });
+        loaded.runner = profile.String({ "client", "runner" }, DefaultRunner);
+        loaded.writeRealmlist = profile.Boolean({ "client", "writeRealmlist" }, true);
+        loaded.clearWdb = profile.Boolean({ "client", "clearWdb" }, true);
+        loaded.dataRoot = Platform::Utf8ToPath(profile.String({ "server", "root" }));
+        loaded.autoStart = profile.Boolean({ "launcher", "autoStart" });
+        loaded.stopWithGame = profile.Boolean({ "launcher", "stopWithGame" });
+        loaded.trayOnClose = profile.Boolean({ "launcher", "trayOnClose" }, true);
+        loaded.language = profile.String({ "launcher", "language" });
+        loaded.uiScale = ReadInt(profile, "launcher", "uiScale", 0);
+        loaded.uiScale = loaded.uiScale ? std::clamp(loaded.uiScale, 50, 300) : 0;
+        loaded.backupTime = profile.String({ "backup", "time" }, "04:00");
+        loaded.backupSchedule = profile.String({ "backup", "schedule" }, "daily");
+        loaded.backupDays = std::max(1, ReadInt(profile, "backup", "days", 14));
+        loaded.backupBudgetMb = std::max(0, ReadInt(profile, "backup", "budget", 2048));
+        loaded.lastBackupDay = profile.String({ "backup", "lastDay" });
+        loaded.lastBackupAt = profile.Integer({ "backup", "lastAt" });
+        loaded.realmName = profile.String({ "server", "realmName" }, "LonelyIce");
+        loaded.sqlStamp = profile.String({ "runtime", "sqlStamp" });
+        loaded.configVersion = ReadInt(profile, "runtime", "configVersion", 0);
+        loaded.location = profile.String({ "server", "location" }, "local");
+        loaded.dataCache = profile.Boolean({ "server", "dataCache" });
+        if (loaded.location.empty())
+            throw std::runtime_error("server/location must name local or a database storage provider.");
+        if (loaded.location != "local")
+            loaded.dataCache = true;
+        loaded.remote.host = profile.String({ "remote", "host" }, loaded.remote.host);
+        if (auto port = profile.Get({ "remote", "port" }))
+        {
+            if (!port->is_string() && !port->is_integer())
+                throw std::runtime_error("Expected a string or integer at remote/port.");
+            loaded.remote.port = ProfileConfig::Scalar(*port);
+        }
+        loaded.remote.user = profile.String({ "remote", "user" }, loaded.remote.user);
+        loaded.remote.password = profile.String({ "remote", "password" });
+        loaded.remote.prefix = profile.String({ "remote", "prefix" }, loaded.remote.prefix);
+        loaded.pendingRealmName = profile.String({ "runtime", "pendingRealmName" });
+        loaded.packageIndex = profile.String({ "packages", "index" }, DefaultPackageIndex);
+        loaded.packageIndexOff = profile.String({ "packages", "disabled" });
+        loaded.packageLocale = profile.String({ "packages", "locale" });
+        *this = std::move(loaded);
+        if (error)
+            error->clear();
+        return true;
     }
-    if (location.empty())
-        location = "local";
-    if (location != "local")
-        dataCache = true;
-    pendingRealmName = ini.Get("server", "pendingRealmName", "");
-    packageIndex = ReplaceIndex(ini.Get("packages", "index", DefaultPackageIndex));
-    packageIndexOff = ReplaceIndex(ini.Get("packages", "disabled", ""));
-    packageLocale = ini.Get("packages", "locale", "");
+    catch (std::exception const& exception)
+    {
+        loadError = "Invalid configuration in " + Platform::PathToUtf8(profile.ProfilePath())
+            + " or local.yaml: " + exception.what();
+        if (error)
+            *error = loadError;
+        return false;
+    }
 }
 
-void LonelyIce::LauncherSettings::Save() const
+void LauncherSettings::ApplyToProfile(ProfileConfig& profile) const
 {
-    IniFile ini;
-    ini.Load(file);     // keeps what this version does not know
-    auto flag = [](bool b) { return std::string(b ? "1" : "0"); };
-    ini.Set("client", "path", Platform::PathToUtf8(clientPath));
-    ini.Set("client", "locale", locale);
-    ini.Set("client", "runner", runner);
-    ini.Set("client", "writeRealmlist", flag(writeRealmlist));
-    ini.Set("client", "clearWdb", flag(clearWdb));
-    ini.Set("server", "config", Platform::PathToUtf8(serverConfig));
-    ini.Set("server", "root", Platform::PathToUtf8(dataRoot));
-    ini.Set("server", "realmName", realmName);
-    ini.Set("server", "sqlStamp", sqlStamp);
-    ini.Set("server", "configVersion", std::to_string(configVersion));
-    ini.Remove("server", "storage");
-    ini.RemoveSection("mysql");
-    ini.Set("server", "location", location);
-    ini.Set("server", "dataCache", flag(dataCache));
-    ini.Set("remote", "host", remote.host);
-    ini.Set("remote", "port", remote.port);
-    ini.Set("remote", "user", remote.user);
-    ini.Set("remote", "password", remote.password);
-    ini.Set("remote", "prefix", remote.prefix);
-    ini.Set("server", "pendingRealmName", pendingRealmName);
-    ini.Set("launcher", "autoStart", flag(autoStart));
-    ini.Set("launcher", "stopWithGame", flag(stopWithGame));
-    ini.Set("launcher", "trayOnClose", flag(trayOnClose));
-    ini.Set("launcher", "language", language);
-    ini.Set("launcher", "uiScale", std::to_string(uiScale));
-    ini.Set("backup", "schedule", backupSchedule);
-    ini.Set("backup", "time", backupTime);
-    ini.Remove("backup", "keep");
-    ini.Set("backup", "days", std::to_string(backupDays));
-    ini.Set("backup", "budget", std::to_string(backupBudgetMb));
-    ini.Set("backup", "lastDay", lastBackupDay);
-    ini.Set("backup", "lastAt", std::to_string(lastBackupAt));
-    ini.Set("packages", "index", packageIndex);
-    ini.Set("packages", "disabled", packageIndexOff);
-    ini.Set("packages", "locale", packageLocale);
-    ini.Save(file);
+    using Layer = ProfileConfig::Layer;
+    profile.Set({ "format" }, int64_t(1));
+    auto portable = [&](char const* section, char const* key, fkyaml::node value)
+    {
+        profile.SetEffective({ section, key }, std::move(value));
+    };
+    auto local = [&](char const* section, char const* key, fkyaml::node value)
+    {
+        profile.Set({ section, key }, std::move(value), Layer::Local);
+        profile.Remove({ section, key }, Layer::Profile);
+    };
+    local("client", "path", Platform::PathToUtf8(clientPath));
+    local("client", "runner", runner);
+    local("server", "root", Platform::PathToUtf8(dataRoot));
+    local("runtime", "sqlStamp", sqlStamp);
+    local("runtime", "configVersion", configVersion);
+    local("runtime", "pendingRealmName", pendingRealmName);
+    local("backup", "lastDay", lastBackupDay);
+    local("backup", "lastAt", lastBackupAt);
+    local("remote", "host", remote.host);
+    local("remote", "port", remote.port);
+    local("remote", "user", remote.user);
+    local("remote", "password", remote.password);
+    local("remote", "prefix", remote.prefix);
+    portable("client", "locale", locale);
+    portable("client", "writeRealmlist", writeRealmlist);
+    portable("client", "clearWdb", clearWdb);
+    portable("server", "realmName", realmName);
+    portable("server", "location", location);
+    portable("server", "dataCache", dataCache);
+    portable("launcher", "autoStart", autoStart);
+    portable("launcher", "stopWithGame", stopWithGame);
+    portable("launcher", "trayOnClose", trayOnClose);
+    portable("launcher", "language", language);
+    portable("launcher", "uiScale", uiScale);
+    portable("backup", "schedule", backupSchedule);
+    portable("backup", "time", backupTime);
+    portable("backup", "days", backupDays);
+    portable("backup", "budget", backupBudgetMb);
+    portable("packages", "index", packageIndex);
+    portable("packages", "disabled", packageIndexOff);
+    portable("packages", "locale", packageLocale);
+}
+
+bool LauncherSettings::Save(std::string* error) const
+{
+    ProfileConfig profile;
+    std::string message;
+    std::filesystem::path const path = file.empty() ? Platform::ExePath().parent_path() / "server.yaml" : file;
+    if (profile.Load(path, message))
+    {
+        try
+        {
+            ApplyToProfile(profile);
+            if (profile.Save(message))
+            {
+                if (error)
+                    error->clear();
+                return true;
+            }
+        }
+        catch (std::exception const& exception)
+        {
+            message = exception.what();
+        }
+    }
+    if (error)
+        *error = message;
+    return false;
 }

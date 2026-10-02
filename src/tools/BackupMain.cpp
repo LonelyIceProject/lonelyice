@@ -1,4 +1,4 @@
-// Backups on the command line, with the launcher's settings (lonelyice.ini):
+// Backups on the command line, with the launcher's settings (server.yaml):
 //   LonelyIce --backup [create]              a backup now; nothing is made when nothing changed
 //   LonelyIce --backup list                  backups, newest first, with what changed in each
 //   LonelyIce --backup restore <id>          puts a backup back; the server must be stopped
@@ -8,6 +8,8 @@
 #include "Backup.h"
 #include "Lang.h"
 #include "LauncherSettings.h"
+#include "LauncherRuntime.h"
+#include "PackageManager.h"
 #include "Platform.h"
 #include <cstdio>
 #include <string>
@@ -51,8 +53,7 @@ int BackupMain(int argc, char** argv)
 
     fs::path const exeDir = Platform::ExePath().parent_path();
     LauncherSettings settings;
-    settings.file = exeDir / "lonelyice.ini";
-    settings.Load();
+    settings.file = exeDir / "server.yaml";
 
     fs::path config, root;
     std::vector<std::string> args;
@@ -63,32 +64,31 @@ int BackupMain(int argc, char** argv)
             continue;
         if ((a == "-c" || a == "--config") && i + 1 < argc)
             config = Platform::Utf8ToPath(argv[++i]);
+        else if (a == "--settings" && i + 1 < argc)
+            settings.file = Platform::Utf8ToPath(argv[++i]);
         else if (a == "--root" && i + 1 < argc)
             root = Platform::Utf8ToPath(argv[++i]);
         else
             args.push_back(a);
     }
 
-    // The launcher's server folder and config (Launcher::Root, Launcher::ServerConfig).
+    std::string error;
+    if (!settings.Load(&error))
+        return Fail(error);
+    ResolveSettingsPaths(settings);
+    LaunchContext context = CreateLaunchContext(settings);
     if (root.empty())
-    {
-        if (!config.empty() && config.parent_path().filename() == "configs")
-            root = config.parent_path().parent_path();
-        else
-            root = settings.dataRoot.empty() ? exeDir : settings.dataRoot;
-    }
+        root = context.root;
     if (config.empty())
     {
-        if (!settings.serverConfig.empty())
-            config = settings.serverConfig;
-        else if (!settings.dataRoot.empty())
-            config = root / "configs" / "worldserver.conf";
-        else
-        {
-            config = exeDir / "configs" / "worldserver.conf";
-            if (std::error_code ec; fs::exists(exeDir / "configs-sqlite" / "worldserver.conf", ec))
-                config = exeDir / "configs-sqlite" / "worldserver.conf";
-        }
+        settings.dataRoot = root;
+        config = root / ".runtime" / "configs" / "worldserver.conf";
+        Packages::Manager packages(context.plugins);
+        // A running server owns the plugin lock; its existing adapter names the live databases.
+        if (!packages.ServerRunning() && !GenerateRuntimeConfig(settings, error))
+            return Fail(error);
+        if (!fs::is_regular_file(config))
+            return Fail("The configured server has no generated database configuration.");
     }
 
     std::string const cmd = args.empty() ? "create" : args[0];

@@ -1,6 +1,8 @@
 #include "Installer.h"
 #include "ClientPatch.h"
 #include "ConfFile.h"
+#include "LauncherRuntime.h"
+#include "ProfileConfig.h"
 #include "ConfigEnv.h"
 #include "GameClient.h"
 #include "Lang.h"
@@ -153,26 +155,39 @@ void Installer::Fail(std::string const& id, std::string const& why)
 void Installer::Run()
 {
     bool ok = true;
-    struct Step { bool on; char const* id; bool (Installer::*fn)(); };
-    for (Step const& s : { Step{ _o.db, "db", &Installer::RunDatabases }, Step{ _o.unpack, "unpack", &Installer::RunUnpack },
-             Step{ _o.pack, "pack", &Installer::RunPack }, Step{ _o.vmaps, "vmaps", &Installer::RunVmaps },
-             Step{ _o.mmaps, "mmaps", &Installer::RunMmaps },
-             Step{ _o.client_prep, "client", &Installer::RunClient } })
+    try
     {
-        if (!s.on)
-            continue;
-        if (_cancel)
+        std::string error;
+        ok = PrepareConfigs(_o, error);
+        if (!ok)
+            Fail("db", error);
+        struct Step { bool on; char const* id; bool (Installer::*fn)(); };
+        for (Step const& s : { Step{ _o.db, "db", &Installer::RunDatabases }, Step{ _o.unpack, "unpack", &Installer::RunUnpack },
+                 Step{ _o.pack, "pack", &Installer::RunPack }, Step{ _o.vmaps, "vmaps", &Installer::RunVmaps },
+                 Step{ _o.mmaps, "mmaps", &Installer::RunMmaps }, Step{ _o.client_prep, "client", &Installer::RunClient } })
         {
-            ok = false;
-            break;
+            if (!ok)
+                break;
+            if (!s.on)
+                continue;
+            if (_cancel)
+            {
+                ok = false;
+                break;
+            }
+            SetStep(s.id, StepState::Running, 0.f);
+            if (!(this->*s.fn)())
+            {
+                ok = false;
+                break;
+            }
+            SetStep(s.id, StepState::Done, 1.f, Tr("install.note.done"));
         }
-        SetStep(s.id, StepState::Running, 0.f);
-        if (!(this->*s.fn)())
-        {
-            ok = false;
-            break;
-        }
-        SetStep(s.id, StepState::Done, 1.f, Tr("install.note.done"));
+    }
+    catch (std::exception const& exception)
+    {
+        ok = false;
+        Fail("db", exception.what());
     }
     _ok = ok && !_cancel;
     Log(Tr(_ok ? "install.log.done" : _cancel ? "install.log.aborted" : "install.log.failed"));
@@ -190,6 +205,38 @@ int Installer::RunChild(std::vector<std::string> const& args, fs::path const& di
     o.args = args;
     o.workDir = dir;
     o.env = env;
+    if (!args.empty() && args.front() == "--server")
+    {
+        LauncherSettings settings;
+        settings.file = _o.profileFile.empty() ? _o.exe.parent_path() / "server.yaml" : _o.profileFile;
+        std::string error;
+        if (!settings.Load(&error))
+        {
+            Log(error);
+            return -1;
+        }
+        settings.dataRoot = _o.root;
+        settings.clientPath = _o.client;
+        settings.location = _o.location;
+        settings.dataCache = _o.cache;
+        settings.remote = _o.remote;
+        if (!_o.realmName.empty())
+            settings.realmName = _o.realmName;
+        LaunchContext context;
+        if (!PrepareLaunch(settings, context, error, false))
+        {
+            Log(error);
+            return -1;
+        }
+        o.env = std::move(context.env);
+        if (_o.rateChanged)
+            for (char const* key : RateKeys)
+                o.env.emplace_back(EnvName(key), std::to_string(_o.rate));
+        if (_o.botsChanged)
+            for (char const* key : { "AiPlayerbot.MinRandomBots", "AiPlayerbot.MaxRandomBots" })
+                o.env.emplace_back(EnvName(key), std::to_string(_o.bots));
+        o.env.insert(o.env.end(), env.begin(), env.end());
+    }
     o.lowPriority = true;
     o.pipes = true;
     Platform::Child child;
@@ -250,122 +297,86 @@ std::string Installer::SqlStamp(fs::path const& setupDir)
 std::string Installer::LoginPort(fs::path const& root)
 {
     ConfFile f;
-    f.Load(root / "configs" / "worldserver.conf");
+    f.Load(root / ".runtime" / "configs" / "worldserver.conf");
     return f.Get("RealmServerPort").value_or("3724");
 }
 
 bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
 {
-    fs::path configs = o.root / "configs";
-    std::error_code ec;
-    for (char const* d : { "configs/modules", "db", "data", "logs", "backups" })
-        fs::create_directories(o.root / d, ec);
-
-    std::vector<fs::path> created;
-    bool read = Pak::Read(o.setupDir / "configs.pak", [&](std::string const& path, std::string const& data)
-    {
-        fs::path dist = configs / Platform::Utf8ToPath(path);
-        fs::create_directories(dist.parent_path(), ec);
-        std::ofstream(dist, std::ios::binary | std::ios::trunc).write(data.data(), std::streamsize(data.size()));
-        fs::path conf = dist;
-        conf.replace_extension();               // x.conf.dist -> x.conf
-        if (!fs::exists(conf, ec))
-        {
-            fs::copy_file(dist, conf, ec);
-            created.push_back(conf);
-        }
-        return true;
-    }, error);
-    if (!read)
+    LauncherSettings settings;
+    settings.file = o.profileFile.empty() ? o.exe.parent_path() / "server.yaml" : o.profileFile;
+    if (!settings.Load(&error))
+        return false;
+    settings.dataRoot = o.root;
+    settings.clientPath = o.client;
+    settings.location = o.location;
+    settings.dataCache = o.cache;
+    settings.remote = o.remote;
+    if (!GenerateRuntimeConfig(settings, error))
         return false;
 
-    // Plugin configs (the server falls back to the .dist in the plugin folder, but LonelyIce edits them).
-    for (PluginManifest const& plugin : ReadPlugins(o.exe.parent_path() / "plugins"))
+    ProfileConfig profile;
+    if (!profile.Load(settings.file, error))
+        return false;
+    // Preserve a received profile's choices on first deployment unless the wizard explicitly changes them.
+    if (o.rateChanged || o.newDatabases)
     {
-        if (plugin.configDist.empty() || !fs::exists(plugin.configDist, ec))
-            continue;
-        fs::path conf = configs / "modules" / ConfigFileName(plugin);
-        if (!fs::exists(conf, ec))
+        ConfFile world;
+        if (!world.Load(o.root / ".runtime" / "configs" / "worldserver.conf"))
         {
-            fs::copy_file(plugin.configDist, conf, ec);
-            created.push_back(conf);
+            error = "Could not open generated server configuration";
+            return false;
         }
-    }
-
-    // Configs that exist keep their values, except rates and bots the wizard was told to change.
-    for (auto [file, changed] : { std::pair{ "worldserver.conf", o.rateChanged }, std::pair{ "modules/playerbots.conf", o.botsChanged } })
-    {
-        fs::path const conf = configs / file;
-        ConfFile f;
-        if (!changed || std::find(created.begin(), created.end(), conf) != created.end() || !f.Load(conf))
-            continue;
-        if (o.rateChanged && std::string_view(file) == "worldserver.conf")
-            for (char const* key : RateKeys)
-                f.Set(key, std::to_string(o.rate));
-        if (o.botsChanged && std::string_view(file) != "worldserver.conf")
+        for (char const* key : RateKeys)
+            if (o.rateChanged || !profile.Get({ "server", "settings", key }))
+                world.Set(key, std::to_string(o.rate));
+        if (!world.Save())
         {
-            f.Set("AiPlayerbot.MinRandomBots", std::to_string(o.bots));
-            f.Set("AiPlayerbot.MaxRandomBots", std::to_string(o.bots));
-        }
-        if (!f.Save())
-        {
-            error = Tr("install.error.write", Platform::PathToUtf8(conf));
+            error = "Could not write generated server configuration";
             return false;
         }
     }
-
-    for (fs::path const& conf : created)
+    if (o.botsChanged || o.newDatabases)
     {
-        ConfFile f;
-        if (!f.Load(conf))
-            continue;
-        std::string name = Platform::PathToUtf8(conf.filename());
-        if (name == "worldserver.conf")
+        ConfFile bots;
+        if (bots.Load(o.root / ".runtime" / "configs" / "modules" / "playerbots.conf"))
         {
-            // per-character settings of the core and of plugins such as mod-transmog
-            f.Set("EnablePlayerSettings", "1");
-            f.Set("LoginDatabaseInfo", "sqlite:db/auth.sqlite");
-            f.Set("WorldDatabaseInfo", "sqlite:db/world.sqlite");
-            f.Set("CharacterDatabaseInfo", "sqlite:db/characters.sqlite");
-            f.Set("DataDir", "data");
-            f.Set("LogsDir", "logs");
-            f.Set("SourceDirectory", "sql");
-            // Updates run only while LonelyIce deploys SQL shipped with a release (it passes the flags then).
-            f.Set("Updates.EnableDatabases", "0");
-            f.Set("BindIP", "127.0.0.1");
-            unsigned cores = std::max(1u, std::thread::hardware_concurrency());
-            f.Set("MapUpdate.Threads", std::to_string(std::clamp<int>(int(cores) - 4, 1, 8)));
-            for (char const* key : RateKeys)
-                f.Set(key, std::to_string(o.rate));
-        }
-        else if (name == "playerbots.conf")
-        {
-            f.Set("PlayerbotsDatabaseInfo", "sqlite:db/playerbots.sqlite;attach=characters=db/characters.sqlite");
-            f.Set("Playerbots.Updates.EnableDatabases", "0");
-            f.Set("AiPlayerbot.MinRandomBots", std::to_string(o.bots));
-            f.Set("AiPlayerbot.MaxRandomBots", std::to_string(o.bots));
-            for (char const* key : { "AiPlayerbot.CombatStrategies", "AiPlayerbot.NonCombatStrategies",
-                     "AiPlayerbot.RandomBotCombatStrategies", "AiPlayerbot.RandomBotNonCombatStrategies" })
-                f.Set(key, "+tactics");
-        }
-        if (!f.Save())
-        {
-            error = Tr("install.error.write", Platform::PathToUtf8(conf));
-            return false;
+            for (char const* key : { "AiPlayerbot.MinRandomBots", "AiPlayerbot.MaxRandomBots" })
+                if (o.botsChanged || !profile.Get({ "plugins", "playerbots", "settings", key }))
+                    bots.Set(key, std::to_string(o.bots));
+            if (!bots.Save())
+            {
+                error = "Could not write generated playerbots configuration";
+                return false;
+            }
         }
     }
     return true;
 }
 
+bool Installer::SaveProfileOptions(InstallOptions const& o, std::string& error)
+{
+    ProfileConfig profile;
+    fs::path const file = o.profileFile.empty() ? o.exe.parent_path() / "server.yaml" : o.profileFile;
+    if (!profile.Load(file, error))
+        return false;
+    if (o.rateChanged || o.newDatabases)
+        for (char const* key : RateKeys)
+            if (o.rateChanged || !profile.Get({ "server", "settings", key }))
+                profile.SetEffective({ "server", "settings", key }, o.rate);
+    if (o.botsChanged || o.newDatabases)
+    {
+        if (profile.Get({ "plugins", "playerbots" }))
+            for (char const* key : { "AiPlayerbot.MinRandomBots", "AiPlayerbot.MaxRandomBots" })
+                if (o.botsChanged || !profile.Get({ "plugins", "playerbots", "settings", key }))
+                    profile.SetEffective({ "plugins", "playerbots", "settings", key }, o.bots);
+    }
+    return profile.Save(error);
+}
+
 bool Installer::RunDatabases()
 {
     std::string error;
-    if (!PrepareConfigs(_o, error))
-    {
-        Fail("db", error);
-        return false;
-    }
-
     // Unpack the SQL where SourceDirectory = "sql" points; remember sizes to turn "Applying x.sql" lines into progress.
     fs::path sql = _o.root / "sql";
     std::error_code ec;
@@ -408,7 +419,7 @@ bool Installer::RunDatabases()
     std::string current = Tr("install.note.create_db");
     bool deployed = false;
     std::string failure;
-    int rc = RunChild({ "--server", "--deploy", "-c", Platform::PathToUtf8(_o.root / "configs" / "worldserver.conf") }, _o.root, env,
+    int rc = RunChild({ "--server", "--deploy", "-c", Platform::PathToUtf8(_o.root / ".runtime" / "configs" / "worldserver.conf") }, _o.root, env,
         [&](std::string const& line)
         {
             if (line.rfind("@@LI ", 0) == 0)
@@ -523,7 +534,7 @@ bool Installer::RunDbcTables(std::string const& action, std::string const& step,
     bool finished = false;
     std::string failure;
     Progress(step, from, Tr(action == "fill" ? "install.note.dbc" : "install.note.dbc_drop"));
-    int rc = RunChild({ "--server", "--dbc", action, "-c", Platform::PathToUtf8(_o.root / "configs" / "worldserver.conf") }, _o.root, env,
+    int rc = RunChild({ "--server", "--dbc", action, "-c", Platform::PathToUtf8(_o.root / ".runtime" / "configs" / "worldserver.conf") }, _o.root, env,
         [&](std::string const& line)
         {
             // "@@LI dbc <done> <total> <table>"

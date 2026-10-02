@@ -752,38 +752,65 @@ BackupResult LonelyIce::RestoreBackup(std::vector<DatabaseFile> const& dbs, fs::
             return res;
         }
 
-    // Out of the way first: on Windows a file some process has open cannot be renamed, so nothing is half replaced.
+    // Keep originals and their journals until every database has been replaced.
     std::vector<fs::path> moved;
-    for (auto const& [m, path] : targets)
+    std::vector<fs::path> replaced;
+    auto rollback = [&]
     {
-        if (!fs::exists(path, ec))
-            continue;
-        fs::rename(path, Suffixed(path, ".old"), ec);
-        if (ec)
+        for (fs::path const& p : replaced)
         {
-            for (fs::path const& p : moved)
-                fs::rename(Suffixed(p, ".old"), p, ec);
-            for (auto const& t : targets)
-                fs::remove(Suffixed(t.second, ".restore"), ec);
-            res.message = Tr("backup.error.in_use", m.name);
-            return res;
+            fs::remove(p, ec);
+            if (ec)
+                res.message += "\n" + Tr("backup.error.write", Platform::PathToUtf8(p)) + ": " + ec.message();
         }
-        moved.push_back(path);
-    }
+        for (auto it = moved.rbegin(); it != moved.rend(); ++it)
+        {
+            fs::rename(Suffixed(*it, ".old"), *it, ec);
+            if (ec)
+                res.message += "\n" + Tr("backup.error.write", Platform::PathToUtf8(Suffixed(*it, ".old"))) + ": " + ec.message();
+        }
+        for (auto const& t : targets)
+            fs::remove(Suffixed(t.second, ".restore"), ec);
+    };
+    for (auto const& [m, path] : targets)
+        for (char const* suffix : { "", "-wal", "-shm", "-journal" })
+        {
+            fs::path const original = Suffixed(path, suffix);
+            bool const exists = fs::exists(original, ec);
+            if (!ec && !exists)
+                continue;
+            if (!ec)
+            {
+                // Never overwrite an original left by an earlier failed restore.
+                bool const oldExists = fs::exists(Suffixed(original, ".old"), ec);
+                if (!ec && oldExists)
+                    ec = std::make_error_code(std::errc::file_exists);
+            }
+            if (!ec)
+                fs::rename(original, Suffixed(original, ".old"), ec);
+            if (ec)
+            {
+                res.message = Tr("backup.error.write", Platform::PathToUtf8(original)) + ": " + ec.message();
+                rollback();
+                return res;
+            }
+            moved.push_back(original);
+        }
     for (auto const& [m, path] : targets)
     {
-        // a log left next to the restored file would be replayed into it
-        fs::remove(Suffixed(path, "-wal"), ec);
-        fs::remove(Suffixed(path, "-shm"), ec);
         fs::rename(Suffixed(path, ".restore"), path, ec);
         if (ec)
         {
-            res.message = Tr("backup.error.write", Platform::PathToUtf8(path));
+            res.message = Tr("backup.error.write", Platform::PathToUtf8(path)) + ": " + ec.message();
+            rollback();
             return res;
         }
-        fs::remove(Suffixed(path, ".old"), ec);
-        res.changed.push_back(m.name);
+        replaced.push_back(path);
     }
+    for (fs::path const& p : moved)
+        fs::remove(Suffixed(p, ".old"), ec);
+    for (auto const& [m, path] : targets)
+        res.changed.push_back(m.name);
     fs::remove(store.Dir() / "state", ec);
     res.ok = true;
     res.id = before.id;

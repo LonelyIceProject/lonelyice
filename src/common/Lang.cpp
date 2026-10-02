@@ -1,7 +1,8 @@
 #include "Lang.h"
 #include "Assets.h"
 #include <shared_mutex>
-#include "IniFile.h"
+#include <mutex>
+#include "ProfileConfig.h"
 #include "Platform.h"
 #include <unordered_map>
 
@@ -92,9 +93,10 @@ void Lang::Init()
     std::string code = Platform::GetEnv("LONELYICE_LANG").value_or("");
     if (code.empty())
     {
-        IniFile ini;
-        ini.Load(Platform::ExePath().parent_path() / "lonelyice.ini");
-        code = ini.Get("launcher", "language", "");
+        ProfileConfig profile;
+        std::string error;
+        if (profile.Load(Platform::ExePath().parent_path() / "server.yaml", error))
+            code = profile.String({ "launcher", "language" });
     }
     Set(code);
 }

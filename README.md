@@ -16,12 +16,16 @@ the background and starts the game with one button.
 You need a World of Warcraft 3.3.5a client (build 12340). LonelyIce does not include or download any game
 data.
 
+For setup over SSH, use `LonelyIce -nw`: the terminal interface configures the server, plugins and storage.
+Start the configured server separately with `LonelyIce --headless`.
+See [Terminal setup and headless servers](docs/terminal.md).
+
 ## What you get
 
 - **One button to play**: LonelyIce starts the server, points the game at it and launches the game.
 - **A world that feels alive**: server features come as plugins, which you can add, remove and configure.
-- **Settings without config files**: experience and drop rates, difficulty, world options and plugin settings
-  in plain words, with a note on whether a change needs a restart.
+- **Settings in the interface or YAML**: experience and drop rates, difficulty, world options and plugin settings
+  in plain words. Share the plugin list and settings as `server.yaml`, with machine-specific overrides in `local.yaml`.
 - **Game master tools**: common server commands as simple forms, account management, and a console for the
   rest.
 - **Runs quietly in the tray**: closing the window keeps your world running; start, stop and restart from the

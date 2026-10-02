@@ -18,12 +18,12 @@ cmake --build build --config RelWithDebInfo --target lonelyice_release
 
 ## Linux and macOS
 
-> **Not tested yet.** The Linux and macOS builds are written to work but have not been built or run so far. Reports
-> and fixes are welcome.
+The Linux x64 terminal release, including the core and bundled plugins, has been built and checked on
+Ubuntu 24.04. Linux desktop and macOS builds have not been verified.
 
-The game client stays the Windows `Wow.exe` and runs through Wine: `[client] runner` in `lonelyice.ini` names the
+The game client stays the Windows `Wow.exe` and runs through Wine: `client.runner` in `local.yaml` names the
 program that starts it (default `wine`; arguments separated by spaces, e.g. `wine64` or a Proton/CrossOver wrapper).
-The server, the launcher and the tools run natively.
+The server, the launcher and the tools run natively. A headless server does not need Wine.
 
 ### Linux
 
@@ -64,6 +64,35 @@ cmake --build build --parallel --target lonelyice_release
 On macOS add `-DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"` to the configure line. `tools/build-ui-deps.sh` uses
 all CPUs; `JOBS=4 tools/build-ui-deps.sh` uses fewer. As on Windows, `build/lonelyice-release` then holds the
 application (`LonelyIce`), `plugins/` and `setup/`.
+
+## Terminal and headless builds
+
+FTXUI supplies the terminal interface on Windows, Linux and macOS. CMake uses an installed FTXUI 7 package
+when available; otherwise it fetches the pinned v7.0.3 source commit and builds it statically. For an offline
+build, supply `-DFETCHCONTENT_SOURCE_DIR_FTXUI=/path/to/ftxui` with that checkout, or install its CMake package.
+
+On Linux, a server/terminal build needs the core's compiler, Boost, OpenSSL and database/archive development
+dependencies, but no X11, Wayland, OpenGL, SDL3, FreeType, RmlUi or Wine. On Debian / Ubuntu:
+
+```sh
+sudo apt install build-essential cmake ninja-build git pkg-config \
+    libboost-all-dev libssl-dev zlib1g-dev libbz2-dev libreadline-dev libncurses-dev
+```
+
+Bundled plugins can need additional dependencies: the MySQL storage plugin needs the database client development
+package, and bot tactics needs LuaJIT and sol2 headers. Follow each plugin's README and set
+`TACTICS_DEPS_DIR` to its prepared dependencies directory when needed. Then build:
+
+```sh
+tools/build-ui-deps.sh --headless
+cmake -S . -B build-headless -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DLONELYICE_GUI=OFF -DLONELYICE_TUI=ON
+cmake --build build-headless --parallel --target lonelyice_release
+```
+
+On Windows, the dependency-script equivalent is `tools/build-ui-deps.ps1 -Headless` and the CMake options are
+the same. `LONELYICE_TUI=OFF` omits FTXUI; `LONELYICE_GUI=OFF -DLONELYICE_TUI=OFF` builds only the command-line
+and server roles. Both options default to ON. See [Terminal setup and headless servers](/docs/terminal).
 
 ## Notes
 

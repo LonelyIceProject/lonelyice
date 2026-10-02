@@ -119,7 +119,7 @@ install.error.write = could not write {0}
 install.error.deploy = the server could not create the databases ({0}), see logs\ for details
 install.error.code = code {0}
 install.error.deploy.database = the databases could not be created or brought up to date, see logs\ for details
-install.error.deploy.config = the server could not read its config (configs\worldserver.conf), see logs\ for details
+install.error.deploy.config = the server could not read its config (.runtime\configs\worldserver.conf), see logs\ for details
 install.error.deploy.client = the server could not read the game client's data, see logs\ for details
 install.error.deploy.account = the databases are ready, but the account could not be created, see logs\ for details
 install.error.deploy.patches = the databases are ready, but the plugins' patches could not be applied, see logs\ for details
@@ -150,7 +150,7 @@ backup.more = +{0}
 backup.no_changes = no changes
 backup.before_restore = Before a restore: {0}
 # BackupMain.cpp
-backup.cli.usage = Usage: LonelyIce --backup [create | list | restore <id> | export <id>] [-c <worldserver.conf>] [--root <server folder>]
+backup.cli.usage = Usage: LonelyIce --backup [create | list | restore <id> | export <id>] [--settings <server.yaml>] [-c <worldserver.conf>] [--root <dir>]
 backup.cli.error = Error: {0}
 backup.cli.mb = {0} MB
 backup.cli.created = Backup {0}: +{1}

@@ -231,10 +231,9 @@ set.changed = Modifié : {0}
 set.changed_restart = Modifié : {0}, un redémarrage est nécessaire
 set.unchanged = Aucun changement
 set.saved = Paramètres enregistrés.
-set.saved_reloaded = Paramètres enregistrés, config rechargée.
 set.saved_restarting = Paramètres enregistrés, le serveur redémarre.
 apply.now = maintenant
-apply.reload = .reload
+apply.reload = prochain démarrage
 apply.restart = redémarrage
 
 # à propos (un groupe de paramètres)
@@ -249,7 +248,7 @@ about.fonts = Polices
 about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
 about.app_dir = Dossier du programme
 about.data_dir = Données du serveur
-about.config = Config du serveur
+about.config = Configuration générée du serveur
 about.plugins_dir = Dossier des plugins
 
 # page des plugins
@@ -370,7 +369,7 @@ wz.client.order = Ordre de recherche : le dossier enregistré, le dossier de Lon
 wz.client.browse = Choisir un autre dossier…
 wz.place = Où conserver les données du serveur
 wz.place.browse = Choisir un dossier…
-wz.place.note = À l'intérieur : configs — paramètres, db — bases de données, data — dbc, maps, vmaps, mmaps, logs — journaux, backups — copies.
+wz.place.note = Données du serveur : db — bases, data — dbc, maps, vmaps et mmaps, logs — journaux, backups — sauvegardes. Les profils YAML sont conservés séparément.
 wz.threads = Threads pour la navigation
 wz.world = Royaume et votre compte
 wz.realm_name = Nom du royaume

@@ -231,10 +231,9 @@ set.changed = Изменено: {0}
 set.changed_restart = Изменено: {0}, нужен перезапуск
 set.unchanged = Изменений нет
 set.saved = Настройки сохранены.
-set.saved_reloaded = Настройки сохранены, конфиг перечитан.
 set.saved_restarting = Настройки сохранены, сервер перезапускается.
 apply.now = сразу
-apply.reload = .reload
+apply.reload = следующий запуск
 apply.restart = перезапуск
 
 # о программе (группа настроек)
@@ -249,7 +248,7 @@ about.fonts = Шрифты
 about.fonts.text = Forum, PT Sans, PT Mono — SIL Open Font License
 about.app_dir = Папка программы
 about.data_dir = Данные сервера
-about.config = Конфиг сервера
+about.config = Созданный конфиг сервера
 about.plugins_dir = Папка плагинов
 
 # страница плагинов
@@ -370,7 +369,7 @@ wz.client.order = Порядок поиска: сохранённая папка
 wz.client.browse = Выбрать другую папку…
 wz.place = Где хранить данные сервера
 wz.place.browse = Выбрать папку…
-wz.place.note = Внутри: configs — настройки, db — базы, data — dbc, maps, vmaps, mmaps, logs — журналы, backups — копии.
+wz.place.note = Данные сервера: db — базы, data — dbc, maps, vmaps и mmaps, logs — журналы, backups — копии. YAML-профили хранятся отдельно.
 wz.threads = Потоков для навигации
 wz.world = Мир и ваш аккаунт
 wz.realm_name = Имя мира

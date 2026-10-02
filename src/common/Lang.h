@@ -20,7 +20,7 @@ namespace LonelyIce::Lang
 
     std::vector<Info> const& Available();
 
-    // Picks the language: LONELYICE_LANG, then [launcher] language of lonelyice.ini next to the exe, else English.
+    // Picks the language: LONELYICE_LANG, then launcher.language of server.yaml next to the exe, else English.
     // Sets LONELYICE_LANG so child processes follow.
     void Init();
     // Switches to code (one of Available(), else English).

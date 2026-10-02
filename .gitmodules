@@ -50,3 +50,7 @@
 	path = plugins/mod-transmog-plugin
 	url = https://github.com/LonelyIceProject/mod-transmog-plugin.git
 	branch = main
+[submodule "plugins/mod-lonelyice-mysql"]
+	path = plugins/mod-lonelyice-mysql
+	url = https://github.com/LonelyIceProject/mod-lonelyice-mysql.git
+	branch = main

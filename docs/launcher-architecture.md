@@ -1,6 +1,6 @@
 # How the launcher runs the server
 
-For contributors: how the launcher window, the server and the wizard's steps work together. They are one
+For contributors: how the desktop launcher, the server and the wizard's steps work together. In GUI mode they use one
 executable ([Command line](/docs/cli)) but never share a process: the launcher starts the server and every heavy
 step as a child process of itself, talks to the server over its stdin and stdout, and passes settings through the
 environment ([Environment variables](/docs/environment)). A server crash or a failed extractor therefore never
@@ -15,7 +15,7 @@ takes the window down, and the launcher can always report what happened.
 | Database steps | `LonelyIce --server --deploy -c <config>`, `--server --dbc fill\|drop -c <config>` | the server folder | `Installer` (wizard) |
 | Extractors | `LonelyIce --tool maps\|tiles\|vmaps\|assemble\|mmaps ...` | the server folder or its `data/` | `Installer` (wizard) |
 | Storage check | `LonelyIce --server --storage-check -c <temp>/LonelyIce/storage-check.conf` | the temporary folder | `StorageCheck` (wizard, Settings → Storage) |
-| Game | `Wow.exe` (Linux, macOS: `[client] runner` with `Wow.exe`) | the game folder | Play |
+| Game | `Wow.exe` (Linux, macOS: `client.runner` with `Wow.exe`) | the game folder | Play |
 
 All children except the game get their stdout and stderr through one pipe and their stdin through another
 (`Platform::Child`); on Windows they have no console window. The wizard's steps and the storage check run below
@@ -30,8 +30,10 @@ results of background work.
 
 ## Settings reaching the server
 
-The server reads `worldserver.conf` and `configs/modules/*.conf` itself; the launcher adds, per start:
+The server reads generated `.runtime/configs/worldserver.conf` and `.runtime/configs/modules/*.conf`;
+the launcher also adds, per start:
 
+- exact `AC_*` overrides for effective YAML core and plugin settings; managed paths and storage values take precedence;
 - `AC_PLUGINS_DIR`: the plugins folder next to the executable;
 - `LONELYICE_CLIENT` and `LONELYICE_LOCALE` when a client was found (the server builds the plugins' client
   patches into it while it starts);
@@ -42,15 +44,18 @@ The server reads `worldserver.conf` and `configs/modules/*.conf` itself; the lau
 The config is passed by its absolute path (`-c`); the core reads the module and plugin configs from the `modules`
 folder beside it, wherever the config is.
 
-Before a start the launcher makes the one-time changes LonelyIce needs in a config written by an older version
-(`[server] configVersion` in [lonelyice.ini](/docs/ini)); later edits of the player stay.
+Every interface reads the same `server.yaml` plus sibling `local.yaml` overrides through `ProfileConfig`.
+`LauncherSettings`, dynamic `SettingsModel` forms, the installer, package manager and headless launcher share
+that model. User edits never write the core's `.conf` files. `GenerateRuntimeConfig` builds a fresh private
+`.runtime/configs` directory from packaged defaults and effective YAML, then replaces the previous generated
+directory. Startup validates the installed plugin versions and enabled states against the YAML profile.
 
-The Settings page writes the server's values straight into `worldserver.conf` and the module and plugin configs,
-keeping comments and the file's own style. What a change needs is part of each field: `now` (only written; the
-server sees it on its next `reload config` or start), `reload` (the launcher sends `reload config` to a running
-server) or `restart` (the launcher restarts it). The realm name lives
-in the auth database: it is kept as `[server] pendingRealmName` and sent with `@@realmname` once the server is
-ready.
+GUI changes requiring server reload/restart restart its owned server so it receives freshly generated config.
+TUI only saves configuration; the external server picks it up on its next start. The desired realm name is applied
+after opening the auth database before loading the realm; pending local state is cleared only after verification.
+
+`--headless` runs the configured server in its current process without stdin input. `--tui` is a separate
+configuration interface and owns no game-server process. Neither mode manages operating-system services.
 
 ## Server output (stdout)
 
@@ -108,7 +113,7 @@ One line per command, UTF-8.
   `exit code <n>`. A process that reported `state failed` stays Failed. After code 2 (`server restart <seconds>`,
   e.g. the Commands tab's Restart card) the launcher starts the server again, as with its own Restart, unless it
   is quitting.
-- Closing the window with `[launcher] trayOnClose = 1` only hides it. Quitting (tray menu, or closing with
+- Closing the window with `launcher.trayOnClose: true` only hides it. Quitting (tray menu, or closing with
   `trayOnClose = 0`) stops the server and waits for it; closing again while it saves kills it. When the desktop
   session ends the launcher sends `@@quit` and leaves; the server object then closes stdin and waits up to
   60 seconds before it kills the process.
@@ -148,7 +153,7 @@ one in this order:
 
 | Step | What runs |
 |---|---|
-| Databases | Writes the configs from `setup/configs.pak` (new files only get LonelyIce's values), unpacks `setup/sql.pak` into `<server folder>/sql`, runs `--server --deploy` with `AC_UPDATES_ENABLE_DATABASES=7`, `LONELYICE_CLIENT` and, when there is one to set, `LONELYICE_ACCOUNT` and `LONELYICE_REALMNAME`; requires `@@LI deploy ok`, removes `sql/`. Configs that exist get the rates and bots only when they were changed on the Realm page. Progress comes from the updater's "Applying" lines. |
+| Databases | Generates runtime configs from `setup/configs.pak`, plugin defaults and the merged YAML profile, unpacks `setup/sql.pak` into `<server folder>/sql`, runs `--server --deploy` with `AC_UPDATES_ENABLE_DATABASES=7`, `LONELYICE_CLIENT` and, when there is one to set, `LONELYICE_ACCOUNT` and `LONELYICE_REALMNAME`; requires `@@LI deploy ok`, removes `sql/`. Realm-page edits are saved to YAML after successful setup. Progress comes from the updater's "Applying" lines. |
 | Unpack game data | `--tool maps <client> <data> 5` (maps and cameras), then `--server --dbc fill`. |
 | Remove the disk cache | `--server --dbc drop`, then deletes `data/dbc`, `data/Cameras`, `data/maps`. |
 | vmaps | `--tool vmaps`, then `--tool assemble`. |
@@ -158,12 +163,12 @@ one in this order:
 While `maps` and `vmaps` run, the client archives LonelyIce wrote are moved out of the client's sight so the
 extractors see stock data. A failed step stops the install; Retry runs it again with the steps after it, skipping
 those that finished (a storage switch runs all its steps again). On success
-the launcher saves the server folder, client, storage and, after the Databases step, `[server] sqlStamp` and
-(when one was passed) `realmName` to `lonelyice.ini`.
+the launcher saves the server folder, client, storage and, after the Databases step, `runtime.sqlStamp` in `local.yaml` and
+(when one was passed) `realmName` to `server.yaml`.
 
 Run again on a server folder that has its databases, the wizard starts from what is there: the realm name the
-launcher knows, the rates of `worldserver.conf` and the bots of `playerbots.conf`. The realm is renamed, and rates
-and bots are written into the existing configs, only when they are changed on the Realm page. The account is
+launcher knows and the rates and bot settings from the YAML profile and packaged defaults. Only explicit
+Realm-page edits change the saved settings. The account is
 optional then: empty fields leave the accounts alone, a login entered is created when it does not exist, and an
 existing account keeps its password and GM level. Without a Databases step (nothing to update) the account fields
 are hidden.
@@ -173,12 +178,12 @@ setting changes at once, otherwise the wizard shows a Storage page with what it 
 "Create the databases" (with the player's account) when the place has none, "Bring the databases up to date" when
 it has them but `setup/sql.pak` changed since the last deploy, unpacking or removing the cache.
 
-When `setup/sql.pak` differs from `[server] sqlStamp` (a newer LonelyIce was unpacked over the old one), the
+When `setup/sql.pak` differs from `runtime.sqlStamp` in `local.yaml` (a newer LonelyIce was unpacked over the old one), the
 launcher says so when it starts, and the next server start (Start, Play, auto start) first opens the wizard's
 install page with the Databases step alone on the storage in use: no account, no realm name. It closes by
 itself on success and the start goes on (Play too); closed after a failure, the start is dropped and the next one
 tries again. This happens only for server folders the wizard made (`sqlStamp` set, config
-`<root>/configs/worldserver.conf`).
+`<root>/.runtime/configs/worldserver.conf`).
 
 ## Network
 
@@ -190,15 +195,15 @@ of the host name, else the default one; `LONELYICE_REALM_ADDRESS` overrides it).
 is sent to `127.0.0.1` and clients in the network to `address`. Auth and world listen on `BindIP`.
 
 The client finds the login server through `realmlist.wtf`. The 3.3.5a client takes `host:port`, so with a
-`RealmServerPort` other than 3724 the launcher writes `127.0.0.1:<port>` (Play with `[client] writeRealmlist`, Fix
+`RealmServerPort` other than 3724 the launcher writes `127.0.0.1:<port>` (Play with `client.writeRealmlist`, Fix
 realmlist, the wizard's client step) and takes `127.0.0.1` or `localhost` with the configured port as its own.
 
 ## Starting the game
 
 Play starts the server first when it is not ready and continues when it is. Then, on a thread, it copies the
-plugins' addons into the client; after that it fixes the realmlist (`[client] writeRealmlist`), writes the start
-locale to `Config.wtf`, clears `Cache/WDB` (`[client] clearWdb`) and starts the game. When the game exits and
-`[launcher] stopWithGame` is on, the server is stopped.
+plugins' addons into the client; after that it fixes the realmlist (`client.writeRealmlist`), writes the start
+locale to `Config.wtf`, clears `Cache/WDB` (`client.clearWdb`) and starts the game. When the game exits and
+`launcher.stopWithGame` is on, the server is stopped.
 
 ## Source map
 
@@ -213,6 +218,6 @@ locale to `Config.wtf`, clears `Cache/WDB` (`[client] clearWdb`) and starts the 
 | `src/launcher/StorageCheck.cpp`, `StorageForm.cpp` | The storage check and the storage form. |
 | `src/launcher/ConfigEnv.cpp` | Config keys as `AC_*` variables, connection strings. |
 | `src/launcher/SettingsModel.cpp`, `ConfFile.cpp` | The Settings page and in-place config editing. |
-| `src/launcher/LauncherSettings.cpp` | `lonelyice.ini`. |
+| `src/launcher/LauncherSettings.cpp` | `server.yaml`. |
 | `src/tools/ToolMain.cpp`, `PkgMain.cpp`, `PackMain.cpp` | `--tool`, `--pkg`, `--pack`. |
 | `src/common/Platform.cpp` | Child processes, environment, consoles per operating system. |

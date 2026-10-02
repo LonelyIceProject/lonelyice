@@ -2,14 +2,14 @@
 
 The server needs data from the game client: the DBC tables (spells, maps, areas, ...), terrain tiles
 (`maps/*.map`), cinematic cameras, and optionally collision (`vmaps`) and paths (`mmaps`). Where it keeps its
-databases and how it gets the game data are two settings in `lonelyice.ini` (`[server] location`, `dataCache`),
+databases and how it gets the game data are two settings in `server.yaml` (`server.location`, `dataCache`),
 chosen in the wizard's "Data" step and in Settings → Storage.
 
 ## Location
 
 - `local` (default): the databases are SQLite files in `<server folder>/db`.
 - the `id` of a plugin's storage (`docs/plugin-format.md`, `storage`), e.g. `mysql` with mod-lonelyice-mysql: the
-  databases are on a database server, reached with `[remote]` host, port, user, password and prefix. The launcher
+  databases are on a database server, reached with `remote` host, port, user, password and prefix. The launcher
   passes `<id>:host;port;user;password;<prefix><name>` for every `*DatabaseInfo` (auth, characters, world,
   playerbots) and the plugin's config values as environment overrides. The launcher's backups work on the built-in
   files only and are off there.

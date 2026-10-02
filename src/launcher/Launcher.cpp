@@ -12,7 +12,10 @@
 #include "StorageForm.h"
 #include "ClientPatch.h"
 #include "ConfigEnv.h"
+#include "LauncherRuntime.h"
 #include "PackageManager.h"
+#include "ProfileConfig.h"
+#include "ProfilePlugins.h"
 #include "TextUtil.h"
 #include "Tray.h"
 #include "UiBackend.h"
@@ -40,8 +43,6 @@ namespace
 {
     constexpr int MaxLogLines = 600;
     constexpr int RestartExitCode = 2;      // the core's RESTART_EXIT_CODE
-    // Changes LonelyIce makes once to an existing server config (MigrateServerConfig); raise with each new one.
-    constexpr int ServerConfigVersion = 1;
 
     struct Opt { Rml::String id, label; };
     struct LocaleChip { Rml::String name, cls; bool launch = false; };
@@ -190,14 +191,6 @@ namespace
             }
         }
         return s;
-    }
-
-    fs::path DefaultServerConfig(fs::path const& exeDir)
-    {
-        for (char const* rel : { "configs-sqlite/worldserver.conf", "configs/worldserver.conf" })
-            if (fs::exists(exeDir / rel))
-                return exeDir / rel;
-        return exeDir / "configs" / "worldserver.conf";
     }
 
     class Launcher : public Rml::EventListener
@@ -414,11 +407,7 @@ namespace
     // The storages of the installed (enabled) plugins.
     std::vector<StorageProviderInfo> Launcher::StorageProviders() const
     {
-        std::vector<StorageProviderInfo> list;
-        for (PluginManifest const& p : ReadPlugins(_exeDir / "plugins"))
-            if (p.storage)
-                list.push_back({ *p.storage, p.dir });
-        return list;
+        return EnabledStorageProviders(_exeDir / "plugins");
     }
 
     std::optional<StorageProviderInfo> Launcher::FindProvider(std::string const& location) const
@@ -553,14 +542,12 @@ namespace
 
     fs::path Launcher::Root() const
     {
-        return _settings.dataRoot.empty() ? _exeDir : fs::path(_settings.dataRoot);
+        return CreateLaunchContext(_settings).root;
     }
 
     fs::path Launcher::ServerConfig() const
     {
-        if (!_settings.serverConfig.empty())
-            return _settings.serverConfig;
-        return _settings.dataRoot.empty() ? DefaultServerConfig(_exeDir) : Root() / "configs" / "worldserver.conf";
+        return CreateLaunchContext(_settings).config;
     }
 
     // A path option of worldserver.conf, resolved against the server folder.
@@ -588,24 +575,15 @@ namespace
         std::string const stamp = Installer::SqlStamp(_exeDir / "setup");
         std::error_code ec;
         return !stamp.empty() && !_settings.sqlStamp.empty() && stamp != _settings.sqlStamp
-            && fs::exists(_exeDir / "setup" / "configs.pak", ec) && fs::equivalent(ServerConfig(), Root() / "configs" / "worldserver.conf", ec);
+            && fs::exists(_exeDir / "setup" / "configs.pak", ec) && fs::equivalent(ServerConfig(), Root() / ".runtime" / "configs" / "worldserver.conf", ec);
     }
 
     // Changes LonelyIce makes once to a server config made by an older version; later edits of the player stay.
     // 1: EnablePlayerSettings = 1 (plugins such as mod-transmog keep per-character settings through it).
     void Launcher::MigrateServerConfig()
     {
-        if (_settings.configVersion >= ServerConfigVersion)
-            return;
-        ConfFile f;
-        if (!f.Load(ServerConfig()))
-            return;
-        if (_settings.configVersion < 1)
-            f.Set("EnablePlayerSettings", "1");
-        if (!f.Save())
-            return;
-        _settings.configVersion = ServerConfigVersion;
-        _settings.Save();
+        std::string error;
+        LonelyIce::MigrateServerConfig(_settings, ServerConfig(), error);
     }
 
     int Launcher::Run(int argc, char** argv)
@@ -617,9 +595,18 @@ namespace
             if (std::string_view(argv[i]) == "--tray")
                 _startHidden = true;
 
-        _settings.file = _exeDir / "lonelyice.ini";
+        _settings.file = _exeDir / "server.yaml";
+        for (int i = 1; i < argc; ++i)
+            if (std::string_view(argv[i]) == "--settings" && i + 1 < argc)
+                _settings.file = Platform::Utf8ToPath(argv[++i]);
         _packages = std::make_unique<Packages::Manager>(_exeDir / "plugins");
-        _settings.Load();
+        std::string loadError;
+        if (!_settings.Load(&loadError))
+        {
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "LonelyIce", loadError.c_str(), nullptr);
+            return 1;
+        }
+        ResolveSettingsPaths(_settings);
         _uiLang = Lang::Code();
         for (Lang::Info const& l : Lang::Available())
             _langs.push_back({ l.code, l.name });
@@ -635,6 +622,12 @@ namespace
             [this] { return _settings.pendingRealmName.empty() ? _settings.realmName : _settings.pendingRealmName; },
             [this](InstallOptions const& o)
             {
+                std::string profileError;
+                if (!Installer::SaveProfileOptions(o, profileError))
+                {
+                    Message(profileError);
+                    return;
+                }
                 _settings.dataRoot = o.root;
                 _settings.serverConfig.clear();
                 _settings.clientPath = o.client;
@@ -654,7 +647,11 @@ namespace
                 }
                 else if (!o.realmName.empty())
                     _settings.pendingRealmName = o.realmName;   // no database step: renamed when the server is up
-                _settings.Save();
+                if (!_settings.Save(&profileError))
+                {
+                    Message(profileError);
+                    return;
+                }
                 MigrateServerConfig();
                 RefreshClient();
                 LoadSettingsModel();
@@ -670,7 +667,7 @@ namespace
                 else
                     AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
-            [this] { Play(); }, [] { UiBackend::Wake(); } });
+            [this] { Play(); }, [] { UiBackend::Wake(); }, [this] { return _settings.file; } });
         // the storage form checks the server folder's built-in databases for "local"
         _storageForm = std::make_unique<StorageForm>("st_", StorageForm::Host{ _exe, [this] { return StorageProviders(); },
             [this](StorageChoice const& c) { return c.Remote() ? RemoteEnv(c) : LocalDatabaseOverrides(Root()); },
@@ -1984,28 +1981,15 @@ namespace
             RefreshServerView();
             return;
         }
-        MigrateServerConfig();
-        AppendLog(Tr("log.starting", Platform::PathToUtf8(config)), "me");
-        // the config goes by its absolute path: the core reads the module configs from "modules" beside it
-        EnvList env;
-        env.emplace_back("AC_PLUGINS_DIR", Platform::PathToUtf8(_exeDir / "plugins"));
-        // the server builds the plugins' client patches while it starts
-        if (_client.valid)
+        LaunchContext context;
+        std::string error;
+        if (!PrepareLaunch(_settings, context, error))
         {
-            env.emplace_back("LONELYICE_CLIENT", Platform::PathToUtf8(_client.dir));
-            env.emplace_back("LONELYICE_LOCALE", ServerLocale());
+            Message(Tr("msg.start_failed", error));
+            return;
         }
-        // game data: read from the client, or unpacked with the DBC files in the world database
-        if (_settings.ReadsClient())
-            env.emplace_back("LONELYICE_DATA", "client");
-        else
-            env.emplace_back(EnvName("DBC.FromDatabase"), "1");
-        if (provider)
-        {
-            EnvList const remote = RemoteEnv(CurrentStorage());
-            env.insert(env.end(), remote.begin(), remote.end());
-        }
-        if (!_server->Start(Platform::PathToUtf8(_exe), Platform::PathToUtf8(config), Platform::PathToUtf8(Root()), env))
+        AppendLog(Tr("log.starting", Platform::PathToUtf8(context.config)), "me");
+        if (!_server->Start(Platform::PathToUtf8(context.exe), Platform::PathToUtf8(context.config), Platform::PathToUtf8(context.root), context.env))
             Message(Tr("msg.start_failed", _server->GetFailReason()));
         RefreshServerView();
         RefreshTray();
@@ -2486,12 +2470,7 @@ namespace
         std::string what = Tr("set.saved");
         if (_server->GetState() == ServerState::Ready)
         {
-            if (r.reload && !restartNeeded)
-            {
-                RunCommand("reload config");
-                what = Tr("set.saved_reloaded");
-            }
-            if (restartNeeded)
+            if (r.reload || restartNeeded)
             {
                 RestartServer();
                 what = Tr("set.saved_restarting");
@@ -2682,7 +2661,20 @@ namespace
             _plLog.clear();
             _plError.clear();
             std::string error;
-            bool const ok = _packages->Install(plan, error, [this](std::string const& line) { _plLog.push_back(Tr("event.plugins_line", line)); });
+            bool ok = _packages->Install(plan, error, [this](std::string const& line) { _plLog.push_back(Tr("event.plugins_line", line)); });
+            if (ok)
+            {
+                ProfileConfig profile;
+                ok = profile.Load(_settings.file, error);
+                if (ok)
+                {
+                    std::vector<std::string> affected;
+                    for (auto const& step : plan.steps)
+                        affected.push_back(step.package.id);
+                    SnapshotProfilePlugins(profile, *_packages, affected);
+                    ok = profile.Save(error);
+                }
+            }
             _plError = ok ? "" : error;
             if (!ok)
                 _plLog.push_back(Tr("event.plugins_line", error));
@@ -2733,6 +2725,18 @@ namespace
 
         bool ok = action == "remove" ? _packages->Remove(id, error) : _packages->SetEnabled(id, !v.enabled, error);
         if (!ok)
+        {
+            Message(error);
+            return;
+        }
+        ProfileConfig profile;
+        if (!profile.Load(_settings.file, error))
+        {
+            Message(error);
+            return;
+        }
+        SnapshotProfilePlugins(profile, *_packages, std::vector<std::string>{ id });
+        if (!profile.Save(error))
         {
             Message(error);
             return;

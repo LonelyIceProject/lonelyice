@@ -1,7 +1,7 @@
 # Builds static FreeType, SDL3, RmlUi, StormLib (client MPQs), miniz (plugin packages) and libcurl (downloads) for LonelyIce
 # into deps\{freetype,sdl3,rmlui,stormlib,miniz,curl}.
 # Sources are cloned/downloaded into deps\src on the first run (git needed). Usage: tools\build-ui-deps.ps1 [-Jobs 8]
-param([int]$Jobs = [Environment]::ProcessorCount)
+param([int]$Jobs = [Environment]::ProcessorCount, [switch]$Headless)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $src  = "$root\deps\src"
@@ -16,6 +16,11 @@ $sources = @{
     rmlui    = @('https://github.com/mikke89/RmlUi.git', '6.1')
     stormlib = @('https://github.com/ladislav-zezula/StormLib.git', 'v9.30')
     miniz    = @('https://github.com/richgel999/miniz.git', '3.0.2')
+}
+if ($Headless) {
+    $sources.Remove('freetype')
+    $sources.Remove('sdl3')
+    $sources.Remove('rmlui')
 }
 foreach ($name in $sources.Keys) {
     if (-not (Test-Path "$src\$name\CMakeLists.txt")) {
@@ -48,13 +53,17 @@ function Build($name, [string[]]$opts) {
     "$name OK"
 }
 
-Build freetype @('-DBUILD_SHARED_LIBS=OFF', '-DFT_DISABLE_ZLIB=ON', '-DFT_DISABLE_BZIP2=ON', '-DFT_DISABLE_PNG=ON',
-    '-DFT_DISABLE_HARFBUZZ=ON', '-DFT_DISABLE_BROTLI=ON')
-Build sdl3 @('-DSDL_SHARED=OFF', '-DSDL_STATIC=ON', '-DSDL_TEST_LIBRARY=OFF', '-DSDL_TESTS=OFF', '-DSDL_EXAMPLES=OFF')
+if (-not $Headless) {
+    Build freetype @('-DBUILD_SHARED_LIBS=OFF', '-DFT_DISABLE_ZLIB=ON', '-DFT_DISABLE_BZIP2=ON', '-DFT_DISABLE_PNG=ON',
+        '-DFT_DISABLE_HARFBUZZ=ON', '-DFT_DISABLE_BROTLI=ON')
+    Build sdl3 @('-DSDL_SHARED=OFF', '-DSDL_STATIC=ON', '-DSDL_TEST_LIBRARY=OFF', '-DSDL_TESTS=OFF', '-DSDL_EXAMPLES=OFF')
+}
 Build stormlib @('-DBUILD_SHARED_LIBS=OFF', '-DSTORM_UNICODE=ON', '-DSTORM_USE_BUNDLED_LIBRARIES=ON', '-DSTORM_BUILD_TESTS=OFF')
 Build miniz @('-DBUILD_SHARED_LIBS=OFF', '-DBUILD_EXAMPLES=OFF', '-DBUILD_TESTS=OFF', '-DINSTALL_PROJECT=ON')
-Build rmlui @('-DBUILD_SHARED_LIBS=OFF', '-DRMLUI_SAMPLES=OFF', '-DRMLUI_FONT_ENGINE=freetype', '-DBUILD_TESTING=OFF',
-    "-DFreetype_ROOT=$root\deps\freetype", "-DCMAKE_PREFIX_PATH=$root\deps\freetype")
+if (-not $Headless) {
+    Build rmlui @('-DBUILD_SHARED_LIBS=OFF', '-DRMLUI_SAMPLES=OFF', '-DRMLUI_FONT_ENGINE=freetype', '-DBUILD_TESTING=OFF',
+        "-DFreetype_ROOT=$root\deps\freetype", "-DCMAKE_PREFIX_PATH=$root\deps\freetype")
+}
 # HTTP(S) only, TLS through Schannel (Windows certificate store), no compression/IDN/PSL/SSH, library only.
 Build curl @('-DBUILD_SHARED_LIBS=OFF', '-DBUILD_STATIC_LIBS=ON', '-DBUILD_CURL_EXE=OFF', '-DBUILD_TESTING=OFF',
     '-DBUILD_EXAMPLES=OFF', '-DBUILD_LIBCURL_DOCS=OFF', '-DBUILD_MISC_DOCS=OFF', '-DENABLE_CURL_MANUAL=OFF',

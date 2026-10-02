@@ -7,6 +7,7 @@
 
 namespace LonelyIce
 {
+    class ProfileConfig;
     // A database server holding the server's databases as <prefix>auth, <prefix>characters, <prefix>world, ...
     struct RemoteDatabase
     {
@@ -15,13 +16,14 @@ namespace LonelyIce
         bool operator==(RemoteDatabase const&) const = default;
     };
 
-    // lonelyice.ini next to the exe (UTF-8).
+    // Portable server.yaml next to the exe, with machine-specific values in sibling local.yaml.
     struct LauncherSettings
     {
         std::filesystem::path file;
+        std::string loadError;
 
         std::filesystem::path clientPath;
-        std::filesystem::path serverConfig;
+        std::filesystem::path serverConfig; // derived private adapter path, never persisted as a user setting
         std::filesystem::path dataRoot;  // server folder made by the wizard (configs, db, data, logs, backups); empty = next to the exe
         std::string locale;              // client language to start, empty = keep Config.wtf
         std::string runner;              // Linux, macOS: the program that runs Wow.exe (wine); unused on Windows
@@ -39,7 +41,7 @@ namespace LonelyIce
         std::string lastBackupDay;       // YYYY-MM-DD of the last scheduled daily backup
         int64_t lastBackupAt = 0;        // time of the last scheduled backup (hourly schedules)
         std::string sqlStamp;            // setup/sql.pak the databases were last deployed from
-        int configVersion = 0;           // LonelyIce's changes to the server config applied so far (ServerConfigVersion)
+        int configVersion = 0;           // reserved local runtime metadata
         // Where the databases are: "local" (SQLite files in <dataRoot>/db) or the id of a plugin's storage (a database
         // server, see StorageProvider), reached with remote.
         std::string location = "local";
@@ -59,8 +61,10 @@ namespace LonelyIce
         // The client's game data stays in its archives (local location without the cache).
         bool ReadsClient() const { return location == "local" && !dataCache; }
 
-        void Load();
-        void Save() const;
+        bool Load(std::string* error = nullptr);
+        bool Save(std::string* error = nullptr) const;
+        // Stage the launcher fields in an already loaded profile so settings edits can save once.
+        void ApplyToProfile(ProfileConfig& profile) const;
     };
 }
 

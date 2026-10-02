@@ -19,6 +19,7 @@ namespace LonelyIce
         std::filesystem::path exe;          // this executable, started again for every step
         std::filesystem::path setupDir;     // folder with sql.pak and configs.pak
         std::filesystem::path root;         // server data: configs, db, data, logs, backups
+        std::filesystem::path profileFile;  // server.yaml; generated core configuration is private
         std::filesystem::path client;       // WoW 3.3.5a folder
 
         // Where the databases are (LauncherSettings::location) and whether the game data is unpacked (maps and
@@ -72,11 +73,13 @@ namespace LonelyIce
         std::vector<std::string> TakeLog();     // new lines since the last call
         std::string Error() const;
 
-        // Writes worldserver.conf and modules/*.conf from configs.pak where they don't exist yet, with LonelyIce defaults.
+        // Rebuilds private core configs from YAML and packaged defaults before database preparation.
         static bool PrepareConfigs(InstallOptions const& o, std::string& error);
+        // Persist wizard rate/bot choices only after successful preparation.
+        static bool SaveProfileOptions(InstallOptions const& o, std::string& error);
         // Size and time of setup/sql.pak: tells whether a newer release brought database updates.
         static std::string SqlStamp(std::filesystem::path const& setupDir);
-        // RealmServerPort of <root>/configs/worldserver.conf ("3724" when not set).
+        // RealmServerPort of <root>/.runtime/configs/worldserver.conf ("3724" when not set).
         static std::string LoginPort(std::filesystem::path const& root);
 
     private:
