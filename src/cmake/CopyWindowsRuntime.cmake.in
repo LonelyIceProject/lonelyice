@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.22)
+
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_PLATFORM "windows+pe")
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL "dumpbin")
+get_filename_component(tool_dir "@CMAKE_LINKER@" DIRECTORY)
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND "${tool_dir}/dumpbin.exe")
+set(search_dirs "@RELEASE_RUNTIME_SEARCH@")
+
+set(msvc_runtime "@CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS@")
+if (NOT msvc_runtime)
+  message(FATAL_ERROR "MSVC redistributable runtime not found")
+endif()
+file(COPY ${msvc_runtime} DESTINATION "${RELEASE}")
+
+file(GLOB executables "${RELEASE}/*.exe")
+file(GLOB_RECURSE libraries "${RELEASE}/*.dll")
+foreach(library IN LISTS libraries)
+  get_filename_component(directory "${library}" DIRECTORY)
+  list(APPEND search_dirs "${directory}")
+endforeach()
+list(REMOVE_DUPLICATES search_dirs)
+file(GET_RUNTIME_DEPENDENCIES
+  EXECUTABLES ${executables}
+  LIBRARIES ${libraries}
+  DIRECTORIES "${RELEASE}" "${BIN_DIR}" ${search_dirs}
+  PRE_EXCLUDE_REGEXES "^[Aa][Pp][Ii]-[Mm][Ss]-" "^[Ee][Xx][Tt]-[Mm][Ss]-"
+  POST_EXCLUDE_REGEXES "[/\\][Ss][Yy][Ss][Tt][Ee][Mm]32[/\\]" "[/\\][Ss][Yy][Ss][Ww][Oo][Ww]64[/\\]"
+  RESOLVED_DEPENDENCIES_VAR resolved
+  UNRESOLVED_DEPENDENCIES_VAR unresolved
+  CONFLICTING_DEPENDENCIES_PREFIX conflicts)
+
+if (unresolved)
+  message(FATAL_ERROR "Unresolved release DLL dependencies: ${unresolved}. Set LONELYICE_RUNTIME_DIRS to their locations.")
+endif()
+foreach(name IN LISTS conflicts_FILENAMES)
+  if (NOT EXISTS "${RELEASE}/${name}")
+    message(FATAL_ERROR "Conflicting DLL dependency ${name}: ${conflicts_${name}}")
+  endif()
+endforeach()
+file(REAL_PATH "${RELEASE}" release_path)
+foreach(dependency IN LISTS resolved)
+  file(REAL_PATH "${dependency}" dependency_path)
+  cmake_path(IS_PREFIX release_path "${dependency_path}" NORMALIZE bundled)
+  if (NOT bundled)
+    file(COPY "${dependency}" DESTINATION "${RELEASE}")
+    message(STATUS "Bundled runtime: ${dependency}")
+  endif()
+endforeach()

@@ -234,6 +234,18 @@ install(TARGETS lonelyice DESTINATION "${CMAKE_INSTALL_PREFIX}")
 #   cmake --build build --config RelWithDebInfo --target lonelyice_release
 # On Linux and macOS OpenSSL comes from the system and is not copied.
 set(LONELYICE_RELEASE_DIR "${CMAKE_BINARY_DIR}/lonelyice-release" CACHE PATH "Where lonelyice_release puts the release")
+set(LONELYICE_RUNTIME_DIRS "" CACHE STRING "Additional Windows DLL search directories for release packaging")
+if (WIN32)
+  # Ship the redistributable MSVC runtime beside the executable, before resolving
+  # imports, so an installed system runtime cannot hide a missing release file.
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+  include(InstallRequiredSystemLibraries)
+  set(RELEASE_RUNTIME_SEARCH "${OPENSSL_RUNTIME_DIR};${LONELYICE_RUNTIME_DIRS}")
+  configure_file(cmake/CopyWindowsRuntime.cmake.in "${GEN_DIR}/copy-windows-runtime.cmake" @ONLY)
+  set(RELEASE_RUNTIME_COMMAND COMMAND ${CMAKE_COMMAND}
+    -DBIN_DIR=$<TARGET_FILE_DIR:lonelyice> -DRELEASE=${LONELYICE_RELEASE_DIR}
+    -P "${GEN_DIR}/copy-windows-runtime.cmake")
+endif()
 if (WIN32)
   set(RELEASE_PLATFORM "windows-x64")
 elseif (APPLE)
@@ -292,6 +304,7 @@ add_custom_target(lonelyice_release
   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:lonelyice>" "${LONELYICE_RELEASE_DIR}"
   COMMAND ${CMAKE_COMMAND} -DBIN_DIR=$<TARGET_FILE_DIR:lonelyice> "-Doptional=${RELEASE_OPTIONAL}" -P "${GEN_DIR}/copy-libs.cmake"
   COMMAND ${CMAKE_COMMAND} -DSRC=$<TARGET_FILE_DIR:lonelyice> -DDST=${LONELYICE_RELEASE_DIR} -P "${GEN_DIR}/copy-extras.cmake"
+  ${RELEASE_RUNTIME_COMMAND}
   COMMAND ${CMAKE_COMMAND} -DRELEASE=${LONELYICE_RELEASE_DIR} -DPLATFORM=${RELEASE_PLATFORM}
     -DPREFIX=${CMAKE_SHARED_LIBRARY_PREFIX} -DSUFFIX=${CMAKE_SHARED_LIBRARY_SUFFIX}
     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StampPluginPlatforms.cmake"

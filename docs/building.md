@@ -96,6 +96,12 @@ and server roles. Both options default to ON. See [Terminal setup and headless s
 
 ## Notes
 
+- Windows release packaging scans executable and plugin DLL imports recursively and includes third-party
+  dependencies and the MSVC redistributable runtime. Windows system DLLs are supplied by the OS. Missing
+  dependencies fail packaging; use `LONELYICE_RUNTIME_DIRS` for additional DLL search directories.
+- Auxiliary launcher libraries are linked statically; the core's bundled zlib is static on Windows. MSBuild
+  vcpkg auto-linking is disabled so globally installed import libraries cannot override explicit CMake choices.
+  Core libraries, plugins and the OpenSSL/MySQL runtimes remain DLLs and are included in the release.
 - The server core is the `external/azerothcore` submodule; `LONELYICE_CORE_DIR` points elsewhere.
 - Plugins in `plugins/` (submodules with a `plugin.json`) are built and shipped with the release;
   `LONELYICE_PLUGIN_DIRS` replaces that list. Some plugins have their own requirements, see their READMEs.
