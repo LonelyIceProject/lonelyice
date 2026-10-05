@@ -313,6 +313,10 @@ add_custom_target(lonelyice_release
   DEPENDS lonelyice
   VERBATIM)
 set_target_properties(lonelyice_release PROPERTIES FOLDER "server")
+get_property(package_targets GLOBAL PROPERTY LONELYICE_PACKAGE_TARGETS)
+if (package_targets)
+  add_dependencies(lonelyice_release ${package_targets})
+endif()
 foreach(plugin_source ${LONELYICE_PLUGIN_DIRS})
   if (EXISTS "${plugin_source}/CMakeLists.txt")
     file(READ "${plugin_source}/CMakeLists.txt" plugin_build)
