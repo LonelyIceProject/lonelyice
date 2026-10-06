@@ -73,6 +73,7 @@ namespace LonelyIce
     private:
         void Go(int step);
         void Next();
+        void NextPreparation();
         void Back();
         void Cancel();
         void Inspect(std::filesystem::path const& client);
@@ -114,6 +115,10 @@ namespace LonelyIce
         std::filesystem::path _customPlace;
         // 2 data: the storage form (wzs_*) and the components
         std::vector<CompRow> _comps;
+        std::vector<CheckRow> _audit;
+        bool _existing = false, _customize = false;
+        std::filesystem::path _preparedFor;
+        std::filesystem::path _cacheDetectedFor;
         Rml::String _threads, _coresNote, _total;
         std::optional<StorageChoice> _compsFor;         // the form the components were built for
         bool _compsChecked = false;                     // ... with the storage's check done

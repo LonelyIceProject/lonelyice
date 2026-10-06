@@ -1,6 +1,7 @@
 #include "Wizard.h"
 #include "ConfFile.h"
 #include "ConfigEnv.h"
+#include "ClientPatch.h"
 #include "Lang.h"
 #include "Platform.h"
 #include "TextUtil.h"
@@ -236,6 +237,9 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     c.Bind("wz_place", &_place);
     c.Bind("wz_places", &_places);
     c.Bind("wz_comps", &_comps);
+    c.Bind("wz_audit", &_audit);
+    c.Bind("wz_existing", &_existing);
+    c.Bind("wz_customize", &_customize);
     c.Bind("wz_threads", &_threads);
     c.Bind("wz_cores_note", &_coresNote);
     c.Bind("wz_total", &_total);
@@ -272,6 +276,7 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     on("wz_cancel", [this] { Cancel(); });
     on("wz_browse_client", [this] { BrowseFolder(true); });
     on("wz_browse_place", [this] { BrowseFolder(false); });
+    on("wz_customize_changed", [this] { RefreshFooter(); Dirty(); });
     c.BindEventCallback("wz_pick_place", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
     {
         if (args.empty())
@@ -310,6 +315,11 @@ void Wizard::Open(fs::path const& client)
     _open = true;
     _switching = _updating = false;
     _prefilledFor.clear();
+    _preparedFor.clear();
+    _cacheDetectedFor.clear();
+    _customize = false;
+    _login.clear();
+    _pass.clear();
     _customPlace.clear();
     Inspect(client);
     fs::path root = _host.currentRoot();
@@ -410,18 +420,35 @@ void Wizard::BuildComponents()
     StorageChoice const storage = _form.Choice();
     std::optional<StorageState> const& checked = _form.Result();
     bool setup = fs::exists(_host.exeDir / "setup" / "sql.pak", ec) && fs::exists(_host.exeDir / "setup" / "configs.pak", ec);
-    // the built-in files are seen at once; a database server only once the check has reached it
-    bool haveDb = storage.Remote() ? checked && checked->databases : !root.empty() && fs::exists(root / "db" / "world.sqlite", ec);
+    // File presence identifies an existing installation; only a successful probe confirms usable databases.
+    bool const haveDb = checked && checked->reached && checked->databases;
     _dbExists = haveDb;
+    _existing = haveDb || (!root.empty() && (fs::exists(root / "db" / "world.sqlite", ec)
+        || fs::exists(root / "db" / "auth.sqlite", ec) || fs::exists(root / "db" / "characters.sqlite", ec)));
     bool const haveCache = !root.empty() && HasUnpackedFiles(data) && (checked ? checked->HasDbc() : haveDb);
     uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", ".vmtree");
-    uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps");
+    uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps", ".mmtile");
+    bool const haveVmaps = vmaps > 0 && CountFiles(data / "vmaps", ".vmtile") > 0;
+    bool const haveClient = _client.valid && !_client.locales.empty()
+        && std::all_of(_client.locales.begin(), _client.locales.end(), [&](ClientLocale const& l)
+            { return GameClient::IsLocalRealmlist(l.realmlist, Installer::LoginPort(root)); })
+        && ClientPatch::AddonsCurrent(_client.dir, ReadPlugins(_host.exeDir / "plugins"));
+    if (_preparedFor != root)
+    {
+        _preparedFor = root;
+        _rl = !haveClient;
+        _wdb = !_existing;
+        _accName = !_existing;
+        _lnk = false;
+    }
 
     auto have = [](uint32_t count, char const* key) { return count ? Tr(key, count) : std::string(); };
-    bool newSql = setup && haveDb && _host.sqlStamp && _host.sqlStamp() != Installer::SqlStamp(_host.exeDir / "setup");
+    std::string const stamp = _host.sqlStamp ? _host.sqlStamp() : std::string();
+    bool const sameRoot = _host.currentRoot && fs::equivalent(root, _host.currentRoot(), ec);
+    bool newSql = setup && haveDb && sameRoot && !stamp.empty() && stamp != Installer::SqlStamp(_host.exeDir / "setup");
     std::string dbNote = !setup ? Tr("wizard.comp.db.no_setup") : newSql ? Tr("wizard.comp.db.new_sql")
-        : haveDb ? Tr(storage.Remote() ? "wizard.comp.db.have_remote" : "wizard.comp.db.have")
-        : storage.Remote() && !checked ? Tr("wizard.comp.db.checking") : std::string();
+        : haveDb ? Tr("wizard.audit.found")
+        : !checked ? Tr("wizard.comp.db.checking") : std::string();
     bool const oldMmaps = HasComp("mmaps");
     bool const hadComps = !_comps.empty();
 
@@ -432,15 +459,34 @@ void Wizard::BuildComponents()
     if (storage.cache)
         _comps.push_back({ "unpack", Tr("install.step.unpack"), Tr("wizard.comp.unpack.desc"), Tr("wizard.comp.unpack.size"),
             haveCache ? Tr("wizard.comp.unpack.have") : std::string(), !haveCache, false, true, 0.5 });
-    _comps.push_back({ "vmaps", Tr("install.step.vmaps"), Tr("wizard.comp.vmaps.desc"), Tr("wizard.comp.vmaps.size"), have(vmaps, "wizard.comp.vmaps.have"),
-        vmaps == 0, false, true, 0.6 });
-    _comps.push_back({ "client", Tr("install.step.client"), Tr("wizard.comp.client.desc"), Tr("wizard.comp.client.size"), "", true, false, true, 0 });
+    _comps.push_back({ "vmaps", Tr("install.step.vmaps"), Tr("wizard.comp.vmaps.desc"), Tr("wizard.comp.vmaps.size"),
+        haveVmaps ? have(vmaps, "wizard.comp.vmaps.have") : std::string(),
+        !haveVmaps, false, true, 0.6 });
+    _comps.push_back({ "client", Tr("install.step.client"), Tr("wizard.comp.client.desc"), Tr("wizard.comp.client.size"), "", !haveClient, false, true, 0 });
     // Paths make the world better but cost the most time and space: the player decides.
     _comps.push_back({ "mmaps", Tr("install.step.mmaps"), Tr("wizard.comp.mmaps.desc"), Tr("wizard.comp.mmaps.size"), have(mmaps, "wizard.comp.mmaps.have"),
-        hadComps && _step >= 2 ? oldMmaps : mmaps == 0, false, false, 6.0 });
+        hadComps && _step >= 2 ? oldMmaps : !_existing && mmaps == 0, false, false, 6.0 });
+    _audit.clear();
+    auto audit = [&](char const* title, bool found, std::string detail = std::string())
+    {
+        _audit.push_back({ found ? "ok" : "warn", Tr(title), detail.empty()
+            ? Tr(found ? "wizard.audit.found" : "wizard.audit.restore") : detail });
+    };
+    for (auto const& [name, found] : { std::pair{ "auth", checked && checked->auth },
+        std::pair{ "characters", checked && checked->characters }, std::pair{ "world", checked && checked->world } })
+        _audit.push_back({ !checked ? "warn" : found ? "ok" : "warn", name,
+            Tr(!checked ? "wizard.audit.checking" : found ? "wizard.audit.found" : "wizard.audit.restore") });
+    audit("wizard.audit.configs", fs::exists(root / ".runtime" / "configs" / "worldserver.conf", ec),
+        Tr("wizard.audit.configs_detail"));
+    if (storage.cache)
+        audit("install.step.unpack", haveCache);
+    audit("install.step.vmaps", haveVmaps, haveVmaps ? have(vmaps, "wizard.comp.vmaps.have") : std::string());
+    audit("install.step.client", haveClient);
+    audit("install.step.mmaps", mmaps > 0, Tr(mmaps > 0 ? "wizard.comp.mmaps.have" : "wizard.audit.optional", mmaps));
     _compsFor = storage;
     _compsChecked = checked.has_value();
     RefreshTotal();
+    RefreshFooter();
 }
 
 // Realm, rates and bots as the chosen place has them now (defaults for a new place); read once per place, so what
@@ -505,9 +551,18 @@ void Wizard::RefreshFooter()
     }
     else
     {
+        std::vector<int> visible;
         for (int i = 0; i < StepCount; ++i)
+        {
+            if (i == 3 && _dbExists && !_customize)
+                continue;
+            if (i == 4 && !HasComp("client"))
+                continue;
+            visible.push_back(i);
             _steps.push_back({ Tr(StepKeys[i]), i < _step ? "done" : i == _step ? "cur" : "" });
-        _counter = Tr("wizard.counter", _step + 1, StepCount);
+        }
+        auto const cur = std::find(visible.begin(), visible.end(), _step);
+        _counter = Tr("wizard.counter", int(std::distance(visible.begin(), cur)) + 1, visible.size());
     }
     _backVisible = !_switching && _step > 0 && _step < 5;
     bool installing = _installer.IsRunning();
@@ -522,6 +577,11 @@ void Wizard::RefreshFooter()
     {
         _nextLabel = Tr("wizard.button.checking");
         _nextOk = false;
+    }
+    else if (_step == 2 && _dbExists && !_customize)
+    {
+        bool const repairs = std::any_of(_comps.begin(), _comps.end(), [](CompRow const& c) { return c.on; });
+        _nextLabel = Tr(repairs ? "wizard.button.restore" : "wizard.button.connect");
     }
     else if (_step == 5)
     {
@@ -541,7 +601,7 @@ void Wizard::Go(int step)
     _waitCheck = false;
     if (_step == 1)
         BuildPlaces();
-    _askAccount = HasComp("db");
+    _askAccount = HasComp("db") || _customize;
     _accountOptional = _dbExists;
     RefreshFooter();
     Dirty();
@@ -550,7 +610,17 @@ void Wizard::Go(int step)
 void Wizard::Back()
 {
     if (!_switching && _step > 0 && _step < 5)
-        Go(_step - 1);
+        Go(_step == 4 && _dbExists && !_customize ? 2 : _step - 1);
+}
+
+void Wizard::NextPreparation()
+{
+    if (HasComp("client"))
+        return Go(4);
+    if (_host.serverRunning && _host.serverRunning())
+        return Error(Tr("wizard.error.server_running"));
+    StartInstall();
+    Go(5);
 }
 
 void Wizard::Next()
@@ -572,7 +642,19 @@ void Wizard::Next()
                 return Error(Tr("wizard.error.not_writable", Utf8(root)));
             // The client may have been selected after opening the wizard, when its storage path was still empty.
             if (!_form.Choice().Remote())
-                _form.Check();
+            {
+                StorageChoice choice = _form.Choice();
+                if (_cacheDetectedFor != root)
+                {
+                    _cacheDetectedFor = root;
+                    if (HasUnpackedFiles(root / "data"))
+                        choice.cache = true;
+                }
+                if (choice != _form.Choice())
+                    _form.Load(choice);
+                else
+                    _form.Check();
+            }
             BuildComponents();
             Prefill();
             return Go(2);
@@ -598,19 +680,22 @@ void Wizard::Next()
             BuildComponents();
             if (_comps[0].on && _comps[0].locked)
                 return Error(Tr("wizard.error.no_setup"));
-            Go(3);
             if (FreeBytes(PlacePath()) < (9ull << 30) && HasComp("mmaps"))
-                Error(Tr("wizard.error.low_space"));
+                return Error(Tr("wizard.error.low_space"));
+            if (_dbExists && !_customize)
+                NextPreparation();
+            else
+                Go(3);
             return;
         }
         case 3:
             // new databases need the player's account; existing ones have theirs, a login given is added if missing
-            if (HasComp("db") && (!_dbExists || !_login.empty() || !_pass.empty())
+            if (_askAccount && (!_dbExists || !_login.empty() || !_pass.empty())
                 && (!ValidAccountName(_login) || !ValidAccountPassword(_pass)))
                 return Error(Tr(_dbExists ? "wizard.error.login_optional" : "wizard.error.login"));
             if (_realm.empty())
                 return Error(Tr("wizard.error.realm"));
-            return Go(4);
+            return NextPreparation();
         case 4:
             if (_host.serverRunning && _host.serverRunning())
                 return Error(Tr("wizard.error.server_running"));
@@ -762,7 +847,7 @@ void Wizard::StartInstall()
     o.remote = storage.remote;
     if (storage.Remote() && _host.remoteEnv)
         o.serverEnv = _host.remoteEnv(storage);
-    o.db = HasComp("db");
+    o.db = HasComp("db") || (_customize && !_login.empty());
     o.unpack = HasComp("unpack");
     // a cache left in the place by an earlier install goes when the server reads the client
     std::optional<StorageState> const& checked = _form.Result();
@@ -842,7 +927,11 @@ void Wizard::Tick()
         Rml::String before = _total;
         RefreshTotal();
         if (before != _total && _model)
+        {
             _model.DirtyVariable("wz_total");
+            RefreshFooter();
+            Dirty();
+        }
     }
 
     if (!_installer.IsRunning() && !_installer.Finished())

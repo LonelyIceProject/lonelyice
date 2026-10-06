@@ -1,7 +1,8 @@
 # Storage check regression test
 
 This standalone test builds the production worker and process wrapper against a mock child process.
-It checks successful completion, failure diagnostics without a trailing newline, and a nonzero exit after
+It checks successful completion, individual database statuses in a partial installation, failure diagnostics
+without a trailing newline, and a nonzero exit after
 the completion marker, and rejection of missing connection settings before starting the child process.
 It does not start a game server or open databases. Temporary files stay in the test build.
 

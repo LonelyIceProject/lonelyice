@@ -184,3 +184,15 @@ wizard.comp.db.have_remote = already on the server, will only be updated
 wizard.comp.db.checking = checking the server…
 wizard.done.db_remote = Databases on the server
 wizard.done.cache = Game data unpacked: disk cache on
+
+wizard.audit.title = Existing installation
+wizard.audit.note = Presence check: found components are kept; missing components are restored. This does not check every file for corruption.
+wizard.audit.found = Found
+wizard.audit.restore = Restore
+wizard.audit.checking = Checking…
+wizard.audit.configs = Server configuration
+wizard.audit.configs_detail = Generated from the YAML profile when connecting
+wizard.audit.optional = Optional; not required to connect
+wizard.audit.customize = Change realm settings or add an account
+wizard.button.restore = Restore and connect
+wizard.button.connect = Connect installation

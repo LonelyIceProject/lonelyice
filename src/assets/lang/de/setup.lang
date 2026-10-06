@@ -184,3 +184,15 @@ wizard.comp.db.have_remote = schon auf dem Server, werden nur aktualisiert
 wizard.comp.db.checking = Server wird geprüft…
 wizard.done.db_remote = Datenbanken auf dem Server
 wizard.done.cache = Spieldaten entpackt: Festplatten-Cache an
+
+wizard.audit.title = Vorhandene Installation
+wizard.audit.note = Vorhandene Komponenten bleiben erhalten, fehlende werden wiederhergestellt. Nicht jede Datei wird auf Beschädigung geprüft.
+wizard.audit.found = Gefunden
+wizard.audit.restore = Wiederherstellen
+wizard.audit.checking = Wird geprüft…
+wizard.audit.configs = Serverkonfiguration
+wizard.audit.configs_detail = Wird beim Verbinden aus dem YAML-Profil erzeugt
+wizard.audit.optional = Optional; zum Verbinden nicht erforderlich
+wizard.audit.customize = Welteinstellungen ändern oder Konto hinzufügen
+wizard.button.restore = Wiederherstellen und verbinden
+wizard.button.connect = Installation verbinden

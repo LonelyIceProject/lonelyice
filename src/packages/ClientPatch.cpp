@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 
@@ -275,6 +276,56 @@ ClientPatch::Result ClientPatch::Apply(fs::path const& clientDir, std::vector<Re
         res.log.push_back(Tr("patch.client.built", locale, ArchiveName(locale)));
     }
     return res;
+}
+
+bool ClientPatch::AddonsCurrent(fs::path const& clientDir, std::vector<PluginManifest> const& plugins)
+{
+    std::error_code ec;
+    fs::path const addons = GameClient::Child(GameClient::Child(clientDir, "Interface"), "AddOns");
+    std::vector<std::string> expected;
+    for (PluginManifest const& plugin : plugins)
+        for (fs::path const& source : plugin.addons)
+        {
+            expected.push_back(source.filename().string());
+            if (!fs::is_directory(addons / source.filename(), ec) || ec)
+                return false;
+            fs::recursive_directory_iterator it(source, ec), end;
+            if (ec)
+                return false;
+            for (; it != end; it.increment(ec))
+            {
+                if (ec)
+                    return false;
+                if (!it->is_regular_file(ec))
+                {
+                    if (ec)
+                        return false;
+                    continue;
+                }
+                fs::path const target = addons / source.filename() / it->path().lexically_relative(source);
+                auto const size = fs::file_size(it->path(), ec);
+                if (ec || fs::file_size(target, ec) != size || ec)
+                    return false;
+                std::ifstream a(it->path(), std::ios::binary), b(target, std::ios::binary);
+                if (!a || !b || !std::equal(std::istreambuf_iterator<char>(a), std::istreambuf_iterator<char>(),
+                    std::istreambuf_iterator<char>(b), std::istreambuf_iterator<char>()) || a.bad() || b.bad())
+                    return false;
+            }
+            if (ec)
+                return false;
+        }
+    std::ifstream list(addons / "lonelyice-addons.txt");
+    std::vector<std::string> tracked;
+    for (std::string name; std::getline(list, name);)
+    {
+        if (!name.empty() && name.back() == '\r')
+            name.pop_back();
+        if (!name.empty())
+            tracked.push_back(name);
+    }
+    std::sort(expected.begin(), expected.end());
+    std::sort(tracked.begin(), tracked.end());
+    return !list.bad() && expected == tracked;
 }
 
 ClientPatch::Result ClientPatch::SyncAddons(fs::path const& clientDir, std::vector<PluginManifest> const& plugins)

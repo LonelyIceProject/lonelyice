@@ -18,6 +18,7 @@ namespace LonelyIce
         bool reached = false;       // the databases could be asked; false: error says why (no connection, refused, ...)
         std::string error;
         bool databases = false;     // auth, characters and world exist and hold their tables
+        bool auth = false, characters = false, world = false;
         int dbcTables = 0, dbcTotal = 0;    // DBC files unpacked into the world database
 
         bool HasDbc() const { return dbcTotal > 0 && dbcTables == dbcTotal; }

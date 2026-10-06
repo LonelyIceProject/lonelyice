@@ -471,10 +471,21 @@
                         <div id="wzs-copy-error" class="btn small" data-if="wzs_state == 'bad'" data-event-click="wzs_copy_error"><span data-if="!wzs_error_copied">@{storage.copy_error}</span><span data-if="wzs_error_copied">@{storage.error_copied}</span></div>
                         <div id="wzs-check" class="btn small" data-if="wzs_state != 'run'" data-event-click="wzs_check">@{storage.check}</div>
                     </div>
+                    <div data-if="wz_existing">
+                        <div class="wh2">@{wizard.audit.title}</div>
+                        <div class="note">@{wizard.audit.note}</div>
+                        <div class="check" data-for="a : wz_audit">
+                            <div class="ic" data-class-ok="a.cls == 'ok'" data-class-warn="a.cls == 'warn'">{{a.cls == 'ok' ? '+' : '!'}}</div>
+                            <div class="grow">{{a.text}}</div><div class="cdetail">{{a.detail}}</div>
+                        </div>
+                        <div class="opt comp"><input type="checkbox" class="check" data-checked="wz_customize" data-event-change="wz_customize_changed"/>
+                            <div class="grow"><div class="o-title">@{wizard.audit.customize}</div></div>
+                        </div>
+                    </div>
                     <div class="wh2">@{wz.comps.required}</div>
                     <div data-for="c : wz_comps">
                         <div class="opt comp" data-if="c.required" data-attr-id="'wz-comp-' + c.id" data-class-locked="c.locked" data-class-have="!c.on">
-                            <div class="ic" data-class-ok="c.on">{{c.on ? '+' : '•'}}</div>
+                            <div class="ic" data-class-ok="!c.on" data-class-warn="c.on">{{c.on ? '!' : '+'}}</div>
                             <div class="grow"><div class="o-title">{{c.title}}</div><div class="o-desc">{{c.desc}}</div><div class="o-note" data-if="c.note != ''">{{c.note}}</div></div>
                             <div class="o-size" data-if="c.on">{{c.size}}</div>
                         </div>

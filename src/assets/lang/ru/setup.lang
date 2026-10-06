@@ -184,3 +184,15 @@ wizard.comp.db.have_remote = уже есть на сервере, будут т�
 wizard.comp.db.checking = проверяю сервер…
 wizard.done.db_remote = Базы на сервере
 wizard.done.cache = Данные игры распакованы: кэш на диске включён
+
+wizard.audit.title = Существующая установка
+wizard.audit.note = Проверка наличия: найденные компоненты сохраняются, недостающие восстанавливаются. Целостность каждого файла не проверяется.
+wizard.audit.found = Найдено
+wizard.audit.restore = Восстановить
+wizard.audit.checking = Проверяется…
+wizard.audit.configs = Конфигурация сервера
+wizard.audit.configs_detail = Создаётся из YAML-профиля при подключении
+wizard.audit.optional = Необязательно для подключения
+wizard.audit.customize = Изменить настройки мира или добавить аккаунт
+wizard.button.restore = Восстановить и подключить
+wizard.button.connect = Подключить установку

@@ -23,6 +23,11 @@ int main(int argc, char**)
     if (argc > 1)
     {
         std::string mode = Platform::GetEnv("STORAGE_TEST_MODE").value_or("");
+        if (mode == "partial")
+        {
+            std::puts("@@LI check db auth ok\n@@LI check db characters missing\n@@LI check db world ok\n@@LI check done");
+            return 0;
+        }
         if (mode != "fail")
         {
             std::puts("@@LI check db auth ok\n@@LI check db characters ok\n@@LI check db world ok\n@@LI check done");
@@ -37,7 +42,7 @@ int main(int argc, char**)
 #endif
         return 42;
     }
-    for (std::string const mode : {"ok", "fail", "fail-after-done", "missing-connection"})
+    for (std::string const mode : {"ok", "partial", "fail", "fail-after-done", "missing-connection"})
     {
         StorageCheck check([] {});
         Platform::Env env = {{"STORAGE_TEST_MODE", mode}};
@@ -58,8 +63,14 @@ int main(int argc, char**)
         }
         else if (mode == "ok")
         {
-            if (!state->reached || !state->databases || !state->error.empty())
+            if (!state->reached || !state->databases || !state->auth || !state->characters || !state->world
+                || !state->error.empty())
                 throw std::runtime_error("Successful probe rejected");
+        }
+        else if (mode == "partial")
+        {
+            if (!state->reached || state->databases || !state->auth || state->characters || !state->world)
+                throw std::runtime_error("Partial database installation was not reported correctly");
         }
         else if (state->reached || state->databases || state->error.find("ASSERTION FAILED") == std::string::npos
             || state->error.find("@@LI") != std::string::npos)

@@ -131,7 +131,15 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
             {
                 std::string const s = status;
                 if (s == "ok")
+                {
                     ++dbOk;
+                    if (std::string_view(name) == "auth")
+                        state.auth = true;
+                    else if (std::string_view(name) == "characters")
+                        state.characters = true;
+                    else if (std::string_view(name) == "world")
+                        state.world = true;
+                }
                 else if (s == "error" && state.error.empty())
                     state.error = Tr("storage.error.db", name, n > 0 ? Platform::ConsoleToUtf8(l.substr(std::size_t(n))) : std::string());
             }

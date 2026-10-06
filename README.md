@@ -16,6 +16,12 @@ the background and starts the game with one button.
 You need a World of Warcraft 3.3.5a client (build 12340). LonelyIce does not include or download any game
 data.
 
+For an existing server folder, the desktop wizard shows database availability and the presence of server data,
+generated configuration and client preparation. It selects missing components for recovery and skips account
+and client setup when they are already usable. Choose **Connect installation**, or **Restore and connect** when
+components are missing; world settings and an additional account remain optional. Configuration is generated
+from the current YAML profile. The presence check does not verify every map file for corruption.
+
 For setup over SSH, use `LonelyIce -nw`: the terminal interface configures the server, plugins and storage.
 Start the configured server separately with `LonelyIce --headless`.
 See [Terminal setup and headless servers](docs/terminal.md).

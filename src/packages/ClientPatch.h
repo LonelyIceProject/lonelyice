@@ -47,6 +47,8 @@ namespace LonelyIce::ClientPatch
     // Copies the plugins' addons into Interface/AddOns (replacing the folders) and removes addons of plugins
     // that are gone (tracked in Interface/AddOns/lonelyice-addons.txt).
     Result SyncAddons(std::filesystem::path const& clientDir, std::vector<PluginManifest> const& plugins);
+    // Read-only comparison of the installed addons with the plugins' source files and tracked addon names.
+    bool AddonsCurrent(std::filesystem::path const& clientDir, std::vector<PluginManifest> const& plugins);
 }
 
 #endif
