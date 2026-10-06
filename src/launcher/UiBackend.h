@@ -24,6 +24,7 @@ namespace LonelyIce::UiBackend
     void Shutdown();
 
     Rml::SystemInterface* GetSystemInterface();
+    bool SetClipboardText(Rml::String const& text);
     Rml::RenderInterface* GetRenderInterface();
     SDL_Window* GetWindow();
     float GetDpRatio();          // display scale * ui scale

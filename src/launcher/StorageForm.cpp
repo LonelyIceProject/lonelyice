@@ -1,5 +1,6 @@
 #include "StorageForm.h"
 #include "Lang.h"
+#include "UiBackend.h"
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Event.h>
 #include <algorithm>
@@ -47,6 +48,7 @@ void StorageForm::Bind(Rml::DataModelConstructor& c, bool registerTypes)
     c.Bind(_p + "prefix", &_prefix);
     c.Bind(_p + "state", &_state);
     c.Bind(_p + "note", &_note);
+    c.Bind(_p + "error_copied", &_errorCopied);
     c.BindEventCallback(_p + "pick", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
     {
         if (args.empty())
@@ -59,6 +61,14 @@ void StorageForm::Bind(Rml::DataModelConstructor& c, bool registerTypes)
         Check();
     });
     c.BindEventCallback(_p + "check", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&) { Check(); });
+    c.BindEventCallback(_p + "copy_error", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const&)
+    {
+        if (_state == "bad" && !_note.empty())
+        {
+            _errorCopied = UiBackend::SetClipboardText(_note);
+            Dirty();
+        }
+    });
 }
 
 void StorageForm::Dirty()
@@ -112,6 +122,7 @@ bool StorageForm::Checkable(StorageChoice const& c) const
 
 void StorageForm::Check()
 {
+    _errorCopied = false;
     StorageChoice const now = Choice();
     _result.reset();
     _editedAt = 0;
@@ -137,6 +148,7 @@ bool StorageForm::Tick()
     if (std::optional<StorageState> r = _check.Take(); r && _checked && SamePlace(*_checked, now))
     {
         _result = r;
+        _errorCopied = false;
         changed = true;
         Relocalize();
     }
@@ -147,6 +159,7 @@ bool StorageForm::Tick()
         if (_result || _check.IsRunning())
         {
             _result.reset();
+            _errorCopied = false;
             _state.clear();
             _note.clear();
             changed = true;

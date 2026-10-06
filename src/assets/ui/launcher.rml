@@ -239,6 +239,7 @@
                         </div>
                         <div class="stcheck" data-if="st_note != ''" data-class-ok="st_state == 'ok'" data-class-warn="st_state == 'warn'" data-class-bad="st_state == 'bad'" data-class-run="st_state == 'run'">
                             <div class="grow">{{st_note}}</div>
+                            <div id="st-copy-error" class="btn small" data-if="st_state == 'bad'" data-event-click="st_copy_error"><span data-if="!st_error_copied">@{storage.copy_error}</span><span data-if="st_error_copied">@{storage.error_copied}</span></div>
                             <div id="st-check" class="btn small" data-if="st_state != 'run'" data-event-click="st_check">@{storage.check}</div>
                         </div>
                     </div>
@@ -467,6 +468,7 @@
                     </div>
                     <div class="stcheck" data-if="wzs_note != ''" data-class-ok="wzs_state == 'ok'" data-class-warn="wzs_state == 'warn'" data-class-bad="wzs_state == 'bad'" data-class-run="wzs_state == 'run'">
                         <div class="grow">{{wzs_note}}</div>
+                        <div id="wzs-copy-error" class="btn small" data-if="wzs_state == 'bad'" data-event-click="wzs_copy_error"><span data-if="!wzs_error_copied">@{storage.copy_error}</span><span data-if="wzs_error_copied">@{storage.error_copied}</span></div>
                         <div id="wzs-check" class="btn small" data-if="wzs_state != 'run'" data-event-click="wzs_check">@{storage.check}</div>
                     </div>
                     <div class="wh2">@{wz.comps.required}</div>

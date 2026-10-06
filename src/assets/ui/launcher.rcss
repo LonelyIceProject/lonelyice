@@ -322,6 +322,7 @@ input.check:checked { background-color: #b3441f; border-color: #6e1a10; box-shad
 .stcheck.warn { border-left-color: #d99a22; }
 .stcheck.bad { border-left-color: #b3441f; color: #7a1f10; }
 .stcheck.run { border-left-color: #3e6b8a; }
+.stcheck .btn { flex-shrink: 0; align-self: flex-start; }
 .wh2 { font-family: "Forum"; font-size: 17dp; color: #3a1a0c; margin: 8dp 0dp 4dp; }
 .opt.have { opacity: 0.7; }
 /* the first decorator is drawn on top */

@@ -239,6 +239,11 @@ Rml::SystemInterface* LonelyIce::UiBackend::GetSystemInterface()
     return &_data->system;
 }
 
+bool LonelyIce::UiBackend::SetClipboardText(Rml::String const& text)
+{
+    return SDL_SetClipboardText(text.c_str());
+}
+
 Rml::RenderInterface* LonelyIce::UiBackend::GetRenderInterface()
 {
     return &_data->render;

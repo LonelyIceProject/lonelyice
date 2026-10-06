@@ -69,7 +69,7 @@ namespace LonelyIce
 
         std::vector<LocRow> _locs;
         Rml::String _loc = "local", _host_, _port, _user, _pass, _prefix, _state, _note, _cacheDesc;
-        bool _cache = false, _remote = false;
+        bool _cache = false, _remote = false, _errorCopied = false;
 
         std::optional<StorageState> _result;
         std::optional<StorageChoice> _checked;     // what the running or last check was for
