@@ -435,6 +435,7 @@ storage.error.temp = Impossible d’écrire {0}
 storage.error.db = {0} : {1}
 storage.error.timeout = Le serveur de bases de données n’a pas répondu à temps.
 storage.error.exit = La vérification s’est arrêtée avec le code {0}.
+storage.error.exit_details = La vérification s’est arrêtée avec le code {0}.\n{1}
 storage.error.start = La vérification n’a pas pu démarrer.
 msg.remote_incomplete = Indiquez le serveur, l’utilisateur et le préfixe des bases.
 msg.storage_switched = Stockage modifié.

@@ -435,6 +435,7 @@ storage.error.temp = Не удаётся записать {0}
 storage.error.db = {0}: {1}
 storage.error.timeout = Сервер баз данных не ответил вовремя.
 storage.error.exit = Проверка завершилась с кодом {0}.
+storage.error.exit_details = Проверка завершилась с кодом {0}.\n{1}
 storage.error.start = Не удалось запустить проверку.
 msg.remote_incomplete = Укажите сервер, пользователя и префикс баз.
 msg.storage_switched = Хранилище изменено.

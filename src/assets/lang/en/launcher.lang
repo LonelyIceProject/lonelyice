@@ -435,6 +435,7 @@ storage.error.temp = Cannot write {0}
 storage.error.db = {0}: {1}
 storage.error.timeout = The database server did not answer in time.
 storage.error.exit = The check stopped with code {0}.
+storage.error.exit_details = The check stopped with code {0}.\n{1}
 storage.error.start = The check could not start.
 msg.remote_incomplete = Fill in the server, the user and the database prefix.
 msg.storage_switched = Storage changed.

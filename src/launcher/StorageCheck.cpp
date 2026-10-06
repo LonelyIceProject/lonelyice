@@ -83,6 +83,7 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
     Platform::Child child;
     bool done = false;
     int dbOk = 0;
+    std::string output;
     if (error.empty() && child.Start(o, error))
     {
         child.CloseInput();
@@ -129,6 +130,11 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
         };
         for (std::size_t read; (read = child.Read(buf, sizeof(buf))) > 0;)
         {
+            // Keep the failure context bounded even if a plugin writes excessive diagnostics.
+            output.append(buf, read);
+            constexpr std::size_t MaxOutput = 32 * 1024;
+            if (output.size() > MaxOutput)
+                output.erase(0, output.size() - MaxOutput);
             pending.append(buf, read);
             for (std::size_t eol; (eol = pending.find_first_of("\r\n")) != std::string::npos;)
             {
@@ -150,8 +156,32 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
         }
         if (timedOut)
             state.error = Tr("storage.error.timeout");
-        else if (!done && state.error.empty())
-            state.error = Tr("storage.error.exit", child.ExitCode());
+        else if ((!done || child.ExitCode() != 0) && state.error.empty())
+        {
+            std::string diagnostics = Platform::ConsoleToUtf8(output);
+            // Protocol messages report progress, rather than explain why the process failed.
+            std::string details;
+            for (std::size_t start = 0; start < diagnostics.size();)
+            {
+                std::size_t const end = diagnostics.find('\n', start);
+                std::string const line = diagnostics.substr(start, end == std::string::npos ? end : end - start);
+                if (line.find_first_not_of(" \t\r") != std::string::npos && line.rfind("@@LI ", 0) != 0)
+                    details += line + '\n';
+                if (end == std::string::npos)
+                    break;
+                start = end + 1;
+            }
+            if (details.size() > 8192)
+                details.erase(0, details.size() - 8192);
+            state.error = details.empty() ? Tr("storage.error.exit", child.ExitCode())
+                : Tr("storage.error.exit_details", child.ExitCode(), details);
+        }
+        // Preserve the child output for troubleshooting failures that used to show only an exit code.
+        if (!state.error.empty())
+        {
+            std::ofstream log(config.parent_path() / "storage-check.log", std::ios::binary | std::ios::trunc);
+            log << Platform::ConsoleToUtf8(output);
+        }
     }
     else if (state.error.empty())
         state.error = error.empty() ? Tr("storage.error.start") : error;

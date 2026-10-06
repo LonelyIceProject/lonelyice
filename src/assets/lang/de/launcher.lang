@@ -435,6 +435,7 @@ storage.error.temp = {0} kann nicht geschrieben werden
 storage.error.db = {0}: {1}
 storage.error.timeout = Der Datenbankserver hat nicht rechtzeitig geantwortet.
 storage.error.exit = Die Prüfung endete mit Code {0}.
+storage.error.exit_details = Die Prüfung endete mit Code {0}.\n{1}
 storage.error.start = Die Prüfung konnte nicht starten.
 msg.remote_incomplete = Server, Benutzer und Datenbank-Präfix angeben.
 msg.storage_switched = Speicher geändert.

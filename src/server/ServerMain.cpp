@@ -1001,6 +1001,14 @@ int ServerMain(int argc, char** argv)
     sPluginMgr->Load(sConfigMgr->GetOption<std::string>("PluginsDir", "plugins"), { "worldserver", "authserver" });
     sConfigMgr->LoadModulesConfigs();
 
+    // Storage backends register when their libraries load. A connection check must not initialize gameplay
+    // scripts: their constructors can depend on world data which this preflight deliberately does not load.
+    if (checkStorage)
+    {
+        CheckStorage();
+        return 0;
+    }
+
     sScriptMgr->SetScriptLoader(AddScripts);
     sScriptMgr->SetModulesLoader([]()
     {
@@ -1012,13 +1020,6 @@ int ServerMain(int argc, char** argv)
 
     LOG_INFO("server.loading", "Initializing Scripts...");
     sScriptMgr->Initialize();
-
-    // the plugins' database backends are registered now
-    if (checkStorage)
-    {
-        CheckStorage();
-        return 0;
-    }
 
     if (!UseClientData())
     {
