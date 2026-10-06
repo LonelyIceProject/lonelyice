@@ -126,6 +126,16 @@ void StorageForm::Check()
     StorageChoice const now = Choice();
     _result.reset();
     _editedAt = 0;
+    Platform::Env const env = _host.env ? _host.env(now) : Platform::Env();
+    if (!now.Remote() && env.empty())
+    {
+        _check.Cancel();
+        _checked.reset();
+        _state.clear();
+        _note = Tr("storage.check.choose_place");
+        Dirty();
+        return;
+    }
     if (!Checkable(now))
     {
         _checked.reset();
@@ -135,7 +145,7 @@ void StorageForm::Check()
         return;
     }
     _checked = now;
-    _check.Start(_host.exe, _host.env ? _host.env(now) : Platform::Env());
+    _check.Start(_host.exe, env);
     _state = "run";
     _note = Tr("storage.check.running");
     Dirty();

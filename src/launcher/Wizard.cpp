@@ -570,6 +570,9 @@ void Wizard::Next()
                 return Error(Tr("wizard.error.no_place"));
             if (!Writable(root))
                 return Error(Tr("wizard.error.not_writable", Utf8(root)));
+            // The client may have been selected after opening the wizard, when its storage path was still empty.
+            if (!_form.Choice().Remote())
+                _form.Check();
             BuildComponents();
             Prefill();
             return Go(2);

@@ -37,17 +37,26 @@ int main(int argc, char**)
 #endif
         return 42;
     }
-    for (std::string const mode : {"ok", "fail", "fail-after-done"})
+    for (std::string const mode : {"ok", "fail", "fail-after-done", "missing-connection"})
     {
         StorageCheck check([] {});
-        check.Start(Platform::ExePath(), {{"STORAGE_TEST_MODE", mode}});
+        Platform::Env env = {{"STORAGE_TEST_MODE", mode}};
+        if (mode != "missing-connection")
+            for (char const* key : { "AC_LOGIN_DATABASE_INFO", "AC_CHARACTER_DATABASE_INFO", "AC_WORLD_DATABASE_INFO" })
+                env.emplace_back(key, "test-connection");
+        check.Start(Platform::ExePath(), env);
         std::optional<StorageState> state;
         auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (!(state = check.Take()) && std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         if (!state)
             throw std::runtime_error("Check did not finish");
-        if (mode == "ok")
+        if (mode == "missing-connection")
+        {
+            if (state->reached || state->databases || state->error != "storage.error.connection_missing")
+                throw std::runtime_error("Missing connection was not rejected before spawning the probe");
+        }
+        else if (mode == "ok")
         {
             if (!state->reached || !state->databases || !state->error.empty())
                 throw std::runtime_error("Successful probe rejected");

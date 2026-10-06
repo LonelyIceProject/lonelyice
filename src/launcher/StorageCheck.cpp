@@ -1,5 +1,6 @@
 #include "StorageCheck.h"
 #include "Lang.h"
+#include <algorithm>
 #include <condition_variable>
 #include <cstdio>
 #include <fstream>
@@ -70,7 +71,16 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
 {
     StorageState state;
     std::string error;
-    fs::path const config = CheckConfig(error);
+    for (char const* key : { "AC_LOGIN_DATABASE_INFO", "AC_CHARACTER_DATABASE_INFO", "AC_WORLD_DATABASE_INFO" })
+    {
+        if (std::none_of(env.begin(), env.end(), [key](auto const& entry)
+            { return entry.first == key && !entry.second.empty(); }))
+        {
+            error = Tr("storage.error.connection_missing", key);
+            break;
+        }
+    }
+    fs::path const config = error.empty() ? CheckConfig(error) : fs::path();
 
     Platform::ChildOptions o;
     o.exe = exe;
