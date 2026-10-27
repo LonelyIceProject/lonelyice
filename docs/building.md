@@ -21,6 +21,10 @@ cmake --build build --config RelWithDebInfo --target lonelyice_release
 The Linux x64 terminal release, including the core and bundled plugins, has been built and checked on
 Ubuntu 24.04. Linux desktop and macOS builds have not been verified.
 
+Linux plugin builds explicitly link playerbots with Boost.Thread. Installing Boost headers alone is not
+enough: the resulting `libplayerbots.so` must list `libboost_thread.so` among its ELF dependencies.
+The release includes a runtime package list in `README-Linux.txt` and a dependency report.
+
 The game client stays the Windows `Wow.exe` and runs through Wine: `client.runner` in `local.yaml` names the
 program that starts it (default `wine`; arguments separated by spaces, e.g. `wine64` or a Proton/CrossOver wrapper).
 The server, the launcher and the tools run natively. A headless server does not need Wine.
