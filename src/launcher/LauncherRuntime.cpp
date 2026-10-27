@@ -222,6 +222,10 @@ bool LonelyIce::GenerateRuntimeConfig(LauncherSettings const& settings, std::str
         }
         SetYamlValues(world, profile.Get({ "server", "settings" }), "server/settings");
         world.Set("DataDir", "data", true);
+        // The core's file appender does not create LogsDir. Ensure first-run failures have a file log.
+        fs::path const logs = Platform::Utf8ToPath(world.Get("LogsDir").value_or("logs"));
+        if (!logs.empty())
+            fs::create_directories(logs.is_absolute() ? logs : context.root / logs);
         if (!world.Save())
             throw std::runtime_error("Cannot save generated server configuration.");
         fs::create_directories(staging / "modules");

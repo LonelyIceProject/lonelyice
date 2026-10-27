@@ -1,4 +1,5 @@
 #include "StorageCheck.h"
+#include "ConsoleText.h"
 #include "Lang.h"
 #include <algorithm>
 #include <condition_variable>
@@ -156,11 +157,11 @@ void StorageCheck::Run(fs::path exe, Platform::Env env, unsigned run)
             pending.append(buf, read);
             for (std::size_t eol; (eol = pending.find_first_of("\r\n")) != std::string::npos;)
             {
-                line(pending.substr(0, eol));
+                line(StripConsoleColors(pending.substr(0, eol)));
                 pending.erase(0, eol + 1);
             }
         }
-        line(pending);
+        line(StripConsoleColors(pending));
         child.Wait(-1);
         {
             std::lock_guard<std::mutex> lock(waitLock);

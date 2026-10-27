@@ -4,6 +4,7 @@
 #include "LauncherRuntime.h"
 #include "ProfileConfig.h"
 #include "ConfigEnv.h"
+#include "ConsoleText.h"
 #include "GameClient.h"
 #include "Lang.h"
 #include "Pak.h"
@@ -268,11 +269,11 @@ int Installer::RunChild(std::vector<std::string> const& args, fs::path const& di
             while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
                 line.pop_back();
             if (!line.empty())
-                onLine(Platform::ConsoleToUtf8(line));
+                onLine(StripConsoleColors(Platform::ConsoleToUtf8(line)));
         }
     }
     if (!pending.empty())
-        onLine(Platform::ConsoleToUtf8(pending));
+        onLine(StripConsoleColors(Platform::ConsoleToUtf8(pending)));
 
     child.Wait(-1);
     int code = child.ExitCode();

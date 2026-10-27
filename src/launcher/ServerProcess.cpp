@@ -1,4 +1,5 @@
 #include "ServerProcess.h"
+#include "ConsoleText.h"
 #include "TextUtil.h"
 #include <algorithm>
 #include <sstream>
@@ -209,6 +210,7 @@ void LonelyIce::ServerProcess::ReaderLoop()
 
 void LonelyIce::ServerProcess::HandleLine(std::string line)
 {
+    line = StripConsoleColors(line);
     if (line.rfind(ControlPrefix, 0) == 0)
     {
         std::istringstream in(line.substr(sizeof(ControlPrefix) - 1));

@@ -595,7 +595,7 @@ Component StorageSetupView::Build()
             for (auto const& step : _installer.Steps())
                 out.push_back(hbox({ text(step.title + " ") | size(WIDTH, EQUAL, 24), gauge(step.progress) | flex,
                     text(" " + Tr("tui.storage.step." + std::to_string(int(step.state)))) }));
-        if ((!_wizard || _wizardStep >= 4) && !_log.empty())
+        if (!_log.empty())
             for (auto it = _log.begin() + std::max<int>(0, int(_log.size()) - 4); it != _log.end(); ++it)
                 out.push_back(paragraph(*it) | dim);
         if (_wizard)

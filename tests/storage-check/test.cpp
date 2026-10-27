@@ -23,6 +23,11 @@ int main(int argc, char**)
     if (argc > 1)
     {
         std::string mode = Platform::GetEnv("STORAGE_TEST_MODE").value_or("");
+        if (mode == "colored")
+        {
+            std::puts("log line\n\x1b[0m@@LI check db auth ok\n\x1b[0m@@LI check db characters ok\n\x1b[0m@@LI check db world ok\n\x1b[0m@@LI check done");
+            return 0;
+        }
         if (mode == "partial")
         {
             std::puts("@@LI check db auth ok\n@@LI check db characters missing\n@@LI check db world ok\n@@LI check done");
@@ -42,7 +47,7 @@ int main(int argc, char**)
 #endif
         return 42;
     }
-    for (std::string const mode : {"ok", "partial", "fail", "fail-after-done", "missing-connection"})
+    for (std::string const mode : {"ok", "colored", "partial", "fail", "fail-after-done", "missing-connection"})
     {
         StorageCheck check([] {});
         Platform::Env env = {{"STORAGE_TEST_MODE", mode}};
@@ -61,7 +66,7 @@ int main(int argc, char**)
             if (state->reached || state->databases || state->error != "storage.error.connection_missing")
                 throw std::runtime_error("Missing connection was not rejected before spawning the probe");
         }
-        else if (mode == "ok")
+        else if (mode == "ok" || mode == "colored")
         {
             if (!state->reached || !state->databases || !state->auth || !state->characters || !state->world
                 || !state->error.empty())
