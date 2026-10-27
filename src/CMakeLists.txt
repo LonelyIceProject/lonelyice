@@ -148,6 +148,10 @@ else()
   add_executable(lonelyice ${LONELYICE_SOURCES})
 endif()
 set_target_properties(lonelyice PROPERTIES OUTPUT_NAME "LonelyIce" FOLDER "server")
+if (UNIX AND NOT APPLE)
+  # Plugins may reference script RTTI hosted by this executable rather than the shared core libraries.
+  set_target_properties(lonelyice PROPERTIES ENABLE_EXPORTS ON)
+endif()
 add_dependencies(lonelyice revision.h)
 
 target_include_directories(lonelyice PRIVATE
