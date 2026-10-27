@@ -10,9 +10,9 @@ cmake_minimum_required(VERSION 3.22)
 project(LonelyIce LANGUAGES CXX C)
 
 if (MSVC)
-  # CMake selects dependencies explicitly. Global vcpkg MSBuild integration
-  # otherwise adds every installed .lib, including dynamic alternatives.
-  list(APPEND CMAKE_VS_GLOBALS "VcpkgAutoLink=false")
+  # CMake selects dependencies explicitly. Global vcpkg MSBuild integration otherwise injects
+  # unrelated headers and import libraries, mixing Boost versions and static/dynamic variants.
+  list(APPEND CMAKE_VS_GLOBALS "VcpkgEnabled=false" "VcpkgAutoLink=false")
 endif()
 
 option(LONELYICE_GUI "Build the graphical launcher (SDL3/RmlUi)" ON)
