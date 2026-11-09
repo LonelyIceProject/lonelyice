@@ -72,6 +72,7 @@
                     </div>
                 </div>
 
+                <button id="support-project" class="btn small" data-event-click="support_project">@{release.support}</button>
             </div>
 
             <div id="panel">
@@ -101,6 +102,7 @@
                         <div id="act-announce" class="action" data-class-disabled="state != 'ready'" data-event-click="announce"><div class="a-title">@{act.announce}</div><div class="a-sub">@{act.announce.sub}</div></div>
                         <div id="act-folder" class="action" data-event-click="open_server_dir"><div class="a-title">@{act.folder}</div><div class="a-sub">@{act.folder.sub}</div></div>
                     </div>
+                    <div class="release-check-row"><button id="release-check" class="btn small" data-event-click="release_check">@{release.check}</button></div>
                 </div>
 
                 <!-- console: kept in the DOM so the log survives tab switches -->
@@ -592,6 +594,23 @@
                 <div class="spacer"></div>
                 <div id="wz-back" class="btn small" data-if="wz_back_visible" data-event-click="wz_back">@{ui.back_step}</div>
                 <div id="wz-next" class="btn next" data-class-disabled="!wz_next_ok" data-event-click="wz_next">{{wz_next_label}}</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="release-overlay" data-if="release_open">
+        <div class="release-dialog">
+            <div class="release-kicker">GitHub Releases</div>
+            <div class="release-title" data-if="release_version != ''">@{release.available}</div>
+            <div class="release-title" data-if="release_version == ''">@{release.title}</div>
+            <div class="release-versions" data-if="release_version != ''">@{release.installed_version} {{release_current}} → @{release.new_version} {{release_version}}</div>
+            <div class="release-status">{{release_status}}</div>
+            <progress class="release-progress" data-if="release_downloading" max="100" data-attr-value="release_progress"/>
+            <div class="row release-actions">
+                <button class="btn small" data-if="release_version != ''" data-event-click="release_notes">@{release.notes}</button>
+                <div class="spacer"></div>
+                <button id="release-close" class="btn small" data-event-click="release_close">{{release_dismiss}}</button>
+                <button id="release-apply" class="btn small" data-if="release_button != ''" data-class-disabled="release_busy || release_blocked" data-event-click="release_apply">{{release_button}}</button>
             </div>
         </div>
     </div>

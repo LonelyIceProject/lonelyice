@@ -14,6 +14,8 @@ namespace LonelyIce::Http
 
     // Fetches http(s) URLs, file:// URLs and local paths into memory. Follows redirects.
     bool Get(std::string const& url, std::vector<uint8_t>& out, std::string& error, Progress const& progress = {});
+    bool GetHttps(std::string const& url, std::vector<uint8_t>& out, std::string& error, std::size_t limit,
+                  Progress const& progress = {});
 
     // url relative to base ("pkg/a.zip" next to "https://host/repo/index.json"); absolute urls pass through.
     std::string Resolve(std::string const& base, std::string const& url);

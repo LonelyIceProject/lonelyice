@@ -16,6 +16,8 @@
 #include "PackageManager.h"
 #include "ProfileConfig.h"
 #include "ProfilePlugins.h"
+#include "ReleaseUpdate.h"
+#include "ServerLock.h"
 #include "TextUtil.h"
 #include "Tray.h"
 #include "UiBackend.h"
@@ -30,6 +32,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <map>
 #include <set>
 #include <mutex>
@@ -200,7 +203,16 @@ namespace
 
         void ProcessEvent(Rml::Event& ev) override
         {
-            if (ev.GetId() == Rml::EventId::Keydown && ev.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_RETURN)
+            if (ev.GetId() != Rml::EventId::Keydown)
+                return;
+            int const key = ev.GetParameter<int>("key_identifier", 0);
+            if (_releaseOpen && key == Rml::Input::KI_ESCAPE)
+            {
+                _releaseOpen = false;
+                _model.DirtyVariable("release_open");
+                ev.StopPropagation();
+            }
+            else if (!_releaseOpen && key == Rml::Input::KI_RETURN && ev.GetTargetElement()->GetId() == "cmd")
                 SendConsoleCommand();
         }
 
@@ -225,6 +237,10 @@ namespace
         void RefreshFooter();
         void RefreshBackups();
         void RefreshAbout();
+        void CheckRelease(bool open);
+        void PollRelease();
+        void RefreshRelease();
+        void UpdateRelease();
         void ShowWindow();
         void BeginQuit();
         void SetUiScale(int percent);
@@ -312,6 +328,20 @@ namespace
         bool _footBusy = false;
         std::vector<Opt> _langs;
         std::vector<NewsView> _news;
+        struct ReleaseResult
+        {
+            std::optional<ReleaseUpdate::Release> release;
+            std::optional<ReleaseUpdate::Staged> staged;
+            std::string error;
+        };
+        std::future<ReleaseResult> _releaseJob;
+        std::optional<ReleaseUpdate::Release> _release;
+        std::optional<ReleaseUpdate::Staged> _stagedRelease;
+        std::atomic<bool> _cancelRelease{false};
+        std::atomic<int> _releasePercent{0};
+        Rml::String _releaseCurrent, _releaseVersion, _releaseStatus, _releaseButton, _releaseDismiss, _releaseError;
+        bool _releaseOpen = false, _releaseBusy = false, _releaseDownloading = false, _releaseBlocked = false;
+        int _releaseProgress = 0;
         std::deque<std::pair<std::string, std::string>> _logLines;   // text, class: re-added after a language switch
         Rml::String _svcSection = "data";
         std::vector<DataRow> _backupRows, _logRows, _aboutRows;
@@ -713,6 +743,10 @@ namespace
             CheckPackageIndex();    // news about plugin updates
         }
         RefreshNews();
+        std::string const updateResult = ReleaseUpdate::TakeResult(_exeDir);
+        if (!updateResult.empty())
+            AddEvent(updateResult);
+        CheckRelease(false);
 
         for (;;)
         {
@@ -772,6 +806,14 @@ namespace
             _syncThread.join();
         if (_plThread.joinable())
             _plThread.join();
+        _cancelRelease = true;
+        if (_releaseJob.valid())
+        {
+            _releaseJob.wait();
+            PollRelease();
+        }
+        if (_stagedRelease)
+            ReleaseUpdate::Discard(*_stagedRelease);
         _settings.Save();
         _server.reset();
         _tray.Destroy();
@@ -871,10 +913,9 @@ namespace
         if (!_doc)
             return false;
         _doc->Show();
+        _doc->AddEventListener(Rml::EventId::Keydown, this);
 
         _log = _doc->GetElementById("log");
-        if (Rml::Element* input = _doc->GetElementById("cmd"))
-            input->AddEventListener(Rml::EventId::Keydown, this);
         for (auto const& [text, cls] : _logLines)
         {
             Rml::ElementPtr p = _doc->CreateElement("p");
@@ -1076,6 +1117,16 @@ namespace
         c.Bind("backup_confirm", &_backupConfirm);
         c.Bind("log_rows", &_logRows);
         c.Bind("about_rows", &_aboutRows);
+        c.Bind("release_open", &_releaseOpen);
+        c.Bind("release_busy", &_releaseBusy);
+        c.Bind("release_downloading", &_releaseDownloading);
+        c.Bind("release_blocked", &_releaseBlocked);
+        c.Bind("release_progress", &_releaseProgress);
+        c.Bind("release_current", &_releaseCurrent);
+        c.Bind("release_version", &_releaseVersion);
+        c.Bind("release_status", &_releaseStatus);
+        c.Bind("release_button", &_releaseButton);
+        c.Bind("release_dismiss", &_releaseDismiss);
         c.Bind("pl_updates", &_plUpdates);
 
         c.Bind("state", &_state);
@@ -1185,6 +1236,8 @@ namespace
                 OpenWizard();
             else if (a == "updates")
                 OpenPage("plugins", "updates");
+            else if (a == "launcher_update")
+                CheckRelease(true);
             else if (a == "data")
                 OpenPage("service", "data");
             else if (a == "backups")
@@ -1258,6 +1311,11 @@ namespace
         on("st_apply", [this] { ApplyStorage(); });
         on("st_revert", [this] { if (!_stBusy) LoadStorageForm(); });
         on("pl_check", [this] { CheckPackageIndex(); });
+        on("support_project", [] { SDL_OpenURL(ReleaseUpdate::SupportUrl); });
+        on("release_check", [this] { CheckRelease(true); });
+        on("release_close", [this] { _releaseOpen = false; _model.DirtyVariable("release_open"); });
+        on("release_notes", [this] { if (_release) SDL_OpenURL(_release->page.c_str()); });
+        on("release_apply", [this] { UpdateRelease(); });
         on("pl_update_all", [this] { PluginAction("update_all", -1); });
         onArg("pl_toggle", [this](Rml::Variant const& v) { PluginAction("toggle", v.Get<int>()); });
         onArg("pl_remove", [this](Rml::Variant const& v) { PluginAction("remove", v.Get<int>()); });
@@ -1364,6 +1422,9 @@ namespace
     void Launcher::Tick()
     {
         RunUiScript();
+        PollRelease();
+        if (_releaseOpen)
+            RefreshRelease();
         _wizard->Tick();
         StorageTick();
         // the database update was closed without finishing: the start (and a Play waiting for it) is off
@@ -1834,6 +1895,9 @@ namespace
             _news.push_back({ "warn", Tr("news.failed"), _server->GetFailReason(), "", "" });
         if (_plUpdates > 0)
             _news.push_back({ "update", Tr("news.updates", _plUpdates), Tr("news.updates.text"), "updates", Tr("news.open") });
+        if (_release)
+            _news.push_back({ "update", Tr("release.available"), Tr("release.version", _release->version),
+                "launcher_update", Tr("release.view") });
 
         // the newest backup
         std::vector<Backup::SnapshotFile> const backups = ListBackups(Root() / "backups");
@@ -1842,6 +1906,111 @@ namespace
         else if (!NeedsSetup() && _settings.location == "local")
             _news.push_back({ "warn", Tr("news.no_backup"), Tr("news.no_backup.text"), "backups", Tr("news.open") });
         _model.DirtyVariable("news");
+    }
+
+    void Launcher::CheckRelease(bool open)
+    {
+        if (open)
+        {
+            _releaseOpen = true;
+            _model.DirtyVariable("release_open");
+        }
+        if (!_releaseJob.valid() && !_stagedRelease && (!open || !_release))
+        {
+            _releaseError.clear();
+            _releaseBusy = true;
+            _releaseJob = std::async(std::launch::async, [this]
+            {
+                ReleaseResult result;
+                result.release = ReleaseUpdate::Check(result.error, [this](auto, auto) { return !_cancelRelease; });
+                return result;
+            });
+        }
+        RefreshRelease();
+    }
+
+    void Launcher::PollRelease()
+    {
+        if (!_releaseJob.valid() || _releaseJob.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return;
+        ReleaseResult result = _releaseJob.get();
+        if (_releaseDownloading)
+            _stagedRelease = std::move(result.staged);
+        else
+            _release = std::move(result.release);
+        _releaseError = std::move(result.error);
+        _releaseDownloading = _releaseBusy = false;
+        RefreshRelease();
+        RefreshNews();
+    }
+
+    void Launcher::RefreshRelease()
+    {
+        _releaseCurrent = ReleaseUpdate::CurrentVersion();
+        _releaseVersion = _release ? _release->version : "";
+        _releaseButton = _release ? Tr(_stagedRelease ? "release.install" : "release.download") : "";
+        _releaseDismiss = Tr(_release ? "release.later" : "release.close");
+        _releaseBlocked = _stagedRelease && (_server->IsRunning() || Packages::ServerLock::IsHeld(_exeDir / "plugins"));
+        if (_releaseDownloading)
+        {
+            _releaseProgress = _releasePercent;
+            _releaseStatus = _releaseProgress == 100 ? Tr("release.verifying") : Tr("release.downloading", _releaseProgress);
+        }
+        else if (_releaseBusy)
+            _releaseStatus = Tr("release.checking");
+        else if (!_releaseError.empty())
+            _releaseStatus = _releaseError;
+        else if (_stagedRelease)
+            _releaseStatus = Tr(_releaseBlocked ? "release.stop_server" : "release.ready");
+        else
+            _releaseStatus = Tr(_release ? "release.preserve" : "release.current");
+        for (char const* key : { "release_current", "release_version", "release_busy", "release_status", "release_button", "release_dismiss",
+             "release_downloading", "release_blocked", "release_progress" })
+            _model.DirtyVariable(key);
+    }
+
+    void Launcher::UpdateRelease()
+    {
+        if (_releaseBusy || !_release)
+            return;
+        _releaseError.clear();
+        if (_stagedRelease)
+        {
+            if (_server->IsRunning() || Packages::ServerLock::IsHeld(_exeDir / "plugins"))
+                _releaseError = Tr("release.stop_server");
+            else if (_wizard->IsOpen() || _backupBusy || _plBusy || _syncBusy || _stBusy || _stChanged ||
+                _settingsModel.ChangedCount())
+                _releaseError = Tr("release.finish_work");
+            else
+            {
+                std::string error;
+                if (ReleaseUpdate::Install(*_stagedRelease, _settings.file, false, error))
+                {
+                    _stagedRelease.reset();
+                    BeginQuit();
+                    return;
+                }
+                _releaseError = error;
+            }
+        }
+        else
+        {
+            _releaseBusy = _releaseDownloading = true;
+            _releasePercent = 0;
+            _releaseJob = std::async(std::launch::async, [this, release = *_release]
+            {
+                ReleaseResult result;
+                result.staged = ReleaseUpdate::Stage(release, _exeDir, result.error,
+                    [this](uint64_t done, uint64_t total)
+                    {
+                        if (total)
+                            _releasePercent = int(done * 100 / total);
+                        return !_cancelRelease;
+                    });
+                return result;
+            });
+        }
+        RefreshRelease();
     }
 
     void Launcher::RefreshFooter()

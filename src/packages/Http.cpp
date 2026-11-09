@@ -2,6 +2,7 @@
 #include "Lang.h"
 #include <curl/curl.h>
 #include <fstream>
+#include <limits>
 #include <memory>
 
 namespace fs = std::filesystem;
@@ -46,11 +47,14 @@ namespace
     {
         std::vector<uint8_t>* out = nullptr;
         LonelyIce::Http::Progress const* progress = nullptr;
+        std::size_t limit;
     };
 
     size_t OnWrite(char* data, size_t size, size_t count, void* user)
     {
         Transfer& transfer = *static_cast<Transfer*>(user);
+        if (size && count > (transfer.limit - transfer.out->size()) / size)
+            return 0;
         try
         {
             transfer.out->insert(transfer.out->end(), data, data + size * count);
@@ -92,9 +96,17 @@ std::string LonelyIce::Http::Resolve(std::string const& base, std::string const&
     return slash == std::string::npos ? url : base.substr(0, slash + 1) + url;
 }
 
-bool LonelyIce::Http::Get(std::string const& url, std::vector<uint8_t>& out, std::string& error, Progress const& progress)
+namespace LonelyIce::Http
+{
+static bool Fetch(std::string const& url, std::vector<uint8_t>& out, std::string& error, Progress const& progress,
+                  std::size_t limit, bool httpsOnly)
 {
     out.clear();
+    if (httpsOnly && !url.starts_with("https://"))
+    {
+        error = Tr("pkg.http.bad_url", url);
+        return false;
+    }
     if (!IsHttp(url))
     {
         std::ifstream in(LocalPath(url), std::ios::binary);
@@ -120,12 +132,12 @@ bool LonelyIce::Http::Get(std::string const& url, std::vector<uint8_t>& out, std
         return false;
     }
 
-    Transfer transfer{ &out, &progress };
+    Transfer transfer{ &out, &progress, limit };
     char details[CURL_ERROR_SIZE] = {};
     CURL* const c = curl.get();
     curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, "http,https");
-    curl_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+    curl_easy_setopt(c, CURLOPT_PROTOCOLS_STR, httpsOnly ? "https" : "http,https");
+    curl_easy_setopt(c, CURLOPT_REDIR_PROTOCOLS_STR, httpsOnly ? "https" : "http,https");
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
     curl_easy_setopt(c, CURLOPT_USERAGENT, "LonelyIce");
@@ -167,4 +179,16 @@ bool LonelyIce::Http::Get(std::string const& url, std::vector<uint8_t>& out, std
         return false;
     }
     return true;
+}
+
+bool Get(std::string const& url, std::vector<uint8_t>& out, std::string& error, Progress const& progress)
+{
+    return Fetch(url, out, error, progress, std::numeric_limits<std::size_t>::max(), false);
+}
+
+bool GetHttps(std::string const& url, std::vector<uint8_t>& out, std::string& error, std::size_t limit,
+              Progress const& progress)
+{
+    return Fetch(url, out, error, progress, limit, true);
+}
 }

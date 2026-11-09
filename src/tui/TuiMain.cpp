@@ -8,6 +8,7 @@
 #include "Lang.h"
 #include "PackageManager.h"
 #include "ProfilePlugins.h"
+#include "ReleaseUpdate.h"
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/screen_interactive.hpp>
@@ -90,11 +91,14 @@ namespace
             host.wake = [this] { Wake(); };
             _storage = std::make_unique<StorageSetupView>(std::move(host));
             RefreshPlugins();
+            Message(ReleaseUpdate::TakeResult(_context.exeDir));
         }
 
         ~TerminalLauncher()
         {
-            _jobs.Cancel();
+            _jobs.CancelAndWait();
+            if (_stagedRelease)
+                ReleaseUpdate::Discard(*_stagedRelease);
         }
 
         int Run()
@@ -106,8 +110,23 @@ namespace
                 _storage->StartWizard();
                 _tab = _tabSelection = 3;
             }
-            _screen.Loop(root);
-            _jobs.Cancel();
+            do
+            {
+                _installRelease = false;
+                _screen.Loop(root);
+                if (_installRelease)
+                {
+                    std::string error;
+                    if (ReleaseUpdate::Install(*_stagedRelease, _settings.file, true, error))
+                    {
+                        _stagedRelease.reset();
+                        break;
+                    }
+                    Message(error);
+                }
+            } while (_installRelease);
+            _jobs.CancelAndWait();
+            _jobs.Poll();
             return 0;
         }
 
@@ -714,7 +733,25 @@ namespace
                 [this] { return Tr("tui.path_root", Platform::PathToUtf8(_context.root)); },
                 [this] { return Tr("tui.path_config", Platform::PathToUtf8(_context.config)); },
                 [this] { return Tr("tui.path_plugins", Platform::PathToUtf8(_context.plugins)); },
-                [this] { return Tr("tui.path_client", Platform::PathToUtf8(_settings.clientPath)); },
+            };
+            auto addValue = [rows](std::function<std::string()> value)
+            {
+                rows->Add(Renderer([value = std::move(value)](bool focused)
+                {
+                    auto element = paragraph(SafeText(value()));
+                    return focused ? element | focus | inverted : element;
+                }));
+            };
+            for (auto const& value : values)
+                addValue(value);
+            addValue([this] { return Tr("tui.path_client", Platform::PathToUtf8(_settings.clientPath)); });
+            rows->Add(Button(Tr("release.support"), [this]
+            {
+                Platform::OpenInShell(Platform::Utf8ToPath(ReleaseUpdate::SupportUrl));
+                Message(ReleaseUpdate::SupportUrl);
+            }));
+            rows->Add(Button(Tr("release.check"), [this] { CheckRelease(); }));
+            values = {
                 [this]
                 {
                     return Tr("tui.storage_current", _settings.location,
@@ -729,13 +766,100 @@ namespace
                 [this] { return Tr(Running() ? "tui.external_running" : "tui.external_stopped"); },
                 [this] { return _restartNeeded ? Tr("tui.restart_needed") : ""; }};
             for (auto const& value : values)
-                rows->Add(Renderer(
-                    [value](bool focused)
-                    {
-                        auto element = paragraph(SafeText(value()));
-                        return focused ? element | focus | inverted : element;
-                    }));
+                addValue(value);
             return Renderer(rows, [rows] { return rows->Render() | vscroll_indicator | frame | flex; });
+        }
+
+        void CheckRelease()
+        {
+            if (Busy())
+                return;
+            if (_stagedRelease)
+            {
+                ShowRelease();
+                return;
+            }
+            Message(Tr("release.checking"));
+            _jobs.Start([this](auto const& cancelled)
+            {
+                std::string error;
+                auto release = ReleaseUpdate::Check(error, [&cancelled](auto, auto) { return !cancelled; });
+                return [this, release, error]
+                {
+                    _release = release;
+                    if (_release)
+                        ShowRelease();
+                    else
+                        Message(error.empty() ? Tr("release.current") : error);
+                };
+            });
+        }
+
+        void ShowRelease()
+        {
+            std::string message = Tr("release.installed_version") + " " + ReleaseUpdate::CurrentVersion() +
+                " → " + Tr("release.new_version") + " " + _release->version + "\n" + Tr("release.preserve");
+            std::vector<std::pair<std::string, Action>> actions{
+                { Tr("release.notes"), [this]
+                  {
+                      Platform::OpenInShell(Platform::Utf8ToPath(_release->page));
+                      ShowDialog(Tr("release.notes"), _release->page,
+                          { { Tr("tui.back"), [this] { ShowRelease(); } } });
+                  } }
+            };
+            if (!_stagedRelease)
+                actions.emplace_back(Tr("release.download"), [this] { DownloadRelease(); });
+            else if (Running())
+                message += "\n" + Tr("release.stop_server");
+            else
+            {
+                message += "\n" + Tr("release.ready");
+                actions.emplace_back(Tr("release.install"), [this]
+                {
+                    GuardEdits([this]
+                    {
+                        if (Running())
+                        {
+                            Message(Tr("release.stop_server"));
+                            return;
+                        }
+                        _installRelease = true;
+                        _screen.ExitLoopClosure()();
+                    });
+                });
+            }
+            actions.emplace_back(Tr("release.later"), [] {});
+            ShowDialog(Tr("release.available"), std::move(message), std::move(actions));
+        }
+
+        void DownloadRelease()
+        {
+            _releaseDownloading = true;
+            _releaseProgress = 0;
+            _jobs.Start([this, release = *_release, root = _context.exeDir](auto const& cancelled)
+            {
+                std::string error;
+                auto staged = ReleaseUpdate::Stage(release, root, error,
+                    [this, &cancelled](uint64_t done, uint64_t total)
+                    {
+                        if (total)
+                        {
+                            int const percent = int(done * 100 / total);
+                            if (_releaseProgress.exchange(percent) != percent)
+                                Wake();
+                        }
+                        return !cancelled;
+                    });
+                return [this, staged, error]
+                {
+                    _releaseDownloading = false;
+                    _stagedRelease = staged;
+                    if (_stagedRelease)
+                        ShowRelease();
+                    else
+                        Message(error);
+                };
+            });
         }
 
         Component PluginsPage()
@@ -822,7 +946,9 @@ namespace
                                border;
                     return vbox({text("LonelyIce") | bold, menu->Render(), separator(), pages->Render() | flex,
                                  separator(),
-                                 paragraph(Busy() ? Tr("tui.busy") : _message) | size(HEIGHT, LESS_THAN, 3) | frame,
+                                 paragraph(_releaseDownloading ? (_releaseProgress == 100 ? Tr("release.verifying") :
+                                    Tr("release.downloading", _releaseProgress.load())) :
+                                    Busy() ? Tr("tui.busy") : _message) | size(HEIGHT, LESS_THAN, 3) | frame,
                                  paragraph(Tr("tui.keys")) | dim, footer->Render()}) |
                            border;
                 });
@@ -919,6 +1045,10 @@ namespace
         Component _settingsHolder, _dialogButtons, _dialogBody;
         std::vector<std::string> _tabs, _pluginLabels, _pluginFilters;
         std::vector<PluginRow> _pluginRows;
+        std::optional<ReleaseUpdate::Release> _release;
+        std::optional<ReleaseUpdate::Staged> _stagedRelease;
+        std::atomic<int> _releaseProgress{0};
+        bool _releaseDownloading = false, _installRelease = false;
         std::string _indexes, _query, _message, _dialogTitle, _dialogText;
         int _tab = 0, _tabSelection = 0, _pluginSelection = 0, _pluginFilter = 0;
         bool _dialog = false, _restartNeeded = false;

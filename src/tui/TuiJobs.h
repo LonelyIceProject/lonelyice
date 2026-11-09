@@ -21,12 +21,7 @@ namespace LonelyIce
             : _wake(std::move(wake)), _error(std::move(error))
         {
         }
-        ~TuiJobs()
-        {
-            Cancel();
-            if (_thread.joinable())
-                _thread.join();
-        }
+        ~TuiJobs() { CancelAndWait(); }
         TuiJobs(TuiJobs const&) = delete;
         TuiJobs& operator=(TuiJobs const&) = delete;
 
@@ -37,6 +32,12 @@ namespace LonelyIce
         void Cancel()
         {
             _cancel = true;
+        }
+        void CancelAndWait()
+        {
+            Cancel();
+            if (_thread.joinable())
+                _thread.join();
         }
         bool Start(Work work)
         {

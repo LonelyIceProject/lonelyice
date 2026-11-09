@@ -43,6 +43,10 @@ For setup over SSH, use `LonelyIce -nw`: the terminal interface configures the s
 Start the configured server separately with `LonelyIce --headless`.
 See [Terminal setup and headless servers](docs/terminal.md).
 
+Use **Check for updates** in the desktop or terminal overview to find the latest stable GitHub release.
+The download is verified against GitHub's SHA-256 digest before it can be installed. Stop the server before
+choosing **Install and restart**. The update keeps your YAML profile, databases and additional plugins.
+
 ## What you get
 
 - **One button to play**: LonelyIce starts the server, points the game at it and launches the game.

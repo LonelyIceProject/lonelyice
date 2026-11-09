@@ -16,6 +16,11 @@ cmake --build build --config RelWithDebInfo --target lonelyice_release
 
 `build/lonelyice-release` then holds the application, `plugins/` and `setup/`.
 
+Release builds use the nearest Git version tag by default. Pass `-DLONELYICE_VERSION=X.Y.Z` when
+building before the tag exists. The embedded version must match the GitHub release tag `vX.Y.Z`.
+The updater selects the matching `lonelyice-vX.Y.Z-windows-x64-desktop.zip`,
+`lonelyice-vX.Y.Z-windows-x64-tui.zip` or `lonelyice-vX.Y.Z-linux-x64-tui.tar.gz` asset.
+
 ## Linux and macOS
 
 The Linux x64 terminal release, including the core and bundled plugins, has been built and checked on

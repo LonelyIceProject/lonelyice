@@ -1,5 +1,6 @@
 #include "Lang.h"
 #include "Platform.h"
+#include "ReleaseUpdate.h"
 #include <cstdio>
 #include <string_view>
 
@@ -20,6 +21,11 @@ int TuiMain(int argc, char** argv);
 // release packer (--pack).
 int main(int argc, char** argv)
 {
+    if (argc > 1 && std::string_view(argv[1]) == "--apply-update")
+    {
+        LonelyIce::Lang::Init();
+        return LonelyIce::ReleaseUpdate::Apply(argc, argv);
+    }
     for (int i = 1; i < argc; ++i)
     {
         std::string_view a = argv[i];
