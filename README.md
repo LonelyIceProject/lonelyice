@@ -6,6 +6,23 @@ Your own World of Warcraft 3.3.5a (Wrath of the Lich King) world, for playing al
 in one application. LonelyIce sets everything up from the game client you already have, runs the server in
 the background and starts the game with one button.
 
+## Screenshots
+
+![LonelyIce launcher overview with server controls and the Play button](docs/screenshots/launcher-overview.png)
+
+<details>
+<summary>Server settings and commands</summary>
+
+**Network and resources**
+
+![Server IPv4 address, ports, and resource settings](docs/screenshots/launcher-settings.png)
+
+**Server commands**
+
+![Command forms for server status, saving, and announcements](docs/screenshots/launcher-commands.png)
+
+</details>
+
 ## Getting started
 
 1. Download a release and unpack it anywhere, for example next to your game folder.
