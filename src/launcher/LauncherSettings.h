@@ -25,6 +25,7 @@ namespace LonelyIce
         std::filesystem::path clientPath;
         std::filesystem::path serverConfig; // derived private adapter path, never persisted as a user setting
         std::filesystem::path dataRoot;  // server folder made by the wizard (configs, db, data, logs, backups); empty = next to the exe
+        std::filesystem::path prebuiltMmaps; // extracted mmaps folder, relative to the profile when not absolute
         std::string locale;              // client language to start, empty = keep Config.wtf
         std::string runner;              // Linux, macOS: the program that runs Wow.exe (wine); unused on Windows
         bool writeRealmlist = true;      // fix realmlist of the start locale before launching

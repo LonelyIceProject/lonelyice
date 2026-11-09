@@ -284,7 +284,7 @@ namespace
         fs::path Root() const;
         fs::path ServerConfig() const;
         fs::path ConfPath(std::string const& key, std::string const& def) const;
-        std::string LoginPort() const;
+        std::string ServerRealmlist() const;
         bool SqlUpdatePending() const;
         void MigrateServerConfig();
 
@@ -559,12 +559,9 @@ namespace
         return p.is_absolute() ? p : Root() / p;
     }
 
-    // RealmServerPort of the server config: the port the game's realmlist needs.
-    std::string Launcher::LoginPort() const
+    std::string Launcher::ServerRealmlist() const
     {
-        ConfFile f;
-        f.Load(ServerConfig());
-        return f.Get("RealmServerPort").value_or("3724");
+        return Installer::ServerRealmlist(_settings.file);
     }
 
     // setup/sql.pak differs from the one the databases were last deployed from. Only for a server folder the wizard
@@ -633,6 +630,8 @@ namespace
                 _settings.clientPath = o.client;
                 _settings.location = o.location;
                 _settings.dataCache = o.cache;
+                if (o.prebuiltMmaps)
+                    _settings.prebuiltMmaps = *o.prebuiltMmaps;
                 if (o.location != "local")
                     _settings.remote = o.remote;
                 if (o.db)
@@ -667,7 +666,8 @@ namespace
                 else
                     AddEvent(Tr("event.install_done", Platform::PathToUtf8(o.root)));
             },
-            [this] { Play(); }, [] { UiBackend::Wake(); }, [this] { return _settings.file; } });
+            [this] { Play(); }, [] { UiBackend::Wake(); }, [this] { return _settings.file; },
+            [this] { return _settings.prebuiltMmaps; } });
         // the storage form checks the server folder's built-in databases for "local"
         _storageForm = std::make_unique<StorageForm>("st_", StorageForm::Host{ _exe, [this] { return StorageProviders(); },
             [this](StorageChoice const& c) { return c.Remote() ? RemoteEnv(c) : LocalDatabaseOverrides(Root()); },
@@ -1701,12 +1701,12 @@ namespace
             }
 
             std::string launch = LaunchLocale();
-            std::string const port = LoginPort();
+            std::string const host = ServerRealmlist();
             int foreign = 0;
             bool launchOk = true;
             for (ClientLocale const& loc : _client.locales)
             {
-                std::string cls = GameClient::IsLocalRealmlist(loc.realmlist, port) ? "ok" : loc.realmlist.empty() ? "bad" : "warn";
+                std::string cls = GameClient::MatchesRealmlist(loc.realmlist, host) ? "ok" : loc.realmlist.empty() ? "bad" : "warn";
                 if (cls != "ok")
                 {
                     ++foreign;
@@ -1725,7 +1725,7 @@ namespace
             else if (foreign)
                 _rlNote = Tr("client.rl_some_foreign", foreign);
             else
-                _rlNote = Tr("client.rl_ok", GameClient::LocalRealmlist(port));
+                _rlNote = Tr("client.rl_ok", host);
         }
         RefreshServerView();
         RefreshTray();
@@ -2085,10 +2085,10 @@ namespace
         if (!_client.valid)
             return;
 
-        std::string const port = LoginPort();
+        std::string const host = ServerRealmlist();
         std::vector<std::string> todo;
         for (ClientLocale const& loc : _client.locales)
-            if (!GameClient::IsLocalRealmlist(loc.realmlist, port) && (locales.empty() || std::find(locales.begin(), locales.end(), loc.name) != locales.end()))
+            if (!GameClient::MatchesRealmlist(loc.realmlist, host) && (locales.empty() || std::find(locales.begin(), locales.end(), loc.name) != locales.end()))
                 todo.push_back(loc.name);
         if (todo.empty())
         {
@@ -2098,7 +2098,6 @@ namespace
         }
 
         std::string error;
-        std::string const host = GameClient::LocalRealmlist(port);
         if (!GameClient::WriteRealmlist(_client, host, todo, error))
         {
             Message(error);

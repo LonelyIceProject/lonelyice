@@ -241,6 +241,7 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     c.Bind("wz_existing", &_existing);
     c.Bind("wz_customize", &_customize);
     c.Bind("wz_threads", &_threads);
+    c.Bind("wz_prebuilt_mmaps", &_prebuiltMmaps);
     c.Bind("wz_cores_note", &_coresNote);
     c.Bind("wz_total", &_total);
     c.Bind("wz_realm", &_realm);
@@ -274,8 +275,10 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
     on("wz_next", [this] { Next(); });
     on("wz_back", [this] { Back(); });
     on("wz_cancel", [this] { Cancel(); });
-    on("wz_browse_client", [this] { BrowseFolder(true); });
-    on("wz_browse_place", [this] { BrowseFolder(false); });
+    on("wz_browse_client", [this] { BrowseFolder(Folder::Client); });
+    on("wz_browse_place", [this] { BrowseFolder(Folder::Place); });
+    on("wz_browse_mmaps", [this] { BrowseFolder(Folder::Mmaps); });
+    on("wz_generate_mmaps", [this] { _prebuiltMmaps.clear(); Dirty(); });
     on("wz_customize_changed", [this] { RefreshFooter(); Dirty(); });
     c.BindEventCallback("wz_pick_place", [this](Rml::DataModelHandle, Rml::Event&, Rml::VariantList const& args)
     {
@@ -283,7 +286,7 @@ void Wizard::Bind(Rml::DataModelConstructor& c)
             return;
         _place = args[0].Get<Rml::String>();
         if (_place == "custom" && _customPlace.empty())
-            BrowseFolder(false);
+            BrowseFolder(Folder::Place);
         // the built-in databases are in the place's folder
         if (!_form.Choice().Remote())
             _form.Check();
@@ -321,6 +324,7 @@ void Wizard::Open(fs::path const& client)
     _login.clear();
     _pass.clear();
     _customPlace.clear();
+    _prebuiltMmaps = _host.prebuiltMmaps ? Utf8(_host.prebuiltMmaps()) : std::string();
     Inspect(client);
     fs::path root = _host.currentRoot();
     std::error_code ec;
@@ -429,9 +433,10 @@ void Wizard::BuildComponents()
     uint32_t vmaps = root.empty() ? 0 : CountFiles(data / "vmaps", ".vmtree");
     uint32_t mmaps = root.empty() ? 0 : CountFiles(data / "mmaps", ".mmtile");
     bool const haveVmaps = vmaps > 0 && CountFiles(data / "vmaps", ".vmtile") > 0;
+    std::string const endpoint = Installer::ServerRealmlist(_host.profileFile ? _host.profileFile() : _host.exeDir / "server.yaml");
     bool const haveClient = _client.valid && !_client.locales.empty()
         && std::all_of(_client.locales.begin(), _client.locales.end(), [&](ClientLocale const& l)
-            { return GameClient::IsLocalRealmlist(l.realmlist, Installer::LoginPort(root)); })
+            { return GameClient::MatchesRealmlist(l.realmlist, endpoint); })
         && ClientPatch::AddonsCurrent(_client.dir, ReadPlugins(_host.exeDir / "plugins"));
     if (_preparedFor != root)
     {
@@ -680,7 +685,7 @@ void Wizard::Next()
             BuildComponents();
             if (_comps[0].on && _comps[0].locked)
                 return Error(Tr("wizard.error.no_setup"));
-            if (FreeBytes(PlacePath()) < (9ull << 30) && HasComp("mmaps"))
+            if (FreeBytes(PlacePath()) < (9ull << 30) && HasComp("mmaps") && _prebuiltMmaps.empty())
                 return Error(Tr("wizard.error.low_space"));
             if (_dbExists && !_customize)
                 NextPreparation();
@@ -855,6 +860,7 @@ void Wizard::StartInstall()
     o.locale = _host.serverLocale ? _host.serverLocale() : std::string();
     o.vmaps = HasComp("vmaps");
     o.mmaps = HasComp("mmaps");
+    o.prebuiltMmaps = Platform::Utf8ToPath(_prebuiltMmaps);
     o.client_prep = HasComp("client");
     o.threads = std::max(1, std::atoi(_threads.c_str()));
     // On databases that exist the realm is renamed only when the name was changed here; rates and bots go into
@@ -881,15 +887,23 @@ void Wizard::StartInstall()
 void Wizard::Tick()
 {
     std::string picked;     // UTF-8
-    bool forClient = false;
+    Folder folder;
     {
         std::lock_guard<std::mutex> guard(_pickLock);
         picked.swap(_picked);
-        forClient = _pickedForClient;
+        folder = _pickedFolder;
     }
     if (!picked.empty())
     {
-        if (forClient)
+        if (folder == Folder::Mmaps)
+        {
+            _prebuiltMmaps = picked;
+            for (auto& component : _comps)
+                if (component.id == "mmaps")
+                    component.on = true;
+            RefreshTotal();
+        }
+        else if (folder == Folder::Client)
         {
             Inspect(Platform::Utf8ToPath(picked));
             BuildPlaces();
@@ -1005,16 +1019,24 @@ void Wizard::BuildDone()
         _done.push_back({ "ok", !_options.newDatabases ? Tr("wizard.done.account_kept", _options.login)
             : _options.gmLevel ? Tr("wizard.done.account_gm", _options.login, _options.gmLevel) : Tr("wizard.done.account", _options.login), "" });
     if (_options.client_prep && _options.realmlist)
-        _done.push_back({ "ok", "realmlist.wtf: " + GameClient::LocalRealmlist(Installer::LoginPort(_options.root)), _rlNote });
+        _done.push_back({ "ok", "realmlist.wtf: " + Installer::ServerRealmlist(_options.profileFile), _rlNote });
 }
 
-void Wizard::BrowseFolder(bool forClient)
+void Wizard::BrowseFolder(Folder folder)
 {
     {
         std::lock_guard<std::mutex> guard(_pickLock);
-        _pickedForClient = forClient;
+        _pickedFolder = folder;
     }
-    std::string start = forClient ? (_client.valid ? Utf8(_client.dir) : Utf8(_host.exeDir)) : Utf8(PlacePath().empty() ? _host.exeDir : PlacePath());
+    fs::path startDir = _host.exeDir;
+    if (folder == Folder::Client && _client.valid)
+        startDir = _client.dir;
+    else if (folder == Folder::Place && !PlacePath().empty())
+        startDir = PlacePath();
+    else if (folder == Folder::Mmaps && !_prebuiltMmaps.empty())
+        startDir = (_host.profileFile ? _host.profileFile().parent_path() : _host.exeDir)
+            / Platform::Utf8ToPath(_prebuiltMmaps);
+    std::string const start = Utf8(startDir);
     SDL_ShowOpenFolderDialog([](void* self, char const* const* list, int)
     {
         if (!list || !list[0])

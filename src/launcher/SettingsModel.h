@@ -22,7 +22,6 @@ namespace LonelyIce
     {
         None,
         MsToMin,
-        BindIp,
         BoolText
     };
 

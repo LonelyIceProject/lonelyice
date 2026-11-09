@@ -55,6 +55,7 @@ namespace LonelyIce
         int _location = 0;
         std::string _remoteHost, _port, _user, _password, _prefix;
         std::string _client, _root, _realm, _login, _accountPassword;
+        std::string _prebuiltMmaps;
         bool _wizard = false, _wizardCheckPending = false;
         int _wizardStep = 0;
         bool _cache = false, _setup = false, _serverOnly = true, _vmaps = false, _mmaps = false;

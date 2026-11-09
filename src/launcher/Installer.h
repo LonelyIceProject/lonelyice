@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -21,6 +22,8 @@ namespace LonelyIce
         std::filesystem::path root;         // server data: configs, db, data, logs, backups
         std::filesystem::path profileFile;  // server.yaml; generated core configuration is private
         std::filesystem::path client;       // WoW 3.3.5a folder
+        // Unset preserves the saved preference. An empty path selects local generation.
+        std::optional<std::filesystem::path> prebuiltMmaps;
 
         // Where the databases are (LauncherSettings::location) and whether the game data is unpacked (maps and
         // cameras into data/, DBC files into dbc_* tables of the world database) or read from the client's archives.
@@ -79,8 +82,8 @@ namespace LonelyIce
         static bool SaveProfileOptions(InstallOptions const& o, std::string& error);
         // Size and time of setup/sql.pak: tells whether a newer release brought database updates.
         static std::string SqlStamp(std::filesystem::path const& setupDir);
-        // RealmServerPort of <root>/.runtime/configs/worldserver.conf ("3724" when not set).
-        static std::string LoginPort(std::filesystem::path const& root);
+        // Client endpoint from the effective BindIP and RealmServerPort in the profile.
+        static std::string ServerRealmlist(std::filesystem::path const& profileFile);
 
     private:
         void Run();
@@ -91,6 +94,7 @@ namespace LonelyIce
         bool RunTiles(std::string const& step, float to);
         bool RunVmaps();
         bool RunMmaps();
+        bool ImportMmaps(std::filesystem::path const& data);
         bool RunClient();
 
         // Starts exe with args in dir; every output line goes to onLine. Returns the exit code, -1 if it could not start.

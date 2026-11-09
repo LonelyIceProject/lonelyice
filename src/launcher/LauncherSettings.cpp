@@ -43,6 +43,7 @@ bool LauncherSettings::Load(std::string* error)
         loaded.writeRealmlist = profile.Boolean({ "client", "writeRealmlist" }, true);
         loaded.clearWdb = profile.Boolean({ "client", "clearWdb" }, true);
         loaded.dataRoot = Platform::Utf8ToPath(profile.String({ "server", "root" }));
+        loaded.prebuiltMmaps = Platform::Utf8ToPath(profile.String({ "setup", "mmapsFolder" }));
         loaded.autoStart = profile.Boolean({ "launcher", "autoStart" });
         loaded.stopWithGame = profile.Boolean({ "launcher", "stopWithGame" });
         loaded.trayOnClose = profile.Boolean({ "launcher", "trayOnClose" }, true);
@@ -109,6 +110,8 @@ void LauncherSettings::ApplyToProfile(ProfileConfig& profile) const
     local("client", "path", Platform::PathToUtf8(clientPath));
     local("client", "runner", runner);
     local("server", "root", Platform::PathToUtf8(dataRoot));
+    if (!prebuiltMmaps.empty() || profile.Get({ "setup", "mmapsFolder" }))
+        local("setup", "mmapsFolder", Platform::PathToUtf8(prebuiltMmaps));
     local("runtime", "sqlStamp", sqlStamp);
     local("runtime", "configVersion", configVersion);
     local("runtime", "pendingRealmName", pendingRealmName);

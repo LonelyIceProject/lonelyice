@@ -69,9 +69,10 @@ client's realmlist, addons or shortcuts.
 
 After saving the configuration and closing the TUI, start the server separately:
 
-For LAN clients, open **Settings → Network and resources** and turn off **This computer only**.
-The YAML equivalent is `server.settings.BindIP: 0.0.0.0`; this may also be a machine-local override.
-The realm then advertises this host's LAN address. Clients use `set realmlist <host-address>` (include the
+For LAN clients, open **Settings → Network and resources → Server IPv4 address** and enter the server's
+LAN address or `0.0.0.0` for all interfaces. The YAML key is `server.settings.BindIP`; this may also be a
+machine-local override. The realm advertises the selected LAN address or detects one for a wildcard binding.
+Clients use `set realmlist <host-address>` (include the
 login port if it differs from 3724). The storage choice `local` refers to SQLite databases, independently
 of which network interfaces accept game connections.
 

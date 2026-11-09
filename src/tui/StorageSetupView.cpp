@@ -95,6 +95,7 @@ void StorageSetupView::Reload()
     _setup = !fs::exists(Root() / ".runtime" / "configs" / "worldserver.conf", ec);
     _serverOnly = true;
     _vmaps = _mmaps = false;
+    _prebuiltMmaps = Platform::PathToUtf8(s.prebuiltMmaps);
     _login.clear();
     _accountPassword.clear();
     _log.clear();
@@ -165,6 +166,7 @@ std::string StorageSetupView::Fingerprint() const
              &_realm, &_login, &_accountPassword })
         add(*v);
     out << _cache << _setup << _serverOnly << _vmaps << _mmaps;
+    out << '\n' << _prebuiltMmaps;
     return out.str();
 }
 
@@ -306,6 +308,8 @@ void StorageSetupView::Review()
     o.pack = plan.pack;
     o.vmaps = _setup && _vmaps;
     o.mmaps = _setup && _mmaps;
+    if (o.mmaps)
+        o.prebuiltMmaps = Platform::Utf8ToPath(_prebuiltMmaps);
     o.client_prep = _setup && !_serverOnly;
     o.realmlist = o.clearWdb = o.accountName = o.client_prep;
     o.shortcut = false;
@@ -360,6 +364,8 @@ void StorageSetupView::Commit()
     auto const& o = *_review;
     s.location = o.location;
     s.dataCache = o.cache;
+    if (o.prebuiltMmaps)
+        s.prebuiltMmaps = *o.prebuiltMmaps;
     if (o.location != "local")
         s.remote = o.remote;
     s.dataRoot = o.root;
@@ -476,6 +482,7 @@ Component StorageSetupView::Build()
     auto setup = Checkbox(Tr("tui.storage.setup"), &_setup);
     auto serverOnly = Checkbox(Tr("tui.storage.server_only"), &_serverOnly);
     auto vmaps = Checkbox(Tr("tui.storage.vmaps"), &_vmaps), mmaps = Checkbox(Tr("tui.storage.mmaps"), &_mmaps);
+    auto mmapFolder = input(&_prebuiltMmaps);
     auto realm = input(&_realm), login = input(&_login), accountPass = input(&_accountPassword, true);
     auto confirm = Checkbox(Tr("tui.storage.confirm"), &_confirm);
     auto removal = Checkbox(Tr("tui.storage.confirm_removal"), &_confirmRemoval);
@@ -511,6 +518,7 @@ Component StorageSetupView::Build()
     add(setup, [this] { return !_wizard; });
     for (auto field : { serverOnly, vmaps, mmaps, realm, login, accountPass })
         add(field, [this] { return _setup && (!_wizard || _wizardStep == 2); });
+    add(mmapFolder, [this] { return _setup && _mmaps && (!_wizard || _wizardStep == 2); });
     for (auto field : { check, review })
         add(field, [this] { return !_wizard; });
     add(confirm, [this] { return _review && (!_wizard || _wizardStep == 3); });
@@ -566,6 +574,11 @@ Component StorageSetupView::Build()
             out.push_back(serverOnly->Render());
             out.push_back(paragraph(Tr("tui.storage.client_note")));
             out.push_back(hbox({ vmaps->Render(), text("   "), mmaps->Render() }));
+            if (_mmaps)
+            {
+                out.push_back(row("wizard.mmaps.folder", mmapFolder));
+                out.push_back(paragraph(Tr("wizard.mmaps.folder_hint")));
+            }
             out.push_back(row("tui.storage.realm", realm));
             out.push_back(row("tui.storage.login", login));
             out.push_back(row("tui.storage.account_password", accountPass));

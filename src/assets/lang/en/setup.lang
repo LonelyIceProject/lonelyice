@@ -196,3 +196,17 @@ wizard.audit.optional = Optional; not required to connect
 wizard.audit.customize = Change realm settings or add an account
 wizard.button.restore = Restore and connect
 wizard.button.connect = Connect installation
+
+wizard.mmaps.folder = Prebuilt mmaps folder
+wizard.mmaps.choose = Choose extracted folder
+wizard.mmaps.generate = Generate locally
+wizard.mmaps.folder_hint = Enable mmaps to use the selected folder. An empty folder field or incompatible files fall back to local generation.
+install.mmaps.check = Checking the prebuilt mmaps
+install.mmaps.copy = Copying the prebuilt mmaps
+install.mmaps.imported = Imported {0} navigation files.
+install.mmaps.invalid = Incompatible navigation file {0} (expected mmap format {1}).
+install.mmaps.incomplete = The folder is missing map parameters or tiles for the main continents.
+install.mmaps.staging = Could not create a temporary import folder.
+install.mmaps.restore_failed = Could not restore the previous mmaps. They are saved at {0}.
+install.mmaps.fallback = Prebuilt mmaps unavailable: {0}. Generating locally.
+install.mmaps.generate = Generating navigation files

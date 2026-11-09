@@ -498,6 +498,15 @@
                             <div class="o-size">{{c.size}}</div>
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="f">
+                            <div class="f-label">@{wizard.mmaps.folder}</div>
+                            <input type="text" id="wz-mmaps-folder" class="field" data-value="wz_prebuilt_mmaps"/>
+                        </div>
+                        <div class="btn small" id="wz-browse-mmaps" data-event-click="wz_browse_mmaps">@{wizard.mmaps.choose}</div>
+                        <div class="btn small" id="wz-generate-mmaps" data-if="wz_prebuilt_mmaps != ''" data-event-click="wz_generate_mmaps">@{wizard.mmaps.generate}</div>
+                    </div>
+                    <div class="note">@{wizard.mmaps.folder_hint}</div>
                     <div class="form-row wz-threads">
                         <div class="f-inline">@{wz.threads}</div>
                         <input type="text" id="wz-threads" class="field short" data-value="wz_threads"/>

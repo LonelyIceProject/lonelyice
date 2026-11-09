@@ -7,20 +7,61 @@
 #include "ConsoleText.h"
 #include "GameClient.h"
 #include "Lang.h"
+#include "MapDefines.h"
 #include "Pak.h"
 #include "Platform.h"
 #include "Plugins.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <set>
 
 namespace fs = std::filesystem;
 using namespace LonelyIce;
 
 namespace
 {
+    bool ValidMmapFile(fs::path const& file, bool tile)
+    {
+        std::ifstream in(file, std::ios::binary);
+        uintmax_t const size = fs::file_size(file);
+        if (!tile)
+        {
+            dtNavMeshParams params{};
+            return size == sizeof(params) && in.read(reinterpret_cast<char*>(&params), sizeof(params))
+                && std::isfinite(params.tileWidth) && params.tileWidth > 0
+                && std::isfinite(params.tileHeight) && params.tileHeight > 0
+                && std::all_of(std::begin(params.orig), std::end(params.orig), [](float x) { return std::isfinite(x); })
+                && params.maxTiles > 0;
+        }
+
+        MmapTileHeader header;
+        dtMeshHeader mesh{};
+        if (!in.read(reinterpret_cast<char*>(&header), sizeof(header))
+            || header.mmapMagic != MMAP_MAGIC || header.mmapVersion != MMAP_VERSION
+            || header.dtVersion != DT_NAVMESH_VERSION || size != sizeof(header) + uint64_t(header.size)
+            || !in.read(reinterpret_cast<char*>(&mesh), sizeof(mesh))
+            || mesh.magic != DT_NAVMESH_MAGIC || mesh.version != DT_NAVMESH_VERSION
+            || mesh.vertCount <= 0 || mesh.polyCount <= 0)
+            return false;
+
+        // Match the aligned sections read by Detour. This also detects incompatible Detour builds.
+        auto section = [](uint64_t width, int count)
+        {
+            return (width * uint64_t(count) + 3) & ~uint64_t(3);
+        };
+        return mesh.maxLinkCount >= 0 && mesh.detailMeshCount >= 0 && mesh.detailVertCount >= 0
+            && mesh.detailTriCount >= 0 && mesh.bvNodeCount >= 0 && mesh.offMeshConCount >= 0
+            && header.size == sizeof(mesh) + section(3 * sizeof(float), mesh.vertCount)
+                + section(sizeof(dtPoly), mesh.polyCount) + section(sizeof(dtLink), mesh.maxLinkCount)
+                + section(sizeof(dtPolyDetail), mesh.detailMeshCount) + section(3 * sizeof(float), mesh.detailVertCount)
+                + section(4, mesh.detailTriCount) + section(sizeof(dtBVNode), mesh.bvNodeCount)
+                + section(sizeof(dtOffMeshConnection), mesh.offMeshConCount);
+    }
+
     constexpr std::size_t MaxLog = 400;
 
     // Rate keys the wizard's preset sets (a superset of the Settings tab's presets).
@@ -295,11 +336,19 @@ std::string Installer::SqlStamp(fs::path const& setupDir)
     return std::to_string(size) + "-" + std::to_string(time);
 }
 
-std::string Installer::LoginPort(fs::path const& root)
+std::string Installer::ServerRealmlist(fs::path const& profileFile)
 {
-    ConfFile f;
-    f.Load(root / ".runtime" / "configs" / "worldserver.conf");
-    return f.Get("RealmServerPort").value_or("3724");
+    ProfileConfig profile;
+    std::string error;
+    auto scalar = [&](char const* key)
+    {
+        auto const value = profile.Get({ "server", "settings", key });
+        return value && (value->is_string() || value->is_integer()) ? ProfileConfig::Scalar(*value) : std::string();
+    };
+    fs::path const file = profileFile.empty() ? Platform::ExePath().parent_path() / "server.yaml" : profileFile;
+    if (profile.Load(file, error))
+        return GameClient::ServerRealmlist(scalar("BindIP"), scalar("RealmServerPort"));
+    return GameClient::ServerRealmlist({}, {});
 }
 
 bool Installer::PrepareConfigs(InstallOptions const& o, std::string& error)
@@ -631,9 +680,113 @@ bool Installer::RunVmaps()
     return true;
 }
 
+bool Installer::ImportMmaps(fs::path const& data)
+{
+    fs::path staging;
+    bool keepStaging = false;
+    try
+    {
+        fs::path const base = _o.profileFile.empty() ? _o.exe.parent_path() : _o.profileFile.parent_path();
+        fs::path source = fs::canonical(base / *_o.prebuiltMmaps);
+        if (fs::is_directory(source / "mmaps"))
+            source /= "mmaps";
+        fs::path const destination = data / "mmaps";
+        bool const inPlace = fs::exists(destination) && fs::equivalent(source, destination);
+        std::set<std::string> maps, tiledMaps;
+        std::vector<fs::path> files;
+        for (auto const& entry : fs::directory_iterator(source))
+        {
+            if (_cancel)
+                return false;
+            fs::path const file = entry.path();
+            bool const tile = file.extension() == ".mmtile";
+            if (!tile && file.extension() != ".mmap")
+                continue;
+            std::string const stem = Platform::PathToUtf8(file.stem());
+            if (entry.is_symlink() || !entry.is_regular_file() || stem.size() < (tile ? 7 : 3)
+                || stem.find_first_not_of("0123456789") != std::string::npos || !ValidMmapFile(file, tile))
+                throw std::runtime_error(Tr("install.mmaps.invalid", Platform::PathToUtf8(file.filename()), MMAP_VERSION));
+            if (tile)
+                tiledMaps.insert(stem.substr(0, stem.size() - 4));
+            else
+                maps.insert(stem);
+            files.push_back(file);
+        }
+        if (!std::includes(maps.begin(), maps.end(), tiledMaps.begin(), tiledMaps.end())
+            || !tiledMaps.contains("000") || !tiledMaps.contains("001")
+            || !tiledMaps.contains("530") || !tiledMaps.contains("571"))
+            throw std::runtime_error(Tr("install.mmaps.incomplete"));
+
+        if (!inPlace)
+        {
+            fs::create_directories(data);
+            fs::path const work = data / (".mmaps-import-" + std::to_string(Platform::TickMs()));
+            if (!fs::create_directory(work))
+                throw std::runtime_error(Tr("install.mmaps.staging"));
+            staging = work;
+            fs::path const incoming = staging / "incoming", previous = staging / "previous";
+            fs::create_directory(incoming);
+            for (std::size_t i = 0; i < files.size() && !_cancel; ++i)
+            {
+                fs::copy_file(files[i], incoming / files[i].filename());
+                if (i % 128 == 0)
+                    Progress("mmaps", float(i + 1) / float(files.size()), Tr("install.mmaps.copy"));
+            }
+            if (!_cancel)
+            {
+                bool const hadPrevious = fs::exists(destination);
+                if (hadPrevious)
+                    fs::rename(destination, previous);
+                try
+                {
+                    fs::rename(incoming, destination);
+                }
+                catch (...)
+                {
+                    if (hadPrevious)
+                    {
+                        keepStaging = true;
+                        fs::rename(previous, destination);
+                        keepStaging = false;
+                    }
+                    throw;
+                }
+            }
+            std::error_code ignored;
+            fs::remove_all(staging, ignored);
+        }
+        if (_cancel)
+            return false;
+        Log(Tr("install.mmaps.imported", files.size()));
+        return true;
+    }
+    catch (std::exception const& error)
+    {
+        std::error_code ignored;
+        if (keepStaging)
+        {
+            Fail("mmaps", Tr("install.mmaps.restore_failed", Platform::PathToUtf8(staging / "previous")));
+            return false;
+        }
+        if (!staging.empty())
+            fs::remove_all(staging, ignored);
+        Log(Tr("install.mmaps.fallback", error.what()));
+        return false;
+    }
+}
+
 bool Installer::RunMmaps()
 {
     fs::path data = _o.root / "data";
+    if (_o.prebuiltMmaps && !_o.prebuiltMmaps->empty())
+    {
+        Progress("mmaps", 0.f, Tr("install.mmaps.check"));
+        if (ImportMmaps(data))
+            return true;
+        if (_cancel || !Error().empty())
+            return false;
+        Progress("mmaps", 0.f, Tr("install.mmaps.generate"));
+    }
     // The generator reads every terrain tile: reading the client, they are built first.
     float const tiles = _o.cache ? 0.f : 0.1f;
     if (tiles > 0.f && !RunTiles("mmaps", tiles))
@@ -674,7 +827,7 @@ bool Installer::RunClient()
     std::string error;
     if (_o.realmlist)
     {
-        std::string const host = GameClient::LocalRealmlist(LoginPort(_o.root));
+        std::string const host = ServerRealmlist(_o.profileFile.empty() ? _o.exe.parent_path() / "server.yaml" : _o.profileFile);
         if (!GameClient::WriteRealmlist(info, host, {}, error))
         {
             Fail("client", error);

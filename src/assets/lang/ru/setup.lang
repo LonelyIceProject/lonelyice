@@ -196,3 +196,17 @@ wizard.audit.optional = Необязательно для подключения
 wizard.audit.customize = Изменить настройки мира или добавить аккаунт
 wizard.button.restore = Восстановить и подключить
 wizard.button.connect = Подключить установку
+
+wizard.mmaps.folder = Папка с готовыми mmaps
+wizard.mmaps.choose = Выбрать папку
+wizard.mmaps.generate = Генерировать локально
+wizard.mmaps.folder_hint = Включите mmaps, чтобы использовать выбранную папку. Если путь пуст или файлы несовместимы, мастер сгенерирует mmaps локально.
+install.mmaps.check = Проверка готовых mmaps
+install.mmaps.copy = Копирование готовых mmaps
+install.mmaps.imported = Импортировано файлов навигации: {0}.
+install.mmaps.invalid = Несовместимый файл навигации {0}. Ожидается формат mmaps {1}.
+install.mmaps.incomplete = В папке отсутствуют параметры карт или тайлы основных континентов.
+install.mmaps.staging = Не удалось создать временную папку для импорта.
+install.mmaps.restore_failed = Не удалось восстановить прежние mmaps. Они сохранены в {0}.
+install.mmaps.fallback = Готовые mmaps недоступны: {0}. Запускается локальная генерация.
+install.mmaps.generate = Генерация файлов навигации

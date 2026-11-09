@@ -50,8 +50,6 @@ namespace
     std::optional<fkyaml::node> TypedValue(SetValue const& value)
     {
         auto const& d = *value.def;
-        if (d.conv == SetConv::BindIp)
-            return fkyaml::node(value.cur == "1" ? "127.0.0.1" : "0.0.0.0");
         if (d.type == 'b')
             return fkyaml::node(value.cur == "1");
         if (d.type != 'n')
@@ -136,7 +134,7 @@ SettingsModel::SettingsModel()
         W("diff", "set.diff.ignore_raid", "Instance.IgnoreRaid", 'b', "rel", "0", "set.diff.ignore_raid.hint"),
         W("diff", "set.diff.quests_ignore_raid", "Quests.IgnoreRaid", 'b', "rel", "0"),
 
-        W("perf", "set.perf.bind_local", "BindIP", 'b', "rst", "0.0.0.0", "set.perf.bind_local.hint"),
+        W("perf", "set.perf.bind_local", "BindIP", 't', "rst", "127.0.0.1", "set.perf.bind_local.hint"),
         W("perf", "set.perf.realm_port", "RealmServerPort", 'n', "rst", "3724", "set.perf.realm_port.hint"),
         W("perf", "set.perf.world_port", "WorldServerPort", 'n', "rst", "8085", "set.perf.world_port.hint"),
         W("perf", "set.perf.soap", "SOAP.Enabled", 'b', "rst", "0"),
@@ -168,8 +166,6 @@ SettingsModel::SettingsModel()
     {
         if (d.key == "PlayerSaveInterval")
             d.conv = SetConv::MsToMin;
-        else if (d.key == "BindIP")
-            d.conv = SetConv::BindIp;
     }
 }
 
@@ -282,8 +278,6 @@ void SettingsModel::Load(fs::path const& worldConf, std::vector<PluginManifest> 
                 else
                     _errors.push_back(Tr("tui.invalid_setting", Tr(d.label)));
             }
-            else if (d.conv == SetConv::BindIp)
-                v = v == "127.0.0.1" ? "1" : "0";
             else if (d.conv == SetConv::MsToMin)
             {
                 int64_t milliseconds = 0;
@@ -430,6 +424,22 @@ std::string SettingsModel::ValidateValue(SetValue const& value)
     auto const& input = value.cur;
     if (input.find_first_of("\r\n") != std::string::npos || input.find('\0') != std::string::npos)
         return invalid();
+    if (d.key == "BindIP" && d.source == SetSource::World)
+    {
+        std::string_view address = input;
+        for (int octet = 0; octet < 4; ++octet)
+        {
+            auto const dot = address.find('.');
+            auto const part = address.substr(0, dot);
+            unsigned number = 0;
+            auto const result = std::from_chars(part.data(), part.data() + part.size(), number);
+            if (result.ec != std::errc{} || result.ptr != part.data() + part.size() || number > 255 ||
+                (part.size() > 1 && part.front() == '0') || ((dot == address.npos) != (octet == 3)))
+                return invalid();
+            if (dot != address.npos)
+                address.remove_prefix(dot + 1);
+        }
+    }
     if (d.type == 'b' && input != "0" && input != "1")
         return invalid();
     if (d.type == 's' &&

@@ -66,6 +66,8 @@ server:
 client:
   path: /srv/wow-client
   runner: wine
+setup:
+  mmapsFolder: /srv/downloads/client-data/mmaps
 remote:
   host: 192.168.1.20
   port: 3306
@@ -78,6 +80,10 @@ Relative paths are resolved against the profile directory. Paths, database crede
 and backup timestamps are saved in `local.yaml`. Do not share that file. On POSIX, generated local files
 are owner-readable/writable only. You can override any portable setting locally, for example
 `server.settings.BindIP`; edits in the interfaces update its existing local override.
+
+`setup.mmapsFolder` points to a folder of extracted `.mmap` and `.mmtile` files, or its parent folder.
+The GUI and TUI setup wizards prefill and save this setting. Leave it empty to generate mmaps locally.
+Setup checks the selected files against the server's navigation format before importing them.
 
 ## Sharing and applying
 

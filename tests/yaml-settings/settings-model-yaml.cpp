@@ -124,6 +124,19 @@ unknown:
         Check(Find(model, "Fraction").cur == "2.5", "float scalar not loaded");
         Check(Find(model, "Text").cur.empty(), "empty explicit schema default overridden by template");
         Check(!model.NeedsRestart(), "clean settings show a restart warning");
+        Check(Find(model, "BindIP").cur == "127.0.0.1", "missing BindIP must match loopback runtime default");
+        Find(model, "BindIP").cur = "192.168.3.256";
+        Check(!model.Save(settings).error.empty(), "invalid bind address accepted");
+        Find(model, "BindIP").cur = "192.168.3.4";
+        auto networkResult = model.Save(settings);
+        Check(networkResult.error.empty(), networkResult.error.c_str());
+        Check(networkResult.restart, "changing network binding must require a restart");
+        ProfileConfig networkProfile;
+        Check(networkProfile.Load(settings.file, error), error.c_str());
+        Check(networkProfile.String({"server", "settings", "BindIP"}) == "192.168.3.4",
+              "explicit LAN address was not saved");
+        model.Load(root / "ignored.conf", {plugin}, settings, {});
+        Check(Find(model, "BindIP").cur == "192.168.3.4", "explicit LAN binding not restored");
         Find(model, "Flag").cur = "1";
         Check(model.NeedsRestart(), "reload setting fails to warn about GUI restart");
         Find(model, "Flag").cur = "0";
@@ -176,6 +189,18 @@ unknown:
         Check(saved.String({"plugins", "demo", "version"}) == "1.0", "package version lost");
         Check(saved.Boolean({"plugins", "demo", "enabled"}), "package enable metadata lost");
         Check(saved.String({"server", "realmName"}) == "Renamed realm", "portable realm name not saved");
+        settings.prebuiltMmaps = fs::path("downloads") / "mmaps";
+        Check(settings.Save(&error), error.c_str());
+        LauncherSettings reopened;
+        reopened.file = settings.file;
+        Check(reopened.Load(&error), error.c_str());
+        Check(reopened.prebuiltMmaps == settings.prebuiltMmaps, "prebuilt mmaps folder did not round-trip");
+        Check(saved.Load(settings.file, error), error.c_str());
+        Check(!saved.Get({"setup", "mmapsFolder"}, Layer::Profile)
+              && saved.Get({"setup", "mmapsFolder"}, Layer::Local), "mmaps folder must stay machine-local");
+        reopened.prebuiltMmaps.clear();
+        Check(reopened.Save(&error), error.c_str());
+        Check(reopened.Load(&error) && reopened.prebuiltMmaps.empty(), "clearing mmaps folder did not persist");
         Check(saved.String({"unknown", "nested"}) == "portable" && saved.String({"unknown", "local"}) == "retain",
               "unknown mappings lost");
         Check(saved.Get({"unknown", "sequence"})->as_seq().at(1).get_value<std::string>() == "x # y",

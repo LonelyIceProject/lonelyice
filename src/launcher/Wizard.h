@@ -41,6 +41,7 @@ namespace LonelyIce
             std::function<void()> play;
             std::function<void()> wake;
             std::function<std::filesystem::path()> profileFile;
+            std::function<std::filesystem::path()> prebuiltMmaps;
         };
 
         explicit Wizard(Host host);
@@ -86,7 +87,8 @@ namespace LonelyIce
         std::filesystem::path PlacePath() const;
         void Error(std::string text);
         void Dirty();
-        void BrowseFolder(bool forClient);
+        enum class Folder { Client, Place, Mmaps };
+        void BrowseFolder(Folder folder);
         bool HasComp(char const* id) const;
         void BuildTransfer();
         void StartSwitch();
@@ -119,7 +121,7 @@ namespace LonelyIce
         bool _existing = false, _customize = false;
         std::filesystem::path _preparedFor;
         std::filesystem::path _cacheDetectedFor;
-        Rml::String _threads, _coresNote, _total;
+        Rml::String _threads, _coresNote, _total, _prebuiltMmaps;
         std::optional<StorageChoice> _compsFor;         // the form the components were built for
         bool _compsChecked = false;                     // ... with the storage's check done
         bool _waitCheck = false;                        // Next waits for the storage check
@@ -152,7 +154,7 @@ namespace LonelyIce
 
         std::mutex _pickLock;
         std::string _picked;                    // folder from the dialog, UTF-8
-        bool _pickedForClient = false;
+        Folder _pickedFolder = Folder::Client;
     };
 }
 

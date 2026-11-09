@@ -3,6 +3,7 @@
 
 #include "ACSoap.h"
 #include "AppenderDB.h"
+#include "Assets.h"
 #include "AuthService.h"
 #include "Banner.h"
 #include "BattlegroundMgr.h"
@@ -323,6 +324,45 @@ namespace
         return ByteArrayToHexStr(Acore::Crypto::SHA256::GetDigestOf(all));
     }
 
+    // Setup removes the full SQL tree. Keep just the updater's bootstrap files available for plugin updates.
+    bool RestoreUpdaterSql(fs::path const& source, std::string const& database)
+    {
+        for (char const* table : { "updates", "updates_include" })
+        {
+            std::string const relative = "data/sql/base/db_" + database + "/" + table + ".sql";
+            fs::path const file = source / relative;
+            if (fs::is_regular_file(file) && fs::file_size(file) > 0)
+                continue;
+            std::string sql;
+            if (!LonelyIce::ReadAsset(relative, sql) || sql.empty())
+            {
+                LOG_ERROR("sql.updates", "Missing embedded updater file '{}'", relative);
+                return false;
+            }
+            fs::path temporary = file;
+            temporary += ".lonelyice-tmp";
+            try
+            {
+                fs::create_directories(file.parent_path());
+                std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+                out.write(sql.data(), std::streamsize(sql.size()));
+                out.close();
+                if (!out)
+                    throw std::runtime_error("write failed");
+                fs::rename(temporary, file);
+                LOG_INFO("sql.updates", "Restored {}", file.string());
+            }
+            catch (std::exception const& exception)
+            {
+                std::error_code ignored;
+                fs::remove(temporary, ignored);
+                LOG_ERROR("sql.updates", "Cannot restore '{}': {}", file.string(), exception.what());
+                return false;
+            }
+        }
+        return true;
+    }
+
     // Updates are off on normal starts: the installer applies the release SQL once and removes it. The SQL of plugins
     // installed or updated since the last start is applied here, by the core's updater limited to the plugins' folders.
     bool UpdatePluginDatabases()
@@ -353,11 +393,11 @@ namespace
                         folders[database].push_back("/" + fs::relative(fs::absolute(dir, ec), source, ec).generic_string());
 
             if ((!DBUpdater<LoginDatabaseConnection>::IsEnabled(updateFlags) && folders.count("auth") &&
-                    !DBUpdater<LoginDatabaseConnection>::Update(LoginDatabase, &folders["auth"])) ||
+                    (!RestoreUpdaterSql(source, "auth") || !DBUpdater<LoginDatabaseConnection>::Update(LoginDatabase, &folders["auth"]))) ||
                 (!DBUpdater<CharacterDatabaseConnection>::IsEnabled(updateFlags) && folders.count("characters") &&
-                    !DBUpdater<CharacterDatabaseConnection>::Update(CharacterDatabase, &folders["characters"])) ||
+                    (!RestoreUpdaterSql(source, "characters") || !DBUpdater<CharacterDatabaseConnection>::Update(CharacterDatabase, &folders["characters"]))) ||
                 (!DBUpdater<WorldDatabaseConnection>::IsEnabled(updateFlags) && folders.count("world") &&
-                    !DBUpdater<WorldDatabaseConnection>::Update(WorldDatabase, &folders["world"])))
+                    (!RestoreUpdaterSql(source, "world") || !DBUpdater<WorldDatabaseConnection>::Update(WorldDatabase, &folders["world"]))))
             {
                 LOG_ERROR("server.loading", "Applying the plugins' SQL failed");
                 return false;
@@ -746,9 +786,7 @@ namespace
     }
 
     // The realm's entry in auth.realmlist follows the config on every start: the port is WorldServerPort; with
-    // BindIP on a loopback address (this computer only) the realm is at 127.0.0.1, otherwise clients in the local
-    // network get BindIP, or this computer's LAN address when BindIP is 0.0.0.0 (LONELYICE_REALM_ADDRESS overrides
-    // it), while clients on this computer keep 127.0.0.1 (localAddress, see Realm::GetAddressForClient).
+    // An explicit binding is also the address clients on this machine must use for the world connection.
     void UpdateRealmAddress()
     {
         uint32 const port = uint32(sConfigMgr->GetOption<int32>("WorldServerPort", 8085));
@@ -756,7 +794,9 @@ namespace
         boost::system::error_code ec;
         boost::asio::ip::address const bindAddress = boost::asio::ip::make_address(bind, ec);
 
-        std::string address = "127.0.0.1";
+        bool const specific = !ec && !bindAddress.is_unspecified();
+        std::string const localAddress = specific ? bindAddress.to_string() : "127.0.0.1";
+        std::string address = localAddress;
         if (ec || !bindAddress.is_loopback())
         {
             address = Env("LONELYICE_REALM_ADDRESS");
@@ -770,9 +810,9 @@ namespace
         }
 
         LoginDatabase.EscapeString(address);
-        LoginDatabase.DirectExecute("UPDATE realmlist SET address = '{}', localAddress = '127.0.0.1', localSubnetMask = '255.0.0.0', "
-            "port = {} WHERE id = {}", address, port, realm.Id.Realm);
-        LOG_INFO("server.worldserver", "Realm address {}:{} (127.0.0.1 for clients on this computer)", address, port);
+        LoginDatabase.DirectExecute("UPDATE realmlist SET address = '{}', localAddress = '{}', localSubnetMask = '{}', "
+            "port = {} WHERE id = {}", address, localAddress, specific ? "255.255.255.255" : "255.0.0.0", port, realm.Id.Realm);
+        LOG_INFO("server.worldserver", "Realm address {}:{} ({} for clients on this computer)", address, port, localAddress);
     }
 
     bool LoadRealmInfo(Acore::Asio::IoContext& ioContext)

@@ -188,15 +188,16 @@ tries again. This happens only for server folders the wizard made (`sqlStamp` se
 ## Network
 
 On every start the server writes its entry in the auth database's `realmlist` from the config: `port` is
-`WorldServerPort`; with `BindIP` on a loopback address `address` is `127.0.0.1` (Settings → Network and resources → This computer only, the default); otherwise it is `BindIP`, or with `0.0.0.0` this computer's address in the local network (the address the
+`WorldServerPort`. Auth and world listen on `BindIP` (Settings → Network and resources → Server IPv4 address,
+default `127.0.0.1`). The realm advertises `BindIP`, or with `0.0.0.0` this computer's address in the local network (the address the
 system sends from by default when it is private, i.e. 10/8, 172.16/12 or 192.168/16, else the first private address
 of the host name, else the default one; `LONELYICE_REALM_ADDRESS` overrides it).
-`localAddress` is always `127.0.0.1` with mask `255.0.0.0`, so a client on this computer (realmlist `127.0.0.1`)
-is sent to `127.0.0.1` and clients in the network to `address`. Auth and world listen on `BindIP`.
+`localAddress` is the explicitly bound address, or `127.0.0.1` for a wildcard binding.
 
 The client finds the login server through `realmlist.wtf`. The 3.3.5a client takes `host:port`, so with a
-`RealmServerPort` other than 3724 the launcher writes `127.0.0.1:<port>` (Play with `client.writeRealmlist`, Fix
-realmlist, the wizard's client step) and takes `127.0.0.1` or `localhost` with the configured port as its own.
+`RealmServerPort` other than 3724 the launcher includes the port when writing the configured address
+(Play with `client.writeRealmlist`, Fix realmlist, or the wizard's client step). For `0.0.0.0`, the local
+client connects via `127.0.0.1`.
 
 ## Starting the game
 
